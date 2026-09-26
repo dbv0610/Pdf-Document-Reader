@@ -262,6 +262,8 @@ open class Cell
         this.styleIndex = styleIndex
     }
 
+    fun getCellStyleIndex(): Int = styleIndex
+
     fun hasValidValue(): Boolean {
         return value != null
     }

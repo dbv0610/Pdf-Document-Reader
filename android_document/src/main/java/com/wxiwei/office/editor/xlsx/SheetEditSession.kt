@@ -8,6 +8,11 @@ import com.wxiwei.office.ss.model.baseModel.Cell
 import com.wxiwei.office.ss.model.baseModel.Row
 import com.wxiwei.office.ss.model.baseModel.Sheet
 import com.wxiwei.office.ss.model.baseModel.Workbook
+import com.wxiwei.office.common.bg.BackgroundAndFill
+import com.wxiwei.office.simpletext.font.Font
+import com.wxiwei.office.ss.model.style.BuiltinFormats
+import com.wxiwei.office.ss.model.style.CellStyle
+import com.wxiwei.office.ss.model.style.NumberFormat
 import com.wxiwei.office.system.IControl
 import java.io.File
 import java.util.Locale
@@ -37,15 +42,22 @@ class SheetEditSession internal constructor(
     var lastError: EditResult.Error? = null; private set
 
     private data class Key(val sheet: Int, val row: Int, val col: Int)
-    private data class Change(val key: Key, val before: String, val after: String)
-    private val undoStack = ArrayList<Change>()
-    private val redoStack = ArrayList<Change>()
+    /** One undoable edit: a typed value, a format change, or several applied together (a range). */
+    private sealed class Step {
+        data class Input(val key: Key, val before: String, val after: String) : Step()
+        data class Format(val key: Key, val beforeStyle: Int, val afterStyle: Int, val format: CellFormat) : Step()
+        data class Group(val steps: List<Step>) : Step()
+    }
+    private val undoStack = ArrayList<Step>()
+    private val redoStack = ArrayList<Step>()
+    /** Format changes applied to each cell, in order; merged relative to the file's style on save. */
+    private val formats = HashMap<Key, MutableList<CellFormat>>()
     /** Cells typed by the user plus formula cells whose result changed: everything [save] writes. */
     private val dirty = LinkedHashSet<Key>()
 
     fun canUndo() = undoStack.isNotEmpty()
     fun canRedo() = redoStack.isNotEmpty()
-    fun hasChanges() = undoStack.isNotEmpty() || dirty.isNotEmpty()
+    fun hasChanges() = undoStack.isNotEmpty() || dirty.isNotEmpty() || formats.values.any { it.isNotEmpty() }
 
     fun sheetIndexOf(sheet: Sheet): Int = book.getSheetIndex(sheet)
 
@@ -71,22 +83,110 @@ class SheetEditSession internal constructor(
         val key = Key(sheetIndex, row, col)
         val before = inputOf(cell(key))
         if (!apply(key, input)) return false
-        undoStack.add(Change(key, before, input)); redoStack.clear()
+        undoStack.add(Step.Input(key, before, input)); redoStack.clear()
         return true
+    }
+
+    /**
+     * Formats one cell (see [CellFormat]); the view shows it at once and [save] writes a new cell
+     * format to styles.xml. Returns false (see [lastError]) for an invalid format or cell.
+     */
+    fun setCellFormat(sheetIndex: Int, row: Int, col: Int, format: CellFormat): Boolean =
+        setRangeFormat(sheetIndex, row, col, row, col, format)
+
+    /** Formats every cell of a rectangle as one undoable step. */
+    fun setRangeFormat(sheetIndex: Int, row1: Int, col1: Int, row2: Int, col2: Int, format: CellFormat): Boolean {
+        format.validate()?.let { return fail(Reason.INVALID_ARGUMENT, it) }
+        val sheet = book.getSheet(sheetIndex) ?: return fail(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
+        if (minOf(row1, col1, row2, col2) < 0 || maxOf(row1, row2) >= 1048576 || maxOf(col1, col2) >= 16384 ||
+            (maxOf(row1, row2) - minOf(row1, row2) + 1L) * (maxOf(col1, col2) - minOf(col1, col2) + 1L) > MAX_FORMAT_CELLS
+        ) return fail(Reason.INVALID_ARGUMENT, "Range out of bounds or too large")
+        val steps = ArrayList<Step>()
+        for (r in minOf(row1, row2)..maxOf(row1, row2)) for (c in minOf(col1, col2)..maxOf(col1, col2)) {
+            val key = Key(sheetIndex, r, c)
+            val cell = cell(key) ?: create(sheet, key)
+            val before = cell.getCellStyleIndex()
+            val after = styleFor(cell.getCellStyle(), format)
+            val step = Step.Format(key, before, after, format)
+            applyFormat(step, true)
+            steps.add(step)
+        }
+        undoStack.add(if (steps.size == 1) steps[0] else Step.Group(steps)); redoStack.clear()
+        lastError = null
+        repaint()
+        return true
+    }
+
+    private fun applyFormat(step: Step.Format, redo: Boolean) {
+        val cell = cell(step.key) ?: return
+        cell.setCellStyle(if (redo) step.afterStyle else step.beforeStyle)
+        cell.removeSTRoot()
+        val list = formats.getOrPut(step.key) { ArrayList() }
+        if (redo) list.add(step.format) else if (list.isNotEmpty()) list.removeAt(list.lastIndex)
+    }
+
+    /** A new model style: [base] with [f] applied (fonts are copied, never changed in place). */
+    private fun styleFor(base: CellStyle?, f: CellFormat): Int {
+        val style = base?.copy() ?: CellStyle()
+        if (f.changesFont) {
+            val font = (book.getFont(style.getFontIndex().toInt()) ?: Font()).copy()
+            f.bold?.let { font.setBold(it) }
+            f.italic?.let { font.setItalic(it) }
+            f.underline?.let { font.setUnderline(if (it) Font.U_SINGLE.toInt() else Font.U_NONE.toInt()) }
+            f.strike?.let { font.setStrikeline(it) }
+            f.fontSize?.let { font.setFontSize(it) }
+            f.fontColor?.let { font.setColorIndex(book.addColor(argb(it))) }
+            val fontIndex = freeIndex { book.getFont(it) != null }
+            font.setIndex(fontIndex)
+            book.addFont(fontIndex, font)
+            style.setFontIndex(fontIndex.toShort())
+        }
+        f.fillColor?.let {
+            style.setFillPattern(if (it == "none") null else BackgroundAndFill().apply {
+                fillType = BackgroundAndFill.FILL_SOLID
+                foregroundColor = argb(it)
+            })
+        }
+        f.horizontal?.let { style.setHorizontalAlign(it) }
+        f.vertical?.let { style.setVerticalAlign(it) }
+        f.wrap?.let { style.setWrapText(it) }
+        f.numberFormat?.let { code ->
+            val builtin = BuiltinFormats.getBuiltinFormat(code)
+            style.setNumberFormat(NumberFormat((if (builtin >= 0) builtin else CUSTOM_FORMAT_ID).toShort(), code))
+        }
+        val index = freeIndex { book.getCellStyle(it) != null }
+        style.setIndex(index.toShort())
+        book.addCellStyle(index, style)
+        return index
+    }
+
+    private fun argb(rgb: String): Int = (0xFF shl 24) or rgb.removePrefix("#").toInt(16)
+
+    /** An index the workbook does not use yet (model indexes; the file gets its own on save). */
+    private fun freeIndex(used: (Int) -> Boolean): Int {
+        var i = FIRST_EDIT_INDEX
+        while (used(i)) i++
+        return i
     }
 
     fun clearCell(sheetIndex: Int, row: Int, col: Int) = setCellInput(sheetIndex, row, col, "")
 
     fun undo(): Boolean {
         val c = undoStack.lastOrNull() ?: return false
-        if (!apply(c.key, c.before)) return false
-        undoStack.removeAt(undoStack.lastIndex); redoStack.add(c); return true
+        if (!replay(c, false)) return false
+        undoStack.removeAt(undoStack.lastIndex); redoStack.add(c); repaint(); return true
     }
 
     fun redo(): Boolean {
         val c = redoStack.lastOrNull() ?: return false
-        if (!apply(c.key, c.after)) return false
-        redoStack.removeAt(redoStack.lastIndex); undoStack.add(c); return true
+        if (!replay(c, true)) return false
+        redoStack.removeAt(redoStack.lastIndex); undoStack.add(c); repaint(); return true
+    }
+
+    private fun replay(step: Step, redo: Boolean): Boolean = when (step) {
+        is Step.Input -> apply(step.key, if (redo) step.after else step.before)
+        is Step.Format -> { applyFormat(step, redo); true }
+        is Step.Group -> (if (redo) step.steps else step.steps.asReversed()).all { replay(it, redo) }
     }
 
     private fun fail(reason: Reason, message: String): Boolean { lastError = EditResult.Error(reason, message); return false }
@@ -160,11 +260,17 @@ class SheetEditSession internal constructor(
                 else -> CellWrite.Blank(k.sheet, k.row, k.col)
             }
         }
-        val result = XlsxWriter(source) { s, r, c -> book.getSheet(s)?.getRow(r)?.getCell(c)?.formula }.save(target, writes)
+        val styles = formats.filterValues { it.isNotEmpty() }
+            .map { (k, list) -> StyleWrite(k.sheet, k.row, k.col, list.reduce { a, b -> a + b }) }
+        val result = XlsxWriter(source) { s, r, c -> book.getSheet(s)?.getRow(r)?.getCell(c)?.formula }.save(target, writes, styles)
         return if (result is EditResult.Ok) result.copy(warnings = warnings) else result
     }
 
     companion object {
+        private const val FIRST_EDIT_INDEX = 20_000 // font and style indexes are Shorts
+        private const val CUSTOM_FORMAT_ID = 200
+        private const val MAX_FORMAT_CELLS = 100_000L
+
         private fun spreadsheetOf(control: IControl): Spreadsheet =
             (control.getView() as? ExcelView)?.getSpreadsheet() ?: error("Open an .xlsx first")
     }

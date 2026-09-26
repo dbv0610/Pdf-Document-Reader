@@ -60,6 +60,20 @@ class SheetEditSessionTest {
             // a formula typed into a cell
             assertTrue(onMain { session.setCellInput(3, 20, 1, "=SUM(1,2,3)") })
             assertEquals(6.0, onMain { num(book, 3, 20, 1) }, 0.0)
+            // format: sheet 4 ("Ghi chú dữ liệu") C6 shares its style with the rest of the table body
+            val otherStyleBefore = onMain { book.getSheet(3)!!.getRow(6)!!.getCell(2)!!.getCellStyleIndex() }
+            val fmt = com.wxiwei.office.editor.xlsx.CellFormat(bold = true, fillColor = "FFFF00", horizontal = "center", numberFormat = "0.00")
+            assertTrue(onMain { session.setCellFormat(3, 20, 1, fmt) })
+            onMain {
+                val st = book.getSheet(3)!!.getRow(20)!!.getCell(1)!!.getCellStyle()!!
+                assertTrue("bold", book.getFont(st.getFontIndex().toInt())!!.isBold())
+                assertEquals(0xFFFFFF00.toInt(), st.getFgColor())
+                assertEquals(com.wxiwei.office.ss.model.style.CellStyle.ALIGN_CENTER, st.getHorizontalAlign())
+                assertEquals("0.00", st.getFormatCode())
+            }
+            assertTrue(onMain { session.setRangeFormat(3, 5, 1, 6, 2, com.wxiwei.office.editor.xlsx.CellFormat(italic = true)) })
+            assertTrue(onMain { session.undo() })
+            assertEquals("undo restores the style", otherStyleBefore, onMain { book.getSheet(3)!!.getRow(6)!!.getCell(2)!!.getCellStyleIndex() })
             val result = onMain { session.save(saved) }
             assertTrue(result.toString(), result is EditResult.Ok)
         }
@@ -70,6 +84,15 @@ class SheetEditSessionTest {
             assertEquals(289.0, onMain { num(book, 0, 5, 3) }, 0.0)
             assertEquals(6.0, onMain { num(book, 3, 20, 1) }, 0.0)
             assertEquals("SUM(1,2,3)", onMain { book.getSheet(3)!!.getRow(20)!!.getCell(1)!!.formula })
+            onMain {
+                val st = book.getSheet(3)!!.getRow(20)!!.getCell(1)!!.getCellStyle()!!
+                assertTrue("bold saved", book.getFont(st.getFontIndex().toInt())!!.isBold())
+                assertEquals(0xFFFFFF00.toInt(), st.getFgColor())
+                assertEquals(com.wxiwei.office.ss.model.style.CellStyle.ALIGN_CENTER, st.getHorizontalAlign())
+                assertEquals("0.00", st.getFormatCode())
+                val other = book.getSheet(3)!!.getRow(6)!!.getCell(2)!!.getCellStyle()!!
+                assertTrue("untouched cell keeps its font", !book.getFont(other.getFontIndex().toInt())!!.isItalic())
+            }
         }
     }
 }

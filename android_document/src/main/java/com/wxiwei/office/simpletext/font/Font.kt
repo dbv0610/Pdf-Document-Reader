@@ -51,6 +51,12 @@ open class Font {
 
     constructor()
 
+    fun copy(): Font = Font().also {
+        it.index = index; it.name = name; it.fontSize = fontSize; it.isItalic = isItalic; it.isBold = isBold
+        it.colorIndex = colorIndex; it.superSubScript = superSubScript; it.underline = underline
+        it.strikeline = strikeline; it.style = style
+    }
+
     constructor(name: String?, style: Int, size: Int) {
         this.name = name ?: "Default"
         this.style = if ((style and 0x03.inv()) == 0) style else 0

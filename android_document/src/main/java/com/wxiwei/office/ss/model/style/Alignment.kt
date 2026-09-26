@@ -118,6 +118,11 @@ class Alignment {
      */
     fun getIndent(): Short = indent
 
+    fun copy(): Alignment = Alignment().also {
+        it.horizontal = horizontal; it.vertival = vertival; it.rotation = rotation
+        it.wrapText = wrapText; it.indent = indent
+    }
+
     /**
      *
      */

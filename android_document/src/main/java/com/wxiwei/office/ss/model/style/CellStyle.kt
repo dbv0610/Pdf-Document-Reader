@@ -45,6 +45,18 @@ class CellStyle
      */
     fun getIndex(): Short = index
 
+    /** An independent copy for editing (border and fill objects are shared until replaced). */
+    fun copy(): CellStyle = CellStyle().also {
+        it.index = index
+        it.numFmt = numFmt?.let { f -> NumberFormat(f.getNumberFormatID(), f.getFormatCode()) }
+        it.fontIndex = fontIndex
+        it.isHidden = isHidden
+        it.isLocked = isLocked
+        it.alignment = alignment?.copy()
+        it.cellBorder = cellBorder
+        it.fill = fill
+    }
+
     /**
      * @param index The index to set.
      */

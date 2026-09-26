@@ -24,6 +24,9 @@ sealed class CellWrite {
     val formulaText: String? get() = when (this) { is Number -> formula; is Text -> formula; is Bool -> formula; is Error -> formula; is Blank -> null }
 }
 
+/** A format change for one cell, relative to the cell's format in the original file. */
+data class StyleWrite(val sheetIndex: Int, val row: Int, val col: Int, val format: CellFormat)
+
 /**
  * Patches the ORIGINAL .xlsx: only the written cells change, everything else (styles, drawings,
  * charts...) is kept byte for byte. Removes calcChain.xml and sets fullCalcOnLoad so Excel
@@ -32,7 +35,7 @@ sealed class CellWrite {
  */
 class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: Int, row: Int, col: Int) -> String? = { _, _, _ -> null }) {
 
-    fun save(target: File, writes: Collection<CellWrite>): EditResult {
+    fun save(target: File, writes: Collection<CellWrite>, styles: Collection<StyleWrite> = emptyList()): EditResult {
         if (!source.extension.equals("xlsx", true) && !source.extension.equals("xlsm", true))
             return EditResult.Error(Reason.UNSUPPORTED_FORMAT, "Only .xlsx/.xlsm can be saved")
         if (source.canonicalFile == target.canonicalFile)
@@ -43,6 +46,20 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             for ((sheetIndex, cells) in writes.groupBy { it.sheetIndex }) {
                 val part = parts.getOrNull(sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
                 writeSheet(pkg, part, sheetIndex, cells)
+            }
+            if (styles.isNotEmpty()) {
+                val stylesPart = stylesPart(pkg) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "No styles.xml")
+                val book = StyleBook(pkg.xml(stylesPart).rootElement!!)
+                for ((sheetIndex, cells) in styles.groupBy { it.sheetIndex }) {
+                    val part = parts.getOrNull(sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
+                    val data = pkg.xml(part).rootElement!!.firstChild(SS, "sheetData") ?: error("Missing sheetData in $part")
+                    for (w in cells.sortedWith(compareBy({ it.row }, { it.col }))) {
+                        val row = rowElement(data, w.row)
+                        val c = cellElement(row, w.row, w.col)
+                        val base = c.attributeValue("s")?.toIntOrNull() ?: 0
+                        c.addAttribute("s", book.xfFor(base, w.format).toString())
+                    }
+                }
             }
             dropCalcChain(pkg)
             pkg.saveTo(target)
@@ -57,6 +74,107 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
         return sheets.childrenNamed(SS, "sheet").map { s ->
             val id = s.attributeValue(QName("id", R)) ?: ""
             rels[id]?.let { pkg.resolveTarget(workbook, it.target) } ?: ""
+        }
+    }
+
+    private fun stylesPart(pkg: OoxmlPackage): String? {
+        val workbook = "xl/workbook.xml"
+        val rel = pkg.relationships(workbook).firstOrNull { it.type.endsWith("/styles") } ?: return null
+        return pkg.resolveTarget(workbook, rel.target)
+    }
+
+    /**
+     * Adds formats to styles.xml: every (original xf, format) pair becomes one new xf, built from
+     * a copy of the original font/fill with the changes, so other cells keep their look.
+     */
+    private class StyleBook(private val root: Element) {
+        private val made = HashMap<Pair<Int, CellFormat>, Int>()
+        private fun list(name: String): Element = root.firstChild(SS, name) ?: com.wxiwei.office.editor.ooxml.newElement(SS, name).also {
+            // CT_Stylesheet order: numFmts, fonts, fills, borders, cellStyleXfs, cellXfs, ...
+            val order = listOf("numFmts", "fonts", "fills", "borders", "cellStyleXfs", "cellXfs")
+            val content = root.content() as MutableList<Any?>
+            val next = order.drop(order.indexOf(name) + 1).firstNotNullOfOrNull { n -> root.firstChild(SS, n) }
+            if (next == null) content.add(it) else content.add(content.indexOf(next), it)
+        }
+        private fun items(list: Element, name: String) = list.childrenNamed(SS, name)
+        private fun append(list: Element, name: String, e: Element): Int {
+            list.add(e)
+            val n = items(list, name).size
+            list.addAttribute("count", n.toString())
+            return n - 1
+        }
+
+        fun xfFor(base: Int, f: CellFormat): Int = made.getOrPut(base to f) {
+            val xfs = list("cellXfs")
+            val baseXf = items(xfs, "xf").getOrNull(base) ?: items(xfs, "xf").firstOrNull()
+            val xf = baseXf?.createCopy() ?: com.wxiwei.office.editor.ooxml.newElement(SS, "xf").apply {
+                addAttribute("numFmtId", "0"); addAttribute("fontId", "0"); addAttribute("fillId", "0"); addAttribute("borderId", "0"); addAttribute("xfId", "0")
+            }
+            if (f.changesFont) {
+                xf.addAttribute("fontId", font(xf.attributeValue("fontId")?.toIntOrNull() ?: 0, f).toString())
+                xf.addAttribute("applyFont", "1")
+            }
+            f.fillColor?.let {
+                xf.addAttribute("fillId", fill(it).toString())
+                xf.addAttribute("applyFill", "1")
+            }
+            f.numberFormat?.let {
+                xf.addAttribute("numFmtId", numFmt(it).toString())
+                xf.addAttribute("applyNumberFormat", "1")
+            }
+            if (f.changesAlignment) {
+                val a = xf.firstChild(SS, "alignment") ?: com.wxiwei.office.editor.ooxml.newElement(SS, "alignment").also {
+                    (xf.content() as MutableList<Any?>).add(0, it)
+                }
+                f.horizontal?.let { if (it == "general") a.attribute("horizontal")?.let { at -> a.remove(at) } else a.addAttribute("horizontal", it) }
+                f.vertical?.let { a.addAttribute("vertical", it) }
+                f.wrap?.let { a.addAttribute("wrapText", if (it) "1" else "0") }
+                xf.addAttribute("applyAlignment", "1")
+            }
+            append(xfs, "xf", xf)
+        }
+
+        private fun font(base: Int, f: CellFormat): Int {
+            val fonts = list("fonts")
+            val font = items(fonts, "font").getOrNull(base)?.createCopy() ?: com.wxiwei.office.editor.ooxml.newElement(SS, "font")
+            fun set(name: String, on: Boolean?) {
+                if (on == null) return
+                font.childrenNamed(SS, name).forEach { font.remove(it) }
+                if (on) font.add(com.wxiwei.office.editor.ooxml.newElement(SS, name))
+            }
+            set("b", f.bold); set("i", f.italic); set("strike", f.strike); set("u", f.underline)
+            f.fontSize?.let { sz ->
+                val e = font.firstChild(SS, "sz") ?: com.wxiwei.office.editor.ooxml.newElement(SS, "sz").also { font.add(it) }
+                e.addAttribute("val", if (sz == Math.rint(sz)) sz.toLong().toString() else sz.toString())
+            }
+            f.fontColor?.let { rgb ->
+                font.childrenNamed(SS, "color").forEach { font.remove(it) }
+                font.add(com.wxiwei.office.editor.ooxml.newElement(SS, "color").apply { addAttribute("rgb", "FF" + rgb.removePrefix("#").uppercase()) })
+            }
+            return append(fonts, "font", font)
+        }
+
+        private fun fill(color: String): Int {
+            if (color == "none") return 0
+            val fills = list("fills")
+            val fill = com.wxiwei.office.editor.ooxml.newElement(SS, "fill")
+            val pattern = com.wxiwei.office.editor.ooxml.newElement(SS, "patternFill").apply { addAttribute("patternType", "solid") }
+            pattern.add(com.wxiwei.office.editor.ooxml.newElement(SS, "fgColor").apply { addAttribute("rgb", "FF" + color.removePrefix("#").uppercase()) })
+            pattern.add(com.wxiwei.office.editor.ooxml.newElement(SS, "bgColor").apply { addAttribute("indexed", "64") })
+            fill.add(pattern)
+            return append(fills, "fill", fill)
+        }
+
+        private fun numFmt(code: String): Int {
+            val builtin = com.wxiwei.office.ss.model.style.BuiltinFormats.getBuiltinFormat(code)
+            if (builtin in 0..49 && !code.startsWith("reserved")) return builtin
+            val list = list("numFmts")
+            items(list, "numFmt").firstOrNull { it.attributeValue("formatCode") == code }?.let { return it.attributeValue("numFmtId")!!.toInt() }
+            val id = maxOf(163, items(list, "numFmt").maxOfOrNull { it.attributeValue("numFmtId")?.toIntOrNull() ?: 0 } ?: 0) + 1
+            append(list, "numFmt", com.wxiwei.office.editor.ooxml.newElement(SS, "numFmt").apply {
+                addAttribute("numFmtId", id.toString()); addAttribute("formatCode", code)
+            })
+            return id
         }
     }
 
