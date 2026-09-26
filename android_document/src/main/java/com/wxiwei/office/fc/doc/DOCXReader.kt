@@ -3284,7 +3284,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         // 字体
         var temp = rPr.element("rFonts")
         if (temp != null) {
-            val fontName = temp.attributeValue("hAnsi") ?: temp.attributeValue("eastAsia")
+            // Latin text (Vietnamese included) uses ascii/hAnsi; a theme reference wins over the
+            // literal name, as in Word
+            val fontName = themeFont(temp.attributeValue("asciiTheme")) ?: temp.attributeValue("ascii")
+                ?: themeFont(temp.attributeValue("hAnsiTheme")) ?: temp.attributeValue("hAnsi")
+                ?: themeFont(temp.attributeValue("eastAsiaTheme")) ?: temp.attributeValue("eastAsia")
             if (fontName != null) {
                 val index = FontTypefaceManage.instance().addFontName(fontName)
                 if (index >= 0) {
@@ -3745,11 +3749,42 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 
     // ===================== THEME / MISC =====================
 
+    // theme fonts (a:majorFont / a:minorFont), keyed "major"/"minor" + "Latin"/"EastAsia"/"Cs"
+    private val themeFonts = HashMap<String, String>()
+
+    private fun readThemeFonts(themePart: PackagePart) {
+        try {
+            val root = themePart.inputStream.use { SAXReader().read(it) }!!.rootElement ?: return
+            val scheme = root.element("themeElements")?.element("fontScheme") ?: return
+            for (kind in listOf("major", "minor")) {
+                val font = scheme.element(kind + "Font") ?: continue
+                font.element("latin")?.attributeValue("typeface")?.takeIf { it.isNotEmpty() }?.let { themeFonts[kind + "Latin"] = it }
+                font.element("ea")?.attributeValue("typeface")?.takeIf { it.isNotEmpty() }?.let { themeFonts[kind + "EastAsia"] = it }
+                font.element("cs")?.attributeValue("typeface")?.takeIf { it.isNotEmpty() }?.let { themeFonts[kind + "Cs"] = it }
+            }
+        } catch (e: Exception) {
+            control?.getSysKit()?.getErrorKit()?.writerLog(e)
+        }
+    }
+
+    /** "minorHAnsi" -> the minor latin font of the theme, etc. */
+    private fun themeFont(theme: String?): String? {
+        if (theme == null) return null
+        val kind = if (theme.startsWith("major")) "major" else "minor"
+        val script = when {
+            theme.endsWith("EastAsia") -> "EastAsia"
+            theme.endsWith("Bidi") -> "Cs"
+            else -> "Latin"
+        }
+        return themeFonts[kind + script] ?: themeFonts[kind + "Latin"]
+    }
+
     @Throws(Exception::class)
     private fun processThemeColor() {
         val part = packagePart ?: return
         val themeShip = part.getRelationshipsByType(PackageRelationshipTypes.THEME_PART).getRelationship(0) ?: return
         val themePart = zip.getPart(themeShip.targetURI) ?: return
+        readThemeFonts(themePart)
         val colors: MutableMap<String, Int> = ThemeReader.instance().getThemeColorMap(themePart)?.toMutableMap() ?: return
         themeColor = colors
         colors[SchemeClrConstant.SCHEME_LT1]?.let { colors[SchemeClrConstant.SCHEME_BG1] = it }

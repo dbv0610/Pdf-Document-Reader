@@ -109,7 +109,8 @@ class SampleRenderTest {
             delay(2500)
             // the view restores the last scroll/zoom; capture every sheet from A1 at 100%
             instrumentation.runOnMainSync {
-                excel.getSheetView()?.apply { setZoom(1f); scrollTo(0f, 0f) }
+                excel.getSheetView()?.apply { setZoom(1f); scrollTo(0f, 0f); invalidateTiles() }
+                excel.getSpreadsheet()?.invalidate()
                 excel.invalidate()
             }
             delay(500)
