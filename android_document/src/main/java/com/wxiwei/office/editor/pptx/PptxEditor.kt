@@ -229,6 +229,72 @@ class PptxEditor(private val source: File) {
         }
     }
 
+    // ---- slides ----------------------------------------------------------------------------
+
+    private val presentationPart = "ppt/presentation.xml"
+    private fun slideIds(pkg: OoxmlPackage): Element =
+        pkg.xml(presentationPart).rootElement!!.firstChild(P, "sldIdLst") ?: error("Missing slide list")
+
+    fun slideCount(): Int = read(0) { pkg -> slideIds(pkg).childrenNamed(P, "sldId").size }
+
+    /** Removes a slide (and its notes); the last slide cannot be removed. */
+    fun deleteSlide(slideIndex: Int): Boolean = queue { pkg ->
+        val list = slideIds(pkg)
+        val ids = list.childrenNamed(P, "sldId")
+        require(ids.size > 1) { "A presentation keeps at least one slide" }
+        val part = part(pkg, slideIndex)
+        val entry = ids[slideIndex]
+        val rid = entry.attributeValue(QName("id", R)) ?: error("Slide without relationship")
+        list.remove(entry)
+        pkg.removeRelationship(presentationPart, rid)
+        // notes belong to this slide only
+        pkg.relationships(part).filter { it.type.endsWith("/notesSlide") && it.targetMode != "External" }.forEach { rel ->
+            val notes = pkg.resolveTarget(part, rel.target)
+            pkg.remove(pkg.relsPartOf(notes)); pkg.remove(notes); pkg.removeOverride(notes)
+        }
+        pkg.remove(pkg.relsPartOf(part)); pkg.remove(part); pkg.removeOverride(part)
+    }
+
+    /** Copies a slide right after it; returns the new slide index or -1. */
+    fun duplicateSlide(slideIndex: Int): Int {
+        var result = -1
+        val ok = queue { pkg ->
+            val part = part(pkg, slideIndex)
+            val number = pkg.partNames().mapNotNull { Regex("ppt/slides/slide(\\d+)\\.xml").matchEntire(it)?.groupValues?.get(1)?.toInt() }.maxOrNull() ?: 0
+            val copy = "ppt/slides/slide${number + 1}.xml"
+            pkg.putBytes(copy, pkg.bytes(part) ?: error("Missing slide part"))
+            val rels = pkg.relsPartOf(part)
+            if (pkg.has(rels)) {
+                pkg.putBytes(pkg.relsPartOf(copy), pkg.bytes(rels)!!)
+                // the copy has no notes of its own
+                pkg.relationships(copy).filter { it.type.endsWith("/notesSlide") }.forEach { pkg.removeRelationship(copy, it.id) }
+            }
+            pkg.ensureOverride(copy, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml")
+            val rid = pkg.addRelationship(presentationPart, REL_SLIDE, "slides/slide${number + 1}.xml")
+            val list = slideIds(pkg)
+            val ids = list.childrenNamed(P, "sldId")
+            val nextId = maxOf(255L, ids.maxOfOrNull { it.num("id") } ?: 255L) + 1
+            val entry = newElement(P, "sldId").apply { addAttribute("id", nextId.toString()); addAttribute(QName("id", R), rid) }
+            val content = list.content() as MutableList<Any?>
+            content.add(content.indexOf(ids[slideIndex]) + 1, entry)
+            result = slideIndex + 1
+        }
+        return if (ok) result else -1
+    }
+
+    /** Moves a slide to [to] (index in the list after removing it from [from]). */
+    fun moveSlide(from: Int, to: Int): Boolean = queue { pkg ->
+        val list = slideIds(pkg)
+        val ids = list.childrenNamed(P, "sldId")
+        require(from in ids.indices && to in ids.indices) { "Slide index out of range" }
+        if (from == to) return@queue
+        val entry = ids[from]
+        list.remove(entry)
+        val rest = list.childrenNamed(P, "sldId")
+        val content = list.content() as MutableList<Any?>
+        if (to >= rest.size) content.add(content.indexOf(rest.last()) + 1, entry) else content.add(content.indexOf(rest[to]), entry)
+    }
+
     fun moveShape(slideIndex: Int, shapeId: Int, rectEmu: Rect): Boolean = queue { pkg ->
         val (e, t) = find(pkg, slideIndex, shapeId)
         val r = t.inverse(rectEmu)

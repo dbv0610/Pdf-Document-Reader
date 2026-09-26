@@ -91,6 +91,20 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         return true
     }
 
+    // Slide changes are saved; the open view shows them after a reopen ([needsReopen]).
+    fun slideCount(): Int = editor.slideCount()
+
+    fun deleteSlide(slideIndex: Int): Boolean = slideChange { editor.deleteSlide(slideIndex) }
+    fun duplicateSlide(slideIndex: Int): Boolean = slideChange { editor.duplicateSlide(slideIndex) >= 0 }
+    fun moveSlide(from: Int, to: Int): Boolean = slideChange { editor.moveSlide(from, to) }
+
+    private fun slideChange(op: () -> Boolean): Boolean {
+        if (!op()) return false
+        needsReopen = true
+        record(op, { false }, { false })
+        return true
+    }
+
     fun moveShape(slideIndex: Int, shapeId: Int, rectEmu: Rect): Boolean {
         val old = display.shapeRect(slideIndex, shapeId) ?: listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rectEmu
         if (!editor.moveShape(slideIndex, shapeId, rectEmu)) return false

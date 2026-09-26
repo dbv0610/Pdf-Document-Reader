@@ -139,6 +139,19 @@ class OoxmlPackage private constructor(
         matches.drop(1).forEach { root.remove(it) }
     }
 
+    fun removeOverride(partName: String) {
+        val key = "/" + name(partName)
+        val root = contentTypes()
+        children(root, TYPES, "Override").filter { it.attributeValue("PartName") == key }.forEach { root.remove(it) }
+    }
+
+    fun removeRelationship(part: String, id: String) {
+        val key = relsPartOf(part)
+        if (!has(key)) return
+        val root = xml(key).rootElement!!
+        children(root, RELS, "Relationship").filter { it.attributeValue("Id") == id }.forEach { root.remove(it) }
+    }
+
     fun ensureOverride(partName: String, contentType: String) {
         val key = "/" + name(partName)
         require(key != "/" && contentType.isNotBlank())

@@ -46,6 +46,10 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("↑") { move(0, -1) },
             button("↓") { move(0, 1) },
             button("Xóa", color = 0xFFC00000.toInt()) { delete() },
+            button("⧉ Nhân bản slide") { slideOp("nhân bản") { session.duplicateSlide(slide()) } },
+            button("Slide ↑") { slideOp("di chuyển") { slide() > 0 && session.moveSlide(slide(), slide() - 1) } },
+            button("Slide ↓") { slideOp("di chuyển") { slide() < session.slideCount() - 1 && session.moveSlide(slide(), slide() + 1) } },
+            button("Xóa slide", color = 0xFFC00000.toInt()) { slideOp("xóa") { session.deleteSlide(slide()) } },
             button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") },
             button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
@@ -123,6 +127,11 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         }
     }
 
+    private fun slideOp(what: String, op: () -> Boolean) {
+        if (!op()) toast(session.lastError?.message ?: "Không $what được slide")
+        else toast("Đã $what slide, sẽ hiện sau khi Lưu")
+    }
+
     /** Some edits (shapes inside groups) are saved but not shown until the file is reopened. */
     private fun reopenHint() {
         if (session.needsReopen) toast("Thay đổi sẽ hiện đầy đủ sau khi lưu và mở lại")
@@ -130,8 +139,16 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     private fun save() {
         if (!session.hasChanges()) return toast("Chưa có thay đổi")
+        val reopen = session.needsReopen
         val result = saveOver(file) { target -> session.save(target) }
         report(result, "Đã lưu " + file.name)
-        if (result is EditResult.Ok) session = LivePptxSession(reader.control!!, file)
+        if (result is EditResult.Ok) {
+            shapeId = -1
+            rect = null
+            selected.text = "Chưa chọn shape"
+            // slide changes and some shape edits only show after reading the file again
+            if (reopen) reader.open(file.absolutePath)
+            session = LivePptxSession(reader.control!!, file)
+        }
     }
 }
