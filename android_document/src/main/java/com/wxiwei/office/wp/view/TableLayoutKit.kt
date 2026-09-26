@@ -252,7 +252,10 @@ class TableLayoutKit {
             //
             cellWidth = cellView.getLayoutSpan(WPViewConstant.X_AXIS)
             cellHeight = cellView.getLayoutSpan(WPViewConstant.Y_AXIS)
-            isInvalid = isInvalid && cellHeight == 0
+            // content height, without the cell margins: a cell whose first line did not fit
+            // is still as tall as its margins, and the row must move to the next page
+            // (continuation cells of a row split across pages keep the old rule)
+            isInvalid = isInvalid && (if (isNullCell) cellHeight == 0 else cellView.getHeight() == 0)
             dx += cellWidth
             rowWidth += cellWidth
             w -= cellWidth
