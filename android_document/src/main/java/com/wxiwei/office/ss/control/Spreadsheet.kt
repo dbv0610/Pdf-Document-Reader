@@ -343,8 +343,54 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
     /**
      *
      */
+    // pinch-zoom preview: the frame at pinch start, drawn scaled until the gesture ends
+    private var pinchFrame: Bitmap? = null
+    private var pinchScale = 1f
+    private var pinchX = 0f
+    private var pinchY = 0f
+
+    /** Captures the current frame for a pinch around ([x], [y]); false when it cannot. */
+    fun beginPinchPreview(x: Float, y: Float): Boolean {
+        endPinchPreview()
+        if (width <= 0 || height <= 0 || sheetview == null) return false
+        return try {
+            val frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(frame)
+            canvas.drawColor(Color.WHITE)
+            sheetview!!.drawSheet(canvas, true)
+            pinchFrame = frame
+            pinchScale = 1f
+            pinchX = x
+            pinchY = y
+            true
+        } catch (e: OutOfMemoryError) {
+            false
+        }
+    }
+
+    fun setPinchPreviewScale(scale: Float) {
+        if (pinchFrame == null) return
+        pinchScale = scale
+        postInvalidateOnAnimation()
+    }
+
+    fun endPinchPreview() {
+        pinchFrame?.recycle()
+        pinchFrame = null
+        pinchScale = 1f
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (!initFinish) {
+            return
+        }
+        pinchFrame?.let { frame ->
+            // cheap while the fingers move: no cell layout or text drawing per frame
+            canvas.drawColor(SSConstant.HEADER_FILL_COLOR)
+            canvas.save()
+            canvas.scale(pinchScale, pinchScale, pinchX, pinchY)
+            canvas.drawBitmap(frame, 0f, 0f, null)
+            canvas.restore()
             return
         }
         try {
