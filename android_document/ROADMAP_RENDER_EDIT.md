@@ -196,7 +196,7 @@ Mức: **P0** = làm sai rõ trên file mẫu · **P1** = sai lệch vị trí/k
   - Làm: `resolver.resolve(fontIndex, bold, italic)` trả về typeface + cờ `fakeBold/fakeItalic`; chỉ set paint khi cờ bật.
   - Trường hợp Canva: family tên kết thúc bằng "Bold" (hoặc font nhúng có `usWeightClass ≥ 600`) + `b=true` → **không** fake bold.
   - Xong khi: slide 2 PPTX tiêu đề "01." và "KỲ VĨ MIỀN BẮC" (Montserrat Bold) có độ dày giống ảnh tham chiếu.
-- [ ] **C3. Cỡ chữ lẻ (1/100 pt)**
+- [x] **C3. Cỡ chữ lẻ (1/100 pt)** (26/09 — không thêm ID mới: `FONT_SIZE_ID` = point nguyên, hoặc `2^24 + phần trăm point`; `getFontSize` cũ trả số làm tròn, `getFontSizeF`/`CharAttr.fontSizeF` dùng để vẽ; `copyFontSize` cho RunAttr)
   - Sửa: `constant/wp/AttrIDConstant.kt` (thêm `FONT_SIZE_CENTI_ID`), `AttrManage` (`setFontSizeF/getFontSizeF`, fallback về `FONT_SIZE_ID`*100), `fillCharAttr`, `CharAttr.fontSize` → Float; `LeafView` dùng float.
   - Reader: DOCX `sz/2`, PPTX `sz/100`, XLSX `sz` float.
   - Lưu ý: nhiều chỗ đọc `getFontSize` Int (DOC, PPT cũ) — giữ API cũ trả Int để không vỡ.
@@ -236,14 +236,14 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
   - Model: `PARA_SHADING_ID` (màu ARGB). Reader: `pPr/shd fill` (bỏ `auto`), hỗ trợ `val=clear` (các pattern khác xấp xỉ bằng `fill`).
   - Vẽ: `ParagraphView.draw` tô nền trước viền/chữ; nhiều đoạn liền nhau cùng nền → tô liền không hở (nền phủ cả khoảng spacing giữa các đoạn cùng nền — đối chiếu ảnh tham chiếu để chốt).
   - Xong khi: khối code Consolas có nền F2F7F6 liền một khối, lùi 480 twips.
-- [ ] **D6. Căn đều `jc=both/distribute`** (D-h)
+- [x] **D6. Căn đều `jc=both/distribute`** (26/09 — `LineView.justify`, `LeafView.justifyExtra`; đã kiểm bằng bản docx sửa thử) (D-h)
   - Reader: map `both` → `PARA_HOR_ALIGN_JUSTIFIED`, `distribute` → justified cả dòng cuối.
   - Layout: trong `LayoutKit`/`LineView`, sau khi xếp leaf vào dòng: nếu justified và **không phải dòng cuối đoạn** (và dòng không kết thúc bằng ngắt dòng cứng) → chia phần dư cho các khoảng trắng (cộng `extraSpace` vào x của leaf phía sau mỗi space).
   - Ảnh hưởng: `editor/word/WordSelection.kt` (offsetAt/rectsFor) phải dùng vị trí sau khi giãn → kiểm tra lại chọn chữ.
   - Xong khi: đoạn ảnh (có `jc=both`) mép phải thẳng.
 - [ ] **D7. Bảng: `tblW`, autofit/fixed, `tblHeader` lặp khi sang trang** (D-i) — `TableLayoutKit.kt`; `setTableHeaderRow` đã có trong `AttrManage.kt:1141`.
-- [ ] **D8. Font theo theme** (D-j): đọc `theme1.xml` `majorFont/minorFont` (latin/ea/cs); `rFonts asciiTheme="minorHAnsi"` → font minor; ưu tiên `ascii` cho ký tự ASCII, `hAnsi` cho Latin mở rộng (tiếng Việt), `eastAsia` cho CJK (có thể chia leaf theo script — bước sau).
-- [ ] **D9. Crop ảnh `srcRect`** (D-k): áp `srcRect` l/t/r/b (1/1000 %) khi vẽ `PictureShape` DOCX, giá trị âm = thêm lề trống.
+- [x] **D8. Font theo theme** (26/09 — `readThemeFonts`/`themeFont`; thứ tự asciiTheme > ascii > hAnsiTheme > hAnsi > eastAsia. Chưa chia leaf theo script) (D-j): đọc `theme1.xml` `majorFont/minorFont` (latin/ea/cs); `rFonts asciiTheme="minorHAnsi"` → font minor; ưu tiên `ascii` cho ký tự ASCII, `hAnsi` cho Latin mở rộng (tiếng Việt), `eastAsia` cho CJK (có thể chia leaf theo script — bước sau).
+- [x] **D9. Crop ảnh `srcRect`** (đã có sẵn qua `PictureEffectInfoFactory` trong `addPicture`) (D-k): áp `srcRect` l/t/r/b (1/1000 %) khi vẽ `PictureShape` DOCX, giá trị âm = thêm lề trống.
 - [ ] **D10. Thuộc tính run còn thiếu** (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
 - [x] **D12. Số trang trong footer trống** (26/09 — placeholder "1" khi field PAGE/NUMPAGES trong header/footer không có kết quả cache; LeafView thay bằng số trang thật) — render thấy "Trang  • Internal Dev Doc" thiếu số: field `PAGE` dạng
   `fldChar begin / instrText PAGE / separate / end` **không có run kết quả** giữa separate và end (WPS ghi vậy) → reader
@@ -252,7 +252,7 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
   **cộng** `after` của đoạn trước + `before` của đoạn sau (trừ khi `contextualSpacing` cùng style). Sửa + so ảnh tham chiếu.
 - [x] **D14. Hiệu năng layout** (26/09 — xóa toàn bộ `Log.e` debug trong `LayoutKit`/`WPLayouter`): `LayoutKit.layoutPara` gọi `Log.e` cho **mỗi dòng** (l.~121, ~204) — xóa.
 - [ ] **D15. TOC rỗng + các đoạn trống tạo khoảng trắng lớn** sau bảng đầu (trang 1) — so với ảnh tham chiếu WPS rồi quyết định.
-- [ ] **D16. Bảng bị cắt ở cuối trang**: dòng cuối trang 2 (bảng "Vùng MIDI") vẽ thành 1 dòng trống cụt sát footer, nội dung sang trang sau — kiểm tra `TableLayoutKit` khi row không vừa trang (nên đẩy cả row sang trang mới nếu `cantSplit` hoặc row chỉ 1 dòng).
+- [x] **D16. Bảng bị cắt ở cuối trang** (26/09 — do D3 gây ra: ô có lề nên cao ≠ 0; `TableLayoutKit.layoutRow` giờ xét chiều cao nội dung của ô có nội dung): dòng cuối trang 2 (bảng "Vùng MIDI") vẽ thành 1 dòng trống cụt sát footer, nội dung sang trang sau — kiểm tra `TableLayoutKit` khi row không vừa trang (nên đẩy cả row sang trang mới nếu `cantSplit` hoặc row chỉ 1 dòng).
 - [ ] **D11. Kiểm tra hồi quy**: danh sách lặp, header/footer, field PAGE ("Trang 1 • Internal Dev Doc" 9pt màu 4DB6AC căn phải), emoji tiêu đề 36pt căn giữa.
 
 ---
@@ -264,7 +264,7 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
   - Làm: bổ sung ID 27–36, 50–58 (ngày/giờ Đông Á — trong file WPS/Excel CJK, 58 = "m月d日"), 59–62, 67–81 (Thái). Với app tiếng Việt: map 14, 27–36, 50–58 → định dạng ngày ngắn theo locale thiết bị (`dd/MM/yyyy`); 20–22, 32–35 → giờ.
   - Xong khi: `Dữ liệu chi tiết!E2` (46202) hiện thành ngày (serial 46202 = 29/06/2026), không còn số.
 - [x] **X2. Ẩn lưới** (26/09 — `Sheet.isShowGridLines`, `SSConstant.gridlineColor`; đọc trong pull parser của `SheetReader`) (X-b): đọc `sheetView@showGridLines` (và `showRowColHeaders`, `zoomScale`, `topLeftCell`) → lưu vào `Sheet`; `ss/view` bỏ vẽ gridline khi tắt.
-- [ ] **X3. Font ô thật** (X-c) — xong cùng C2/C4.
+- [x] **X3. Font ô thật** (26/09, cùng C4) (X-c) — xong cùng C2/C4.
 - [ ] **X4. Table style tùy biến** (X-d)
   - Reader: trong `StyleReader` đọc `<tableStyles><tableStyle name=…><tableStyleElement type=… dxfId=…>`, map sang `SSTableStyle` (wholeTable, headerRow, totalRow, firstColumn, lastColumn, firstRowStripe, secondRowStripe, firstColumnStripe).
   - `TableStyleKit`: nếu tên style có trong bảng tùy biến → dùng, không thì builtin như cũ. Áp `tableStyleInfo showRowStripes/showFirstColumn…`.
@@ -274,17 +274,17 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
 - [x] **X0. Màu sai do palette** (26/09 — `Workbook.addColor(argb)` tái dùng slot palette 0..65; `indexedColors` trong styles.xml (đọc SAU theme/font/fill) ghi đè slot đó → nền chart `bg1` và chữ trắng hóa **xanh lá 008000**. Giờ màu động luôn ở index ≥ 66.)
 - [ ] **X7. Chart** (X-f): kiểm tra 4 chart với ảnh tham chiếu; ưu tiên: màu `schemeClr + lumMod/lumOff` trên `dPt` pie, data label `showVal/showPercent`, tiêu đề chart rich text, `manualLayout` plot area.
 - [ ] **X8. Ảnh qua vùng dòng ẩn** (X-g): khi tính `twoCellAnchor` bỏ qua dòng hidden theo `editAs` (mặc định `twoCell` → ảnh co theo; nếu ≈0 thì dùng `a:ext` làm kích thước).
-- [ ] **X10. Test render Excel không ổn định vị trí cuộn** — `SampleRenderTest.xlsx` chụp sheet ở vị trí cuộn khác nhau giữa các lần chạy; cần cuộn về `topLeftCell` (hoặc A1) trước khi chụp.
-- [ ] **X11. Tiêu đề chart**: chart 1 hiện "Series 1" thay vì tiêu đề thật, pie (chart 4) mất tiêu đề — kiểm tra đọc `c:title/c:tx/c:rich` và `autoTitleDeleted`.
+- [ ] **X10. Test render Excel không ổn định vị trí cuộn** (đã thử `setZoom(1f)`, `scrollTo(0,0)`, `invalidateTiles()` — chưa ăn; khả năng view con có scroll Android riêng) — `SampleRenderTest.xlsx` chụp sheet ở vị trí cuộn khác nhau giữa các lần chạy; cần cuộn về `topLeftCell` (hoặc A1) trước khi chụp.
+- [ ] **X11. Tiêu đề chart** — chart 3/4 có `<c:title>` **không có text** và series không tên → "Series 1" có thể đúng như Excel; chỉ sửa sau khi có ảnh tham chiếu (G0.3).
 - [ ] **X9. Kiểm tra lại**: merge + căn giữa + wrapText (dashboard B5:C5…), chiều cao dòng customHeight, độ rộng cột theo *max digit width* của font mặc định (Calibri 11 → 7px @96dpi), numFmt 41–44 accounting, `%`.
 
 ---
 
 ## 8. Giai đoạn 4 — PPTX render
 
-- [ ] **P1. Đậm kép Canva** (P-a) — xong cùng C2/C5. Kiểm tra slide 2–8.
-- [ ] **P2. Khoảng cách dòng/đoạn chính xác** (P-b): `ParaAttr.kt:363, 382, 405` đổi `val.toInt() / 100` → `val.toFloat() / 100f`.
-- [ ] **P3. Cỡ chữ lẻ** (P-c) — cùng C3 (`RunAttr.kt:310`, và nhánh `:586`).
+- [x] **P1. Đậm kép Canva** (26/09, cùng C2/C5 — ảnh slide 2 không đổi, không bị đậm kép) (P-a) — xong cùng C2/C5. Kiểm tra slide 2–8.
+- [x] **P2. Khoảng cách dòng/đoạn chính xác** (26/09) (P-b): `ParaAttr.kt:363, 382, 405` đổi `val.toInt() / 100` → `val.toFloat() / 100f`.
+- [x] **P3. Cỡ chữ lẻ** (26/09, cùng C3) (P-c) — cùng C3 (`RunAttr.kt:310`, và nhánh `:586`).
 - [ ] **P4. `spAutoFit`** (P-d): khi box có `spAutoFit`, chiều cao hiển thị = chiều cao text đã layout (tối thiểu `ext cy`), vẫn giữ `anchor`. Không đổi file.
 - [ ] **P5. Ảnh trong custGeom** (P-e): so slide 2 (3 ảnh cover-crop, `fillRect` âm) và slide 9 (custGeom `cubicBezTo`) với ảnh tham chiếu; sửa `AutoShapeDataKit` nếu `fillRect` âm bị hiểu thành co ảnh.
 - [ ] **P6. Group scale**: kiểm tra `ReaderKit.getChildShapeAnchor` với `chExt ≠ ext` (slide 2: `ext 5511800×3454400`, `chExt 1325326×830619`, tỷ lệ ~4.16) — viền/độ dày nét cũng phải scale.
@@ -390,4 +390,14 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 26/09/2026 | D1–D5 | Cỡ chữ, style Normal, nền/viền/lề ô, bỏ hack chữ trắng→đen, viền + nền đoạn. Kiểm tra bằng ảnh: header bảng nền 00695C chữ trắng, viền xám mảnh, callout có vạch trái, khối code nền F2F7F6, header/footer có đường kẻ. |
 | 26/09/2026 | D12, D13, D14, X1, X2, X0 | Số trang footer, spacing cộng, bỏ log layout, ngày builtin 58, ẩn lưới, sửa màu palette (chart xanh lá / chữ trắng thành xanh). Đã kiểm bằng ảnh. |
 | 26/09/2026 | C1, C2, C4, C5~ | Font bundle metric-compatible + đậm/nghiêng thật + font Excel theo tên + weight font nhúng. Ảnh: Word dùng Arimo, khối code monospace, heading đậm thật; PPTX không hồi quy. |
-| — | **Làm tiếp** | P2/P3 (spcPts, cỡ chữ lẻ PPTX) → D16 → X11 → X10 → D6 (justify) → C3. |
+| 26/09/2026 | P2, D6, D16, D8, D9, C3/P3 | spcPts lẻ, căn đều, bảng sang trang, font theme, cỡ chữ lẻ. Test render 3 định dạng pass, không hồi quy. |
+| 26/09/2026 | **TẠM DỪNG** | Theo yêu cầu: dừng sau phần đọc/render, **chưa làm realtime edit**. Commit cuối: xem `git log`. |
+
+### Khi làm tiếp — phần đọc còn lại (theo thứ tự đề xuất)
+1. **G0.3** ảnh tham chiếu (xuất PDF/PNG 3 file mẫu từ WPS) — cần để chốt X11, D15, X4 và spacing.
+2. **D7** lặp dòng tiêu đề bảng khi sang trang (`tblHeader` đã đọc, `TableLayoutKit` chưa lặp) — thấy ở trang 3 file mẫu.
+3. **X6** bật lại freeze pane (`Sheet.getPaneInformation()` trả `null` từ bản gốc vendor) — kiểm tra vẽ kỹ trước khi bật.
+4. **X10** sửa test chụp Excel về A1; rồi **X4** table style tùy biến, **X5** nút AutoFilter.
+5. **P4** `spAutoFit`, **P5/P6** kiểm tra ảnh custGeom + group scale bằng ảnh tham chiếu.
+6. **D10** thuộc tính run còn thiếu (`rPr/shd`, caps, letter spacing), **D15** khoảng trắng TOC rỗng, **C6** emoji/surrogate, `contextualSpacing`.
+7. Sau đó mới sang Giai đoạn 5 (realtime edit).
