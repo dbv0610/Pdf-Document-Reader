@@ -241,10 +241,10 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
   - Layout: trong `LayoutKit`/`LineView`, sau khi xếp leaf vào dòng: nếu justified và **không phải dòng cuối đoạn** (và dòng không kết thúc bằng ngắt dòng cứng) → chia phần dư cho các khoảng trắng (cộng `extraSpace` vào x của leaf phía sau mỗi space).
   - Ảnh hưởng: `editor/word/WordSelection.kt` (offsetAt/rectsFor) phải dùng vị trí sau khi giãn → kiểm tra lại chọn chữ.
   - Xong khi: đoạn ảnh (có `jc=both`) mép phải thẳng.
-- [ ] **D7. Bảng: `tblW`, autofit/fixed, `tblHeader` lặp khi sang trang** (D-i) — `TableLayoutKit.kt`; `setTableHeaderRow` đã có trong `AttrManage.kt:1141`.
+- [x] **D7. Bảng: `tblHeader` lặp khi sang trang** (27/09 — `TableLayoutKit.layoutRepeatedHeader`; `tblW`/autofit/fixed chưa làm) (D-i) — `TableLayoutKit.kt`; `setTableHeaderRow` đã có trong `AttrManage.kt:1141`.
 - [x] **D8. Font theo theme** (26/09 — `readThemeFonts`/`themeFont`; thứ tự asciiTheme > ascii > hAnsiTheme > hAnsi > eastAsia. Chưa chia leaf theo script) (D-j): đọc `theme1.xml` `majorFont/minorFont` (latin/ea/cs); `rFonts asciiTheme="minorHAnsi"` → font minor; ưu tiên `ascii` cho ký tự ASCII, `hAnsi` cho Latin mở rộng (tiếng Việt), `eastAsia` cho CJK (có thể chia leaf theo script — bước sau).
 - [x] **D9. Crop ảnh `srcRect`** (đã có sẵn qua `PictureEffectInfoFactory` trong `addPicture`) (D-k): áp `srcRect` l/t/r/b (1/1000 %) khi vẽ `PictureShape` DOCX, giá trị âm = thêm lề trống.
-- [ ] **D10. Thuộc tính run còn thiếu** (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
+- [~] **D10. Thuộc tính run còn thiếu** (27/09 — xong: `caps`/`smallCaps` (small caps vẽ như caps), giãn chữ `w:spacing`. **Cố ý chưa vẽ** `rPr/shd`: WPS ghi `shd fill=FFFFFF` dưới chữ trắng trên nền màu (doc_test) — cần ảnh tham chiếu Word trước khi quyết định) (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
 - [x] **D12. Số trang trong footer trống** (26/09 — placeholder "1" khi field PAGE/NUMPAGES trong header/footer không có kết quả cache; LeafView thay bằng số trang thật) — render thấy "Trang  • Internal Dev Doc" thiếu số: field `PAGE` dạng
   `fldChar begin / instrText PAGE / separate / end` **không có run kết quả** giữa separate và end (WPS ghi vậy) → reader
   phải tự tạo leaf số trang (`setFontPageNumberType`) khi gặp instrText `PAGE`/`NUMPAGES` dù không có kết quả cache. Xem `processRun` quanh `fldChar`.
@@ -265,16 +265,16 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
   - Xong khi: `Dữ liệu chi tiết!E2` (46202) hiện thành ngày (serial 46202 = 29/06/2026), không còn số.
 - [x] **X2. Ẩn lưới** (26/09 — `Sheet.isShowGridLines`, `SSConstant.gridlineColor`; đọc trong pull parser của `SheetReader`) (X-b): đọc `sheetView@showGridLines` (và `showRowColHeaders`, `zoomScale`, `topLeftCell`) → lưu vào `Sheet`; `ss/view` bỏ vẽ gridline khi tắt.
 - [x] **X3. Font ô thật** (26/09, cùng C4) (X-c) — xong cùng C2/C4.
-- [ ] **X4. Table style tùy biến** (X-d)
+- [x] **X4. Table style tùy biến** (27/09 — `StyleReader.processCustomTableStyle`, `Workbook.getCustomTableStyle`; test `customTableStyle`. *Kèm*: `<b val="1"/>` trước đây bị hiểu là không đậm) (X-d)
   - Reader: trong `StyleReader` đọc `<tableStyles><tableStyle name=…><tableStyleElement type=… dxfId=…>`, map sang `SSTableStyle` (wholeTable, headerRow, totalRow, firstColumn, lastColumn, firstRowStripe, secondRowStripe, firstColumnStripe).
   - `TableStyleKit`: nếu tên style có trong bảng tùy biến → dùng, không thì builtin như cũ. Áp `tableStyleInfo showRowStripes/showFirstColumn…`.
   - Màu `dxf` dùng `theme` + `tint` → đi qua `ThemeColorReader`/`SchemeColorUtil` (đã có xử lý tint).
-- [ ] **X5. Nút AutoFilter** (X-e): đọc `autoFilter@ref` (sheet và table) → vẽ icon ▼ ở góc phải ô header; cột đang lọc (`filterColumn`) dùng icon phễu.
-- [ ] **X6. Freeze pane 2 chiều** — ⚠️ `Sheet.getPaneInformation()` đang **trả `null` cố định** (`ss/model/baseModel/Sheet.kt`, comment `/*paneInformation*/`) → freeze pane bị tắt hoàn toàn; tìm lý do tắt (có thể lỗi vẽ) trước khi bật lại.: kiểm tra sheet3 (`xSplit=1 ySplit=5`, `topLeftCell=B19`) cuộn đúng, đường freeze đúng vị trí.
+- [x] **X5. Nút AutoFilter** (27/09 — đọc autoFilter của sheet và table + `filterColumn`; cột đang lọc nút xanh; `SheetView.drawAutoFilterButtons`) (X-e): đọc `autoFilter@ref` (sheet và table) → vẽ icon ▼ ở góc phải ô header; cột đang lọc (`filterColumn`) dùng icon phễu.
+- [x] **X6. Freeze pane 2 chiều** (27/09 — vẽ đè 3 dải cố định trong `SheetView.drawFrozenPanes`; `Sheet.getFrozenPane()`; `getPaneInformation()` vẫn null để bộ cuộn không bỏ dòng) — ⚠️ `Sheet.getPaneInformation()` đang **trả `null` cố định** (`ss/model/baseModel/Sheet.kt`, comment `/*paneInformation*/`) → freeze pane bị tắt hoàn toàn; tìm lý do tắt (có thể lỗi vẽ) trước khi bật lại.: kiểm tra sheet3 (`xSplit=1 ySplit=5`, `topLeftCell=B19`) cuộn đúng, đường freeze đúng vị trí.
 - [x] **X0. Màu sai do palette** (26/09 — `Workbook.addColor(argb)` tái dùng slot palette 0..65; `indexedColors` trong styles.xml (đọc SAU theme/font/fill) ghi đè slot đó → nền chart `bg1` và chữ trắng hóa **xanh lá 008000**. Giờ màu động luôn ở index ≥ 66.)
 - [ ] **X7. Chart** (X-f): kiểm tra 4 chart với ảnh tham chiếu; ưu tiên: màu `schemeClr + lumMod/lumOff` trên `dPt` pie, data label `showVal/showPercent`, tiêu đề chart rich text, `manualLayout` plot area.
 - [ ] **X8. Ảnh qua vùng dòng ẩn** (X-g): khi tính `twoCellAnchor` bỏ qua dòng hidden theo `editAs` (mặc định `twoCell` → ảnh co theo; nếu ≈0 thì dùng `a:ext` làm kích thước).
-- [ ] **X10. Test render Excel không ổn định vị trí cuộn** (đã thử `setZoom(1f)`, `scrollTo(0,0)`, `invalidateTiles()` — chưa ăn; khả năng view con có scroll Android riêng) — `SampleRenderTest.xlsx` chụp sheet ở vị trí cuộn khác nhau giữa các lần chạy; cần cuộn về `topLeftCell` (hoặc A1) trước khi chụp.
+- [x] **X10. Test render Excel** (27/09 — dùng `SheetView.drawRegion(sheet, 0, 0, 1f)`, luôn từ A1) (đã thử `setZoom(1f)`, `scrollTo(0,0)`, `invalidateTiles()` — chưa ăn; khả năng view con có scroll Android riêng) — `SampleRenderTest.xlsx` chụp sheet ở vị trí cuộn khác nhau giữa các lần chạy; cần cuộn về `topLeftCell` (hoặc A1) trước khi chụp.
 - [ ] **X11. Tiêu đề chart** — chart 3/4 có `<c:title>` **không có text** và series không tên → "Series 1" có thể đúng như Excel; chỉ sửa sau khi có ảnh tham chiếu (G0.3).
 - [ ] **X9. Kiểm tra lại**: merge + căn giữa + wrapText (dashboard B5:C5…), chiều cao dòng customHeight, độ rộng cột theo *max digit width* của font mặc định (Calibri 11 → 7px @96dpi), numFmt 41–44 accounting, `%`.
 
@@ -397,7 +397,10 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 
 | 27/09/2026 | **ppt2.pptx** (Canva, chữ đè nhau slide 3/4) | Nguyên nhân: **giãn chữ `a:rPr@spc` chưa được đọc** (tiêu đề 96pt có `spc=-1344`, phụ đề `spc=-504`) → chữ rộng hơn hộp, xuống dòng và đè lên phụ đề/thân bài. Không phải lỗi làm tròn. Sửa: `FONT_SPACING_ID` (1/100 pt), PPTX `spc`, DOCX `w:rPr/w:spacing` (twips), `LeafView` dùng `Paint.letterSpacing`. Dấu tiếng Việt lạ của font "Barber FIll" là **đúng glyph của font** (đã vẽ trực tiếp từ font nhúng để đối chiếu). Test `SampleRenderTest.ppt2`. |
 
+| 27/09/2026 | D7, X6, D10~, X4, X5, X10, shape trong bảng căn giữa/phải | Test render 7 mẫu pass (docx, doc_test, shape_in_table, xlsx, custom_table_style, pptx, ppt2). |
+
 ### Khi làm tiếp — phần đọc còn lại (theo thứ tự đề xuất)
+Các mục còn lại **cần ảnh tham chiếu (G0.3) để quyết định**, không nên sửa mù: X11 tiêu đề chart ("Series 1"), `rPr/shd` của WPS, D15 khoảng trắng TOC rỗng. Ít ảnh hưởng: P4 `spAutoFit` (chỉ khác khi hộp có nền/viền), D7 `tblW`/fixed layout, small caps đúng cỡ, shape trong bảng bị chia nhiều trang.
 0. ~~Shape neo trong ô bảng~~ (27/09 — xong: `PositionLayoutKit.pageY/columnLeft` cộng vị trí ô/dòng/bảng, cột = vùng chữ của ô; bảng căn trái được đặt x trước khi layout các dòng; test `shapeInTable`). ~~Lưới dòng trong text box~~ (27/09 — **giữ** lưới trong text box với pitch gốc: text box "References" của doc_test cao 164.6pt = 10 dòng × 15.6pt + lề trong, tức WPS có bắt lưới; chỉ thân trang mới giãn pitch — chuyển từ `fillPageAttr` sang `WPLayouter.stretchLinePitch`). Còn: shape trong bảng bị chia qua nhiều trang, bảng căn giữa/phải (x vẫn dịch sau khi layout).
 1. **G0.3** ảnh tham chiếu (xuất PDF/PNG 3 file mẫu từ WPS) — cần để chốt X11, D15, X4 và spacing.
 2. **D7** lặp dòng tiêu đề bảng khi sang trang (`tblHeader` đã đọc, `TableLayoutKit` chưa lặp) — thấy ở trang 3 file mẫu.

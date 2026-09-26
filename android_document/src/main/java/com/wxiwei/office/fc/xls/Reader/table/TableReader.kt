@@ -16,6 +16,15 @@ class TableReader private constructor() {
         fun instance(): TableReader = reader
     }
 
+    private fun parseRange(ref: String): CellRangeAddress? {
+        val range = ref.split(":")
+        if (range.size != 2) return null
+        return CellRangeAddress(
+            ReferenceUtil.instance().getRowIndex(range[0]), ReferenceUtil.instance().getColumnIndex(range[0]),
+            ReferenceUtil.instance().getRowIndex(range[1]), ReferenceUtil.instance().getColumnIndex(range[1])
+        )
+    }
+
     fun read(control: IControl, tablePart: PackagePart, sheet: Sheet) {
         val saxreader = SAXReader()
         try {
@@ -49,6 +58,17 @@ class TableReader private constructor() {
             val totalsRowShown = root!!.attributeValue("totalsRowShown")
             if (!totalsRowShown.equals("0", ignoreCase = true) && totalsRowCount.equals("1", ignoreCase = true)) {
                 table.setTotalRowShown(true)
+            }
+
+            // AutoFilter of the table: header buttons, and which columns are filtered
+            root.element("autoFilter")?.attributeValue("ref")?.let { ref ->
+                parseRange(ref)?.let { range ->
+                    val filter = Sheet.AutoFilter(range)
+                    for (fc in root.element("autoFilter")!!.elements("filterColumn")!!.filterIsInstance<com.wxiwei.office.fc.dom4j.Element>()) {
+                        fc.attributeValue("colId")?.toIntOrNull()?.let { filter.filtered.add(range.getFirstColumn() + it) }
+                    }
+                    sheet.addAutoFilter(filter)
+                }
             }
 
             val styleInfo = root!!.element("tableStyleInfo")

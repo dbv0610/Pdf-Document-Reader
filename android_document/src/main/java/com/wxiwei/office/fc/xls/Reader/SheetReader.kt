@@ -132,6 +132,7 @@ class SheetReader private constructor() {
         var captureValue = false
         var rowHasMetadata = false
         var rowsRead = 0
+        var sheetAutoFilter: Sheet.AutoFilter? = null
 
         try {
             while (true) {
@@ -144,6 +145,19 @@ class SheetReader private constructor() {
                     XmlPullParser.START_TAG -> when (parser.name) {
                         "sheetView" -> {
                             if (parser.attr("showGridLines").let { it == "0" || it == "false" }) target.setShowGridLines(false)
+                        }
+                        // sheet-level AutoFilter (tables carry their own, read by TableReader)
+                        "autoFilter" -> {
+                            val range = parser.attr("ref")?.split(":")?.takeIf { it.size == 2 }?.let {
+                                CellRangeAddress(
+                                    ReferenceUtil.instance().getRowIndex(it[0]), ReferenceUtil.instance().getColumnIndex(it[0]),
+                                    ReferenceUtil.instance().getRowIndex(it[1]), ReferenceUtil.instance().getColumnIndex(it[1])
+                                )
+                            }
+                            sheetAutoFilter = range?.let { Sheet.AutoFilter(it).also { f -> target.addAutoFilter(f) } }
+                        }
+                        "filterColumn" -> sheetAutoFilter?.let { f ->
+                            parser.attr("colId")?.toIntOrNull()?.let { f.filtered.add(f.range.getFirstColumn() + it) }
                         }
                         "sheetFormatPr" -> {
                             parser.attr("defaultRowHeight")?.let {

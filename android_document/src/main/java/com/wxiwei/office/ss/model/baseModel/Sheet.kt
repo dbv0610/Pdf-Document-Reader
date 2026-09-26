@@ -486,6 +486,17 @@ open class Sheet {
     // sheetView@showGridLines
     private var showGridLines = true
 
+    /** An AutoFilter range (sheet or table); [filtered] holds the absolute columns being filtered. */
+    class AutoFilter(val range: com.wxiwei.office.ss.model.CellRangeAddress, val filtered: MutableSet<Int> = HashSet())
+
+    private val autoFilters = ArrayList<AutoFilter>()
+
+    fun addAutoFilter(filter: AutoFilter) {
+        autoFilters.add(filter)
+    }
+
+    fun getAutoFilters(): List<AutoFilter> = autoFilters
+
     fun isShowGridLines(): Boolean = showGridLines
 
     fun setShowGridLines(show: Boolean) {

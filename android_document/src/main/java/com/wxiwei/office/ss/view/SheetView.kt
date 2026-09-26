@@ -357,10 +357,59 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
         //table format
         tableFormatView!!.draw(canvas)
 
+        drawAutoFilterButtons(canvas)
+
         //draw shape(textbox, pict, chart)
         shapeView!!.draw(canvas)
 
         canvas.restore()
+    }
+
+    /**
+     * The drop-down button in each header cell of an AutoFilter range, like Excel; a column that
+     * is being filtered gets a blue button.
+     */
+    private fun drawAutoFilterButtons(canvas: Canvas) {
+        val sheet = this.sheet ?: return
+        val filters = sheet.getAutoFilters()
+        if (filters.isEmpty()) return
+        val clip = canvas.clipBounds
+        val paint = PaintKit.instance().getPaint()
+        val oldColor = paint.color
+        val oldStyle = paint.style
+        val path = android.graphics.Path()
+        for (filter in filters) {
+            val row = filter.range.getFirstRow()
+            for (col in filter.range.getFirstColumn()..filter.range.getLastColumn()) {
+                if (sheet.isColumnHidden(col)) continue
+                val cell = ModelUtil.instance().getCellAnchor(this, row, col)
+                if (cell.right < clip.left || cell.left > clip.right || cell.bottom < clip.top || cell.top > clip.bottom) continue
+                val size = minOf(cell.height() - 2, cell.width() - 2, 17 * zoom)
+                if (size < 6) continue
+                val r = android.graphics.RectF(cell.right - size - 1, cell.bottom - size - 1, cell.right - 1, cell.bottom - 1)
+                val filtered = col in filter.filtered
+                paint.style = android.graphics.Paint.Style.FILL
+                paint.color = if (filtered) 0xFFDDEBF7.toInt() else 0xFFF2F2F2.toInt()
+                canvas.drawRect(r, paint)
+                paint.style = android.graphics.Paint.Style.STROKE
+                paint.color = 0xFF8C8C8C.toInt()
+                canvas.drawRect(r, paint)
+                // arrow
+                paint.style = android.graphics.Paint.Style.FILL
+                paint.color = if (filtered) 0xFF2F5597.toInt() else 0xFF404040.toInt()
+                val cx = r.centerX()
+                val cy = r.centerY()
+                val w = size * 0.28f
+                path.reset()
+                path.moveTo(cx - w, cy - w / 2)
+                path.lineTo(cx + w, cy - w / 2)
+                path.lineTo(cx, cy + w / 2)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+        }
+        paint.color = oldColor
+        paint.style = oldStyle
     }
 
     /**
@@ -656,6 +705,8 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
                 tableFormatView!!.draw(canvas)
                 tableElapsed = android.os.SystemClock.uptimeMillis() - tableStarted
             }
+
+            drawAutoFilterButtons(canvas)
 
             //draw active cell border
             drawActiveCellBorder(canvas)
