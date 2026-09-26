@@ -121,7 +121,10 @@ class PptxEditor(private val source: File) {
         walk(tree(pkg, part)).map { (e, t) ->
             val id = identity(e)!!
             PptxShapeInfo(id.num("id").toInt(), id.attributeValue("name") ?: "", when (e.name) {
-                "sp" -> ShapeKind.TEXT; "pic" -> ShapeKind.PICTURE; "grpSp" -> ShapeKind.GROUP
+                // a shape filled with a picture and without text (Canva's image frames) is a picture
+                "sp" -> if (descendants(e).none { it.namespaceURI == A.uRI && it.name == "t" } &&
+                    descendants(e).any { it.name == "blipFill" }) ShapeKind.PICTURE else ShapeKind.TEXT
+                "pic" -> ShapeKind.PICTURE; "grpSp" -> ShapeKind.GROUP
                 "graphicFrame" -> if (descendants(e).any { it.namespaceURI == A.uRI && it.name == "tbl" }) ShapeKind.TABLE else ShapeKind.OTHER
                 else -> ShapeKind.OTHER
             }, t.map(rect(xfrm(e)) ?: inherited(pkg, part, e) ?: Rect(0, 0, 0, 0)),
