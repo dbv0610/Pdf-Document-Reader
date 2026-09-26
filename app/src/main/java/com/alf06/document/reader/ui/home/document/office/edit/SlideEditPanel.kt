@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.wxiwei.office.editor.EditResult
 import com.wxiwei.office.editor.pptx.LivePptxSession
 import com.wxiwei.office.editor.pptx.Rect
+import com.wxiwei.office.editor.pptx.TextFormat
 import com.wxiwei.office.reader.OfficeDocumentView
 import java.io.File
 
@@ -26,6 +27,19 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     override val view: View = column().apply {
         addView(line(button("Chọn shape", bold = true) { pickShape() }, selected, weights = floatArrayOf(0f, 1f)))
         addView(line(text, button("Đổi chữ") { setText() }, button("+ Text box") { addTextBox() }, weights = floatArrayOf(1f, 0f, 0f)))
+        addView(toolRow(
+            button("B", bold = true) { format(TextFormat(bold = true)) },
+            button("I") { format(TextFormat(italic = true)) },
+            button("U") { format(TextFormat(underline = true)) },
+            button("Chữ đỏ") { format(TextFormat(rgbHex = "C00000")) },
+            button("Chữ đen") { format(TextFormat(rgbHex = "000000")) },
+            button("Cỡ 18") { format(TextFormat(sizePt = 18f)) },
+            button("Cỡ 28") { format(TextFormat(sizePt = 28f)) },
+            button("Cỡ 40") { format(TextFormat(sizePt = 40f)) },
+            button("⇤") { format(TextFormat(align = "l")) },
+            button("↔") { format(TextFormat(align = "ctr")) },
+            button("⇥") { format(TextFormat(align = "r")) },
+        ))
         addView(toolRow(
             button("←") { move(-1, 0) },
             button("→") { move(1, 0) },
@@ -64,6 +78,12 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     private fun setText() {
         if (shapeId < 0) return toast("Chọn shape trước")
         if (!session.setShapeText(slide(), shapeId, text.text.toString())) toast(session.lastError?.message ?: "Không đổi được chữ")
+        else reopenHint()
+    }
+
+    private fun format(f: TextFormat) {
+        if (shapeId < 0) return toast("Chọn shape trước")
+        if (!session.setTextFormat(slide(), shapeId, f)) toast(session.lastError?.message ?: "Shape này không có chữ")
         else reopenHint()
     }
 
