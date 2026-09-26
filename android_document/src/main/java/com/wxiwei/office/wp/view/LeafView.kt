@@ -69,6 +69,19 @@ open class LeafView : AbstractView {
     /**
      * 初始化leaf属性
      */
+    /**
+     * The text as shown: all/small caps upper-case each character in place (same length, so model
+     * offsets are unchanged). Small caps are drawn as plain capitals for now.
+     */
+    private fun displayText(): String? {
+        val text = elem?.getText(null) ?: return null
+        val caps = charAttr?.caps ?: 0
+        if (caps == 0) return text
+        val chars = text.toCharArray()
+        for (i in chars.indices) chars[i] = Character.toUpperCase(chars[i])
+        return String(chars)
+    }
+
     /** Extra width (px at zoom 1) after each space, set by a justified line. */
     var justifyExtra = 0f
 
@@ -128,7 +141,7 @@ open class LeafView : AbstractView {
     open fun doLayout(docAttr: DocAttr?, pageAttr: PageAttr?, paraAttr: ParaAttr?, x: Int, y: Int, w: Int, h: Int, maxEnd: Long, flag: Int): Int {
         val start = getStartOffset(null)
         val startElem = elem!!.getStartOffset()
-        var text = elem!!.getText(null)
+        var text = displayText()
         if (start > startElem) {
             text = text!!.substring((start - startElem).toInt(), (elem!!.getEndOffset() - startElem).toInt())
         }
@@ -177,7 +190,7 @@ open class LeafView : AbstractView {
      * 得到指定结束位置字符宽度
      */
     open fun getTextWidth(): Float {
-        var text = elem!!.getText(null)
+        var text = displayText()
         val s = (start - elem!!.getStartOffset()).toInt()
         val e = (end - elem!!.getStartOffset()).toInt()
         text = text!!.substring(s, e)
@@ -272,7 +285,7 @@ open class LeafView : AbstractView {
             dY -= Math.ceil((paint.descent() - paint.ascent()).toDouble()).toInt()
         }
         // 绘制文本
-        var text: String? = elem!!.getText(null)
+        var text: String? = displayText()
         var s = (start - elem!!.getStartOffset()).toInt()
         var e = (end - elem!!.getStartOffset()).toInt()
 
@@ -389,7 +402,7 @@ open class LeafView : AbstractView {
      * @param isBack 是否向后取，是为在视图上，上一行的结束位置与下一行开始位置相同
      */
     override fun modelToView(offset: Long, rect: Rectangle, isBack: Boolean): Rectangle {
-        var text = elem!!.getText(null)
+        var text = displayText()
         val s = (start - elem!!.getStartOffset()).toInt()
         val e = (offset - elem!!.getStartOffset()).toInt()
         text = text!!.substring(s, e)
@@ -408,7 +421,7 @@ open class LeafView : AbstractView {
     override fun viewToModel(x: Int, y: Int, isBack: Boolean): Long {
         var vX = x
         vX -= this.x
-        var text = elem!!.getText(null)
+        var text = displayText()
         val s = (start - elem!!.getStartOffset()).toInt()
         val e = (end - elem!!.getStartOffset()).toInt()
         text = text!!.substring(s, e)

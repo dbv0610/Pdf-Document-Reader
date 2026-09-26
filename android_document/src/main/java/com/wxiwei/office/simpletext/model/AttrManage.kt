@@ -92,6 +92,16 @@ class AttrManage {
         attr!!.setAttribute(AttrIDConstant.FONT_SPACING_ID, hundredths)
     }
 
+    fun setFontCaps(attr: IAttributeSet?, caps: Int) {
+        attr!!.setAttribute(AttrIDConstant.FONT_CAPS_ID, caps)
+    }
+
+    fun getFontCaps(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_CAPS_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_CAPS_ID) ?: Int.MIN_VALUE
+        return if (a == Int.MIN_VALUE) 0 else a
+    }
+
     fun getFontSpacing(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
         var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_SPACING_ID)
         if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_SPACING_ID) ?: Int.MIN_VALUE
@@ -1494,6 +1504,7 @@ class AttrManage {
         charAttr.fontIndex = getFontName(paraAttr, leafAttr)
         charAttr.fontSizeF = getFontSizeF(paraAttr, leafAttr)
         charAttr.spacingPt = getFontSpacing(paraAttr, leafAttr) / 100f
+        charAttr.caps = getFontCaps(paraAttr, leafAttr)
         charAttr.fontSize = Math.round(charAttr.fontSizeF)
         charAttr.fontScale = getFontScale(paraAttr, leafAttr)
         charAttr.fontColor = getFontColor(paraAttr, leafAttr)

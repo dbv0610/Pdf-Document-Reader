@@ -30,6 +30,10 @@ class CharAttr {
     @JvmField
     var spacingPt = 0f
 
+    // 0 none, 1 all caps, 2 small caps (shown as caps)
+    @JvmField
+    var caps = 0
+
     // 字体
     @JvmField
     var fontIndex = 0
