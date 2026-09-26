@@ -13,6 +13,7 @@ import com.alf06.document.reader.R
 import com.alf06.document.reader.model.DocumentType
 import com.alf06.document.reader.model.RecentDocument
 import com.alf06.document.reader.ui.home.document.office.ReadDocumentActivity
+import com.alf06.document.reader.ui.home.document.office.edit.EditDrafts
 import com.wxiwei.office.reader.OfficeDocumentView
 import com.wxiwei.office.reader.ReaderState
 import com.wxiwei.office.ss.control.ExcelView
@@ -367,6 +368,93 @@ class ReadDocumentEditTest {
                 assertEquals(start, sel.first)
                 assertTrue("end moved right: $sel", sel.last + 1 > start + 6)
             }
+        }
+    }
+
+    /** Bold "CHƠI CÙNG" from the toolbar; returns its offset. */
+    private fun boldTitle(scenario: ActivityScenario<ReadDocumentActivity>, viewer: OfficeDocumentView, file: File): Long {
+        var start = -1L
+        scenario.onActivity {
+            val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+            val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+            for (i in 0 until map.size) {
+                val l = map.leaf(i); val k = l.text.indexOf("PianoLearn — Tính")
+                if (k >= 0) { start = l.start + k; break }
+            }
+            com.wxiwei.office.editor.word.WordSelection(word).setSelection(start, start + "PianoLearn".length)
+        }
+        scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "B" }!!.performClick() }
+        Thread.sleep(800)
+        return start
+    }
+
+    private fun savedXml(file: File) = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+
+    /** The run holding "PianoLearn" in the saved subtitle is bold. */
+    private fun subtitleBold(file: File): Boolean {
+        val xml = savedXml(file)
+        val i = xml.indexOf(">PianoLearn")
+        if (i < 0) return false
+        val run = xml.substring(xml.lastIndexOf("<w:r>", i).coerceAtLeast(xml.lastIndexOf("<w:r ", i)), i)
+        return run.contains("<w:b/>") || run.contains("<w:b ")
+    }
+
+    @Test
+    fun unsavedEditsDraftAndPrompt() {
+        val file = sample("sample.docx")
+        val context = instrumentation.targetContext
+        EditDrafts.delete(context, file)
+        assertTrue(!subtitleBold(file))
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            boldTitle(scenario, viewer, file)
+            // to the background: the edit goes to a draft, the file is untouched
+            scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+            Thread.sleep(1000)
+            assertTrue("draft written", EditDrafts.pending(context, file) != null)
+            assertTrue("file untouched", !subtitleBold(file))
+        }
+        // the app was closed: opening the document offers the draft
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(1500)
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Khôi phục"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click())
+            Thread.sleep(1500)
+            assertTrue("draft restored into the file", subtitleBold(file))
+            assertTrue("draft used up", EditDrafts.pending(context, file) == null)
+            // edit again, then leave the toolbar: asked to save; discard keeps the file
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(2500)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            val xmlBefore = savedXml(file)
+            var start = -1L
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                start = com.wxiwei.office.editor.word.WordSelection(word).let { sel ->
+                    val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+                    var s = -1L
+                    for (i in 0 until map.size) { val l = map.leaf(i); val k = l.text.indexOf("Parse MIDI"); if (k >= 0) { s = l.start + k; break } }
+                    sel.setSelection(s, s + 5); s
+                }
+            }
+            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "I" }!!.performClick() }
+            Thread.sleep(500)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(800)
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Bỏ thay đổi"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click())
+            Thread.sleep(1500)
+            assertEquals("discarded edits are not saved", xmlBefore, savedXml(file))
+            scenario.onActivity { a -> assertEquals(View.GONE, a.findViewById<View>(R.id.editPanel).visibility) }
         }
     }
 }

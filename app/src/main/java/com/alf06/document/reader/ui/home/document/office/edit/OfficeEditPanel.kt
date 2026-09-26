@@ -30,6 +30,35 @@ internal abstract class OfficeEditPanel(
 ) {
     abstract val view: View
 
+    /** True when there are edits not written to the file yet. */
+    abstract fun hasChanges(): Boolean
+
+    /** Writes the document with every edit to [target]. */
+    protected abstract fun writeTo(target: File): EditResult
+
+    /** The file now holds every edit: start over on it. */
+    protected abstract fun onSaved()
+
+    /** Saves the edits over the file; true when there is nothing left to save. */
+    fun save(): Boolean {
+        if (!hasChanges()) {
+            toast("Chưa có thay đổi")
+            return true
+        }
+        val result = saveOver(file) { target -> writeTo(target) }
+        report(result, "Đã lưu " + file.name)
+        if (result !is EditResult.Ok) return false
+        EditDrafts.delete(context, file)
+        onSaved()
+        return true
+    }
+
+    /** Keeps the unsaved edits in a draft (the app may be killed in the background). */
+    fun saveDraft() {
+        if (!hasChanges()) return
+        runCatching { EditDrafts.write(context, file) { target -> writeTo(target) } }
+    }
+
     /** Called when the panel is hidden; stop listening to the document. Call super. */
     open fun close() {
         keepAboveKeyboard(false)

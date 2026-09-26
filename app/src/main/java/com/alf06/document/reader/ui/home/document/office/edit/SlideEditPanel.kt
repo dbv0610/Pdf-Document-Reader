@@ -211,16 +211,19 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         if (session.needsReopen) toast("Thay đổi sẽ hiện đầy đủ sau khi lưu và mở lại")
     }
 
-    private fun save() {
-        if (!session.hasChanges()) return toast("Chưa có thay đổi")
-        val reopen = session.needsReopen
-        val result = saveOver(file) { target -> session.save(target) }
-        report(result, "Đã lưu " + file.name)
-        if (result is EditResult.Ok) {
-            select(null)
-            // slide changes and some shape edits only show after reading the file again
-            if (reopen) reader.open(file.absolutePath)
-            session = LivePptxSession(reader.control!!, file)
-        }
+    private var reopenAfterSave = false
+
+    override fun hasChanges() = session.hasChanges()
+
+    override fun writeTo(target: File): EditResult {
+        reopenAfterSave = session.needsReopen
+        return session.save(target)
+    }
+
+    override fun onSaved() {
+        select(null)
+        // slide changes and some shape edits only show after reading the file again
+        if (reopenAfterSave) reader.open(file.absolutePath)
+        session = LivePptxSession(reader.control!!, file)
     }
 }

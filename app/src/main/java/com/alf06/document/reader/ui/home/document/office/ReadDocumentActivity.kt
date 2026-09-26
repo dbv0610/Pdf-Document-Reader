@@ -29,6 +29,7 @@ import com.alf06.document.reader.ui.dialog.FileOptionsBottomSheet
 import com.alf06.document.reader.ui.dialog.OpenFileErrorDialog
 import com.alf06.document.reader.ui.dialog.RenameFileDialog
 import com.alf06.document.reader.ui.home.document.layoutThumbnailStrip
+import com.alf06.document.reader.ui.home.document.office.edit.EditDrafts
 import com.alf06.document.reader.ui.home.document.office.edit.ExcelEditPanel
 import com.alf06.document.reader.ui.home.document.office.edit.OfficeEditPanel
 import com.alf06.document.reader.ui.home.document.office.edit.SlideEditPanel
@@ -89,6 +90,7 @@ class ReadDocumentActivity :
 
     private var reader: OfficeDocumentView? = null
     private var editPanel: OfficeEditPanel? = null
+    private var draftChecked = false
 
     private var search: DocumentSearch? = null
     private var searchJob: Job? = null
@@ -202,8 +204,10 @@ class ReadDocumentActivity :
         renderSearchState()
         // editing: .docx / .xlsx / .pptx once the document is open
         collectFlow(reader.state.map { it.status == ReaderState.Status.Ready }.distinctUntilChanged()) { ready ->
-            icEditApp.isVisible = ready && File(document.path).extension.lowercase() in EDITABLE_EXTENSIONS
+            val editable = File(document.path).extension.lowercase() in EDITABLE_EXTENSIONS
+            icEditApp.isVisible = ready && editable
             if (!ready) closeEditPanel()
+            if (ready && editable) offerDraft(File(document.path))
         }
     }
 
@@ -227,7 +231,7 @@ class ReadDocumentActivity :
 
     override fun backPressed() {
         if (editPanel != null) {
-            closeEditPanel()
+            requestCloseEditPanel()
             return
         }
         if (binding.lnSearchData.isVisible) {
@@ -239,7 +243,7 @@ class ReadDocumentActivity :
 
     private fun toggleEditPanel() {
         if (editPanel != null) {
-            closeEditPanel()
+            requestCloseEditPanel()
             return
         }
         val reader = reader ?: return
@@ -267,6 +271,48 @@ class ReadDocumentActivity :
         binding.editPanel.addView(panel.view)
         binding.editPanel.visible()
         binding.icEditApp.alpha = 0.5f
+    }
+
+    /** Closes the edit toolbar, asking first when there are unsaved edits. */
+    private fun requestCloseEditPanel() {
+        val panel = editPanel ?: return
+        if (!panel.hasChanges()) return closeEditPanel()
+        val file = File(document?.path ?: return closeEditPanel())
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.edit_unsaved_title)
+            .setMessage(getString(R.string.edit_unsaved_message, file.name))
+            .setPositiveButton(R.string.edit_save) { _, _ -> if (panel.save()) closeEditPanel() }
+            .setNegativeButton(R.string.edit_discard) { _, _ ->
+                // the view shows the edits: read the file again
+                closeEditPanel()
+                EditDrafts.delete(this, file)
+                reader?.open(file.absolutePath)
+            }
+            .setNeutralButton(R.string.edit_keep_editing, null)
+            .show()
+    }
+
+    /** Offers the edits kept when the app was closed before saving them. */
+    private fun offerDraft(file: File) {
+        if (draftChecked) return
+        draftChecked = true
+        val draft = EditDrafts.pending(this, file) ?: return
+        val time = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+            .format(java.util.Date(draft.lastModified()))
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.edit_draft_title)
+            .setMessage(getString(R.string.edit_draft_message, file.name, time))
+            .setPositiveButton(R.string.edit_draft_restore) { _, _ ->
+                if (EditDrafts.restore(this, file)) reader?.open(file.absolutePath)
+                else toast(R.string.edit_draft_restore_failed)
+            }
+            .setNegativeButton(R.string.edit_discard) { _, _ -> EditDrafts.delete(this, file) }
+            .show()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        editPanel?.saveDraft()
     }
 
     private fun closeEditPanel() {

@@ -291,19 +291,17 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         selection()?.let { select(it, at until at + t.length) }
     }
 
-    private fun save() {
-        val s = session ?: return toast("Chưa có thay đổi")
-        if (!s.hasChanges()) return toast("Chưa có thay đổi")
-        val result = saveOver(file) { target -> s.save(target) }
-        report(result, "Đã lưu " + file.name)
-        if (result is EditResult.Ok) {
-            session = null
-            anchor = null
-            stopTyping()
-            selectionLabel.text = HINT
-            // show the saved text: reopen the document
-            reader.open(file.absolutePath)
-        }
+    override fun hasChanges() = session?.hasChanges() == true
+
+    override fun writeTo(target: File) = session!!.save(target)
+
+    override fun onSaved() {
+        session = null
+        anchor = null
+        stopTyping()
+        selectionLabel.text = HINT
+        // show the saved text: reopen the document
+        reader.open(file.absolutePath)
     }
 
     private companion object {

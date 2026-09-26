@@ -125,14 +125,12 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     private fun toggleWrap() = format(CellFormat(wrap = currentStyle()?.isWrapText() != true))
 
-    private fun save() {
-        if (!session.hasChanges()) {
-            toast("Chưa có thay đổi")
-            return
-        }
-        val result = saveOver(file) { target -> session.save(target) }
-        report(result, "Đã lưu " + file.name)
-        // the file now holds every change: start a new session on it
-        if (result is com.wxiwei.office.editor.EditResult.Ok) session = SheetEditSession(reader.control!!, file)
+    override fun hasChanges() = session.hasChanges()
+
+    override fun writeTo(target: File) = session.save(target)
+
+    // the file now holds every change: start a new session on it
+    override fun onSaved() {
+        session = SheetEditSession(reader.control!!, file)
     }
 }
