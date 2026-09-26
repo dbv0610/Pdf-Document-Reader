@@ -107,9 +107,9 @@ open class LeafView : AbstractView {
         paint.typeface = FontTypefaceManage.instance().getFontTypeface(charAttr.fontIndex, charAttr.isBold, charAttr.isItalic)
         // 字号
         if (charAttr.subSuperScriptType > 0) {
-            paint.textSize = charAttr.fontSize * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL / 2
+            paint.textSize = charAttr.fontSizeF * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL / 2
         } else {
-            paint.textSize = charAttr.fontSize * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
+            paint.textSize = charAttr.fontSizeF * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
         }
 
         // 颜色

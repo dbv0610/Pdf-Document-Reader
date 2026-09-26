@@ -159,8 +159,7 @@ class RunAttr {
     private fun setFontSize(attrFrom: IAttributeSet?, attrTo: IAttributeSet) {
         if (attrFrom != null) {
             if (AttrManage.instance().hasAttribute(attrFrom, AttrIDConstant.FONT_SIZE_ID)) {
-                AttrManage.instance()
-                    .setFontSize(attrTo, AttrManage.instance().getFontSize(null, attrFrom))
+                AttrManage.instance().copyFontSize(attrFrom, attrTo)
             }
         }
     }
@@ -307,7 +306,7 @@ class RunAttr {
             if (rPr.attribute("sz") != null) {
                 `val` = rPr.attributeValue("sz")
                 if (`val` != null && `val`.length > 0) {
-                    AttrManage.instance().setFontSize(attr, (`val`.toFloat() / 100).toInt())
+                    AttrManage.instance().setFontSize(attr, `val`.toFloat() / 100)
                 }
             } else {
                 setFontSize(attrLayout, attr)
@@ -586,7 +585,7 @@ class RunAttr {
             if (rPr.attribute("sz") != null) {
                 `val` = rPr.attributeValue("sz")
                 if (`val` != null && `val`.length > 0) {
-                    AttrManage.instance().setFontSize(attr, (`val`.toFloat() / 100).toInt())
+                    AttrManage.instance().setFontSize(attr, `val`.toFloat() / 100)
                 }
             } else {
                 setFontSize(attrLayout, attr)

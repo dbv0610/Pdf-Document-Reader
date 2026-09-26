@@ -3279,7 +3279,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         // must not enlarge Latin text; without sz the size is inherited from the style.
         val halfPoints = rPr.element("sz")?.attributeValue("val").toFloatSafe(0f)
         if (halfPoints > 0f) {
-            am.setFontSize(attr, maxOf(1, Math.round(halfPoints / 2f)))
+            am.setFontSize(attr, maxOf(1f, halfPoints / 2f))
         }
         // 字体
         var temp = rPr.element("rFonts")

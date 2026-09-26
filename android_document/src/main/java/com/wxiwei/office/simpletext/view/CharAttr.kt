@@ -22,6 +22,10 @@ class CharAttr {
     @JvmField
     var fontSize = 0
 
+    // exact size in points (fontSize is rounded)
+    @JvmField
+    var fontSizeF = 0f
+
     // 字体
     @JvmField
     var fontIndex = 0

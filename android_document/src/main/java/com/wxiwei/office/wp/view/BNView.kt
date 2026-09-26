@@ -127,7 +127,7 @@ class BNView : AbstractView() {
         // the number takes the paragraph's font, like Word ("1." in Arial, not a serif)
         paint.typeface = FontTypefaceManage.instance().getFontTypeface(charAttr.fontIndex, charAttr.isBold, charAttr.isItalic)
         // 字号
-        paint.textSize = charAttr.fontSize * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
+        paint.textSize = charAttr.fontSizeF * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
         // 颜色
         paint.color = charAttr.fontColor
 

@@ -63,15 +63,33 @@ class AttrManage {
     /**
      * get fontSize
      */
-    fun getFontSize(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+    fun getFontSize(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int =
+        Math.round(getFontSizeF(paraAttr, leafAttr))
+
+    /** Font size in points, keeping half/hundredth points (10.5pt, 151.71pt). */
+    fun getFontSizeF(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Float {
         var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_SIZE_ID)
         if (a == Int.MIN_VALUE) {
-            a = paraAttr!!.getAttribute(AttrIDConstant.FONT_SIZE_ID)
+            a = paraAttr?.getAttribute(AttrIDConstant.FONT_SIZE_ID) ?: Int.MIN_VALUE
             if (a == Int.MIN_VALUE) {
-                return 12
+                return 12f
             }
         }
-        return a
+        return decodeFontSize(a)
+    }
+
+    /** Sets a fractional size; whole sizes are stored as before (points). */
+    fun setFontSize(attr: IAttributeSet?, points: Float) {
+        val hundredths = Math.round(points * 100)
+        attr!!.setAttribute(
+            AttrIDConstant.FONT_SIZE_ID,
+            if (hundredths % 100 == 0) hundredths / 100 else FONT_SIZE_HUNDREDTHS + hundredths
+        )
+    }
+
+    /** Copies the raw size (whole or fractional) of [from] to [to]. */
+    fun copyFontSize(from: IAttributeSet?, to: IAttributeSet?) {
+        to!!.setAttribute(AttrIDConstant.FONT_SIZE_ID, from!!.getAttribute(AttrIDConstant.FONT_SIZE_ID))
     }
 
     /**
@@ -1473,7 +1491,8 @@ class AttrManage {
     fun fillCharAttr(charAttr: CharAttr?, paraAttr: IAttributeSet?, leafAttr: IAttributeSet?) {
         charAttr!!.reset()
         charAttr.fontIndex = getFontName(paraAttr, leafAttr)
-        charAttr.fontSize = getFontSize(paraAttr, leafAttr)
+        charAttr.fontSizeF = getFontSizeF(paraAttr, leafAttr)
+        charAttr.fontSize = Math.round(charAttr.fontSizeF)
         charAttr.fontScale = getFontScale(paraAttr, leafAttr)
         charAttr.fontColor = getFontColor(paraAttr, leafAttr)
         charAttr.isBold = getFontBold(paraAttr, leafAttr)
@@ -1529,6 +1548,10 @@ class AttrManage {
         return ParaDecoration(if (shading == Int.MIN_VALUE) null else shading, sides[0], sides[1], sides[2], sides[3])
     }
 
+    /** FONT_SIZE_ID holds points, or [FONT_SIZE_HUNDREDTHS] + hundredths of a point. */
+    fun decodeFontSize(value: Int): Float =
+        if (value >= FONT_SIZE_HUNDREDTHS) (value - FONT_SIZE_HUNDREDTHS) / 100f else value.toFloat()
+
     private fun marginPixels(attr: IAttributeSet?, id: Short, default: Int): Int {
         val twips = attr!!.getAttribute(id)
         return if (twips == Int.MIN_VALUE) default else Math.round(twips * MainConstant.TWIPS_TO_PIXEL)
@@ -1545,6 +1568,8 @@ class AttrManage {
     }
 
     companion object {
+        private const val FONT_SIZE_HUNDREDTHS = 1 shl 24
+
         @JvmField
         var am = AttrManage()
 

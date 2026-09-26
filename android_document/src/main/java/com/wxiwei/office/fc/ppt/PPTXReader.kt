@@ -361,6 +361,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                     var fontsize = 12
                     if (style != null) {
                         fontsize = style.getAttrbuteSet()!!.getAttribute(AttrIDConstant.FONT_SIZE_ID)
+                            .let { if (it < 0) it else Math.round(com.wxiwei.office.simpletext.model.AttrManage.instance().decodeFontSize(it)) }
                         if (fontsize < 0) {
                             fontsize = 12
                         }
