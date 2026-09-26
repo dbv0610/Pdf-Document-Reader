@@ -230,6 +230,103 @@ class LiveDocxSessionTest {
     }
 
     @Test
+    fun typeInTableCell() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_cell.docx")
+        val saved = OpenDocument.output("live_docx_cell_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val at = offsetOf(source.absolutePath, "Nạp file .mid")
+            assertTrue(at >= 0)
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(at, "[ô] ") })
+            assertTrue(paragraphText(reader, at).startsWith("[ô] Nạp file .mid"))
+            assertTrue(session.lastError?.toString(), onMain { session.setBold(at + 4, at + 8, true) })
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val at = offsetOf(saved.absolutePath, "[ô] Nạp file .mid")
+            assertTrue("typed cell text saved", at >= 0)
+            assertTrue("bold in cell saved", bold(reader, at + 5))
+        }
+    }
+
+    /** (start, end) of every laid out page, once the background layout has finished. */
+    private suspend fun pages(reader: com.wxiwei.office.reader.OfficeReader): List<Pair<Long, Long>> {
+        repeat(100) {
+            val done = onMain { (reader.control!!.getView() as Word).getRoot(com.wxiwei.office.constant.wp.WPViewConstant.PAGE_ROOT.toInt()).let { (it as com.wxiwei.office.wp.view.PageRoot).isFinishLayout() } }
+            if (done) return@repeat
+            delay(100)
+        }
+        delay(300)
+        return onMain {
+            val root = (reader.control!!.getView() as Word).getRoot(com.wxiwei.office.constant.wp.WPViewConstant.PAGE_ROOT.toInt()) as com.wxiwei.office.wp.view.PageRoot
+            (0 until root.getPageCount()).map { root.getPageView(it)!!.let { p -> p.getStartOffset(null) to p.getEndOffset(null) } }
+        }
+    }
+
+    @Test
+    fun typingSpeedAndIncrementalLayout() {
+        for (name in listOf("sample.docx", "doc_test.docx")) {
+            val source = OpenDocument.copySample(name, "live_speed_$name")
+            OpenDocument.open(source, { it.layout != null }) { reader ->
+                val before = pages(reader)
+                val session = onMain { LiveDocxSession(reader.control!!, source) }
+                val doc = { (reader.control!!.getView() as Word).getDocument() }
+                // a paragraph with text on the middle page, where typing lays out only the pages from there
+                val page = before[before.size / 2]
+                val at = onMain {
+                    var o = page.first
+                    while (o < page.second) {
+                        val p = doc().getParagraph(o) ?: break
+                        if (p.getEndOffset() - p.getStartOffset() > 20 && p.getStartOffset() >= page.first) { o = p.getStartOffset() + 5; break }
+                        o = p.getEndOffset()
+                    }
+                    o
+                }
+                // show the page being edited, as when typing on it
+                onMain {
+                    val w = reader.control!!.getView() as Word
+                    val rect = w.modelToView(at, com.wxiwei.office.java.awt.Rectangle(), false)
+                    w.scrollTo(0, ((rect.y - 200) * w.getZoom()).toInt())
+                }
+                delay(300)
+                val times = ArrayList<Long>()
+                for (i in 0 until 30) {
+                    val t = onMain { val s0 = System.nanoTime(); assertTrue(session.lastError?.toString(), session.insertText(at + i, if (i % 6 == 5) " " else "a")); System.nanoTime() - s0 }
+                    times.add(t / 1000)
+                    delay(30)
+                }
+                // Enter and Backspace too
+                assertTrue(onMain { session.insertText(at + 30, "\n") })
+                val incremental = pages(reader)
+                onMain { (reader.control!!.getView() as Word).relayoutContent() }
+                val full = pages(reader)
+                val sorted = times.sorted()
+                android.util.Log.i("TypingSpeed", "$name pages=${before.size} at=$at reopen=${session.needsReopen} median=${sorted[sorted.size / 2]}us max=${sorted.last()}us all=$times")
+                assertEquals("incremental layout paginates like a full one", full, incremental)
+            }
+        }
+    }
+
+    /** Not a check: lays sample.docx out again and again for a profiler (simpleperf) to watch. */
+    @Test
+    fun layoutProfileLoop() {
+        if (InstrumentationRegistry.getArguments().getString("profileLoop") == null) return
+        val source = OpenDocument.copySample("sample.docx", "live_profile.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            pages(reader)
+            val end = System.currentTimeMillis() + 20_000
+            while (System.currentTimeMillis() < end) {
+                onMain {
+                    val w = reader.control!!.getView() as Word
+                    synchronized(w.getDocument()) { w.relayoutContent() }
+                }
+                pages(reader)
+            }
+        }
+    }
+
+    @Test
     fun paragraphFormattingLive() {
         val source = OpenDocument.copySample("sample.docx", "live_docx_para.docx")
         val saved = OpenDocument.output("live_docx_para_saved.docx")

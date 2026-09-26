@@ -266,10 +266,18 @@ class Word : LinearLayout, IWord {
      * Lays the document out again from the model after an edit, keeping the scroll position.
      * The first page is laid out now, the rest in the background like when opening.
      */
-    fun relayoutContent() {
+    /**
+     * Lays the document out again after a live edit. With [fromOffset] (the start of the edit),
+     * pages before it keep their layout, which keeps typing fast in long documents.
+     */
+    fun relayoutContent(fromOffset: Long = -1) {
         when (currentRootType) {
             WPViewConstant.PAGE_ROOT.toInt() -> {
                 val old = pageRoot ?: return
+                if (fromOffset >= 0 && old.relayoutFrom(fromOffset, ((scrollY + height) / zoom).toInt() + 1, zoom)) {
+                    postInvalidate()
+                    return
+                }
                 val sx = scrollX
                 val sy = scrollY
                 old.dispose()

@@ -135,6 +135,49 @@ class PageRoot(private var word: Word?) : AbstractView(), IRoot {
                 "thread=${Thread.currentThread().name}"
         )
     }
+    /**
+     * Lays the pages out again from the page before the one holding the paragraph of [offset]
+     * (a live edit there): earlier pages keep their layout. Pages are laid out at once down to
+     * [visibleBottom] (page root coordinates), the background layout does the rest. Returns false
+     * when only a full layout will do (the edit is on the first pages, or a table breaks there).
+     * Call with the document lock held, like any model change.
+     */
+    fun relayoutFrom(offset: Long, visibleBottom: Int, zoom: Float): Boolean {
+        val doc = getDocument() ?: return false
+        if (!layoutStarted) return false
+        val paraStart = minOf(offset, doc.getParagraph(offset)?.getStartOffset() ?: offset)
+        // from the page where the edited paragraph starts: its lines on every page may change
+        val restart: Int
+        val start: Long
+        synchronized(this) {
+            // not laid out yet: the background layout will get there with the new text
+            if (pages.isNotEmpty() && paraStart >= pages.last().getEndOffset(null) && !wpLayouter.isLayoutFinish()) {
+                layoutThread.start()
+                return true
+            }
+            var k = pages.indexOfLast { it.getStartOffset(null) <= paraStart }
+            // a page continuing a table needs the table's break state: start before it
+            while (k > 0 && pages[k - 1].endsWithBrokenTable) k--
+            if (k <= 0) return false
+            restart = k
+            start = pages[k].getStartOffset(null)
+            for (i in pages.lastIndex downTo k) deleteView(pages.removeAt(i), true)
+        }
+        viewContainer.removeFrom(start)
+        wpLayouter.restartAt(start, restart + 1, pages[restart - 1].getEndOffset(null))
+        while (!wpLayouter.isLayoutFinish()) {
+            val last = pages.lastOrNull() ?: break
+            // the next page would start below the screen
+            if (last.getY() + last.getHeight() > visibleBottom) break
+            val before = pages.size
+            wpLayouter.backLayout()
+            if (pages.size == before) break // no progress: leave it to the background layout
+        }
+        LayoutKit.instance().layoutAllPage(this, zoom)
+        if (!wpLayouter.isLayoutFinish()) layoutThread.start()
+        return true
+    }
+
     fun getPageView(pageIndex: Int): PageView? = if (pageIndex < 0 || pageIndex >= pages.size) null else pages[pageIndex]
     fun checkUpdateHeaderFooterFieldText(): Boolean { var has = false; for (page in pages) has = has || page.checkUpdateHeaderFooterFieldText(pages.size); return has }
     fun setLayoutThreadDied(isDied: Boolean) { layoutThread.setDied(isDied) }

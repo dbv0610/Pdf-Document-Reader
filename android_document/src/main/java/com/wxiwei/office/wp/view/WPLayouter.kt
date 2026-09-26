@@ -260,6 +260,7 @@ class WPLayouter(root: PageRoot) {
         } else if (para.getType() == WPViewConstant.TABLE_VIEW && tableLayout!!.isTableBreakPages()) {
             breakPara = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.TABLE_VIEW.toInt()) as ParagraphView
             pageView.setHasBreakTable(true)
+            pageView.endsWithBrokenTable = true
             (para as TableView).setBreakPages(true)
         } else if (elem != null && currentLayoutOffset < elem.getEndOffset()) {
             breakPara = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.PARAGRAPH_VIEW.toInt()) as ParagraphView
@@ -478,6 +479,18 @@ class WPLayouter(root: PageRoot) {
      */
     fun setCurrentLayoutOffset(currentLayoutOffset: Long) {
         this.currentLayoutOffset = currentLayoutOffset
+    }
+
+    /**
+     * Continues the layout at [offset] as page [pageNumber], after the kept pages that end at
+     * [lastPageEnd] (see PageRoot.relayoutFrom). A page never starts inside a broken table here.
+     */
+    fun restartAt(offset: Long, pageNumber: Int, lastPageEnd: Long) {
+        currentLayoutOffset = offset
+        currentPageNumber = pageNumber
+        lastCommittedPageEndOffset = lastPageEnd
+        breakPara = null
+        tableLayout!!.clearBreakPages()
     }
 
     fun isLayoutFinish(): Boolean {

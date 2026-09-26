@@ -80,6 +80,12 @@ class ViewContainer {
         return view
     }
 
+    /** Drops the paragraph views starting at or after [offset] (their pages are laid out again). */
+    @Synchronized
+    fun removeFrom(offset: Long) {
+        paras?.removeAll { it.getStartOffset(null) >= offset }
+    }
+
     /**
      *
      */

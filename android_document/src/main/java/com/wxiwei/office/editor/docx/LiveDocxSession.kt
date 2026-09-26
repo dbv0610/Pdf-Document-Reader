@@ -152,10 +152,10 @@ class LiveDocxSession(control: IControl, private val source: File) {
             val before = targets.map { it.getAttribute()!!.clone() }
             targets.forEach { apply(it.getAttribute()!!) }
             val after = targets.map { it.getAttribute()!!.clone() }
-            word.relayoutContent()
+            word.relayoutContent(targets.first().getStartOffset())
             fun restore(states: List<IAttributeSet>) {
                 targets.forEachIndexed { i, p -> p.setAttribute(states[i].clone()) }
-                word.relayoutContent()
+                word.relayoutContent(targets.first().getStartOffset())
             }
             undoStack.add(Step(
                 undo = { editor.undoLast().also { if (it) restore(before) } },
@@ -189,7 +189,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 last.edit.length = last.text.length.toLong()
                 editor.insertText(last.original, last.text)
                 redoStack.clear()
-                word.relayoutContent()
+                word.relayoutContent(offset)
                 return true
             }
             // inside the text being typed (an IME editing its composing word)
@@ -208,7 +208,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             val edit = Edit.Insert(offset, text.length.toLong())
             edits.add(edit)
             undoStack.add(TypingStep(offset, original, text, edit)); redoStack.clear()
-            word.relayoutContent()
+            word.relayoutContent(offset)
             return true
         }
     }
@@ -224,11 +224,11 @@ class LiveDocxSession(control: IControl, private val source: File) {
         val edit = Edit.Insert(offset, 1)
         edits.add(edit)
         undoStack.add(SplitStep(offset,
-            undo = { editor.undoLast() && doc.joinMainParagraph(offset).also { edits.remove(edit); word.relayoutContent() } },
-            redo = { editor.insertText(original, "\n") && doc.splitMainParagraph(offset).also { edits.add(edit); word.relayoutContent() } },
+            undo = { editor.undoLast() && doc.joinMainParagraph(offset).also { edits.remove(edit); word.relayoutContent(offset) } },
+            redo = { editor.insertText(original, "\n") && doc.splitMainParagraph(offset).also { edits.add(edit); word.relayoutContent(offset) } },
         ))
         redoStack.clear()
-        word.relayoutContent()
+        word.relayoutContent(offset)
         return true
     }
 
@@ -242,11 +242,11 @@ class LiveDocxSession(control: IControl, private val source: File) {
         val edit = Edit.Delete(mark, 1)
         edits.add(edit)
         undoStack.add(Step(
-            undo = { editor.undoLast() && doc.splitMainParagraph(mark).also { edits.remove(edit); word.relayoutContent() } },
-            redo = { editor.deleteText(os, oe) && doc.joinMainParagraph(mark).also { edits.add(edit); word.relayoutContent() } },
+            undo = { editor.undoLast() && doc.splitMainParagraph(mark).also { edits.remove(edit); word.relayoutContent(mark) } },
+            redo = { editor.deleteText(os, oe) && doc.joinMainParagraph(mark).also { edits.add(edit); word.relayoutContent(mark) } },
         ))
         redoStack.clear()
-        word.relayoutContent()
+        word.relayoutContent(mark)
         return true
     }
 
@@ -275,17 +275,17 @@ class LiveDocxSession(control: IControl, private val source: File) {
             undoStack.add(Step(
                 undo = {
                     editor.undoLast() && doc.insertMainText(start, removed).also {
-                        edits.remove(edit); word.relayoutContent()
+                        edits.remove(edit); word.relayoutContent(start)
                     }
                 },
                 redo = {
                     editor.deleteText(os, oe) && doc.deleteMainText(start, end).also {
-                        edits.add(edit); word.relayoutContent()
+                        edits.add(edit); word.relayoutContent(start)
                     }
                 },
             ))
             redoStack.clear()
-            word.relayoutContent()
+            word.relayoutContent(start)
             return true
         }
     }
@@ -324,18 +324,18 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 undo = {
                     editor.undoLast() && doc.insertMainText(start + n, removed).also {
                         doc.deleteMainText(start, start + n)
-                        edits.remove(insert); edits.remove(delete); word.relayoutContent()
+                        edits.remove(insert); edits.remove(delete); word.relayoutContent(start)
                     }
                 },
                 redo = {
                     editor.replaceText(os, oe, text) && doc.insertMainText(start, text).also {
                         doc.deleteMainText(start + n, end + n)
-                        edits.add(delete); edits.add(insert); word.relayoutContent()
+                        edits.add(delete); edits.add(insert); word.relayoutContent(start)
                     }
                 },
             ))
             redoStack.clear()
-            word.relayoutContent()
+            word.relayoutContent(start)
             return true
         }
     }
@@ -364,7 +364,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             editor.insertText(last.original, updated)
         }
         redoStack.clear()
-        word.relayoutContent()
+        word.relayoutContent(start)
         return true
     }
 
@@ -377,7 +377,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             if (!editor.undoLast()) return false
             doc.deleteMainText(at, at + text.length)
             edits.remove(edit)
-            word.relayoutContent()
+            word.relayoutContent(at)
             return true
         }
 
@@ -385,7 +385,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             val doc = word.getDocument() as? WPDocument ?: return false
             if (!editor.insertText(original, text) || !doc.insertMainText(at, text)) return false
             edits.add(edit)
-            word.relayoutContent()
+            word.relayoutContent(at)
             return true
         }
     }
@@ -435,10 +435,10 @@ class LiveDocxSession(control: IControl, private val source: File) {
             val before = targets.map { it.getAttribute().clone() }
             targets.forEach { apply(it.getAttribute()) }
             val after = targets.map { it.getAttribute().clone() }
-            word.relayoutContent()
+            word.relayoutContent(start)
             fun restore(states: List<IAttributeSet>) {
                 targets.forEachIndexed { i, leaf -> leaf.setAttribute(states[i].clone()) }
-                word.relayoutContent()
+                word.relayoutContent(start)
             }
             undoStack.add(Step(
                 undo = { editor.undoLast().also { if (it) restore(before) } },

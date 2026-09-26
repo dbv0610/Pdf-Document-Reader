@@ -385,6 +385,9 @@ class PageView(elem: IElement) : AbstractView() {
     /**
      * @return Returns the hasBreakTable.
      */
+    /** True when a table breaks at the bottom of this page and goes on on the next. */
+    var endsWithBrokenTable = false
+
     fun isHasBreakTable(): Boolean {
         return breakTable
     }
