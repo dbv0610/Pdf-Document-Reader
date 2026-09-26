@@ -47,6 +47,14 @@ open class ParagraphElement : AbstractElement() {
         return leaf!!.getElement(offset)
     }
 
+    /** Number of leaves (text runs, shapes, fields). */
+    fun leafCount(): Int = leaf?.size() ?: 0
+
+    /** Removes the leaf at [index] (it must not be used afterwards). */
+    fun removeLeafAt(index: Int) {
+        leaf?.removeElementForIndex(index)
+    }
+
     /**
      * Plain text leaves overlapping [start, end), after splitting the ones that cross a boundary
      * (the halves keep copies of the attributes). Other leaves (shapes, fields) are never split

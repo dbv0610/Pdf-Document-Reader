@@ -20,6 +20,8 @@ class TableElement : ParagraphElement() {
 
     override fun getElementForIndex(index: Int): IElement? = rowElement.getElementForIndex(index)
 
+    fun rowCount(): Int = rowElement.size()
+
     override fun getText(doc: IDocument?): String = ""
 
     override fun appendLeaf(leafElem: LeafElement?) {

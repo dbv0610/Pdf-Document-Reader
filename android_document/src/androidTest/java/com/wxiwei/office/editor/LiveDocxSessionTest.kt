@@ -21,14 +21,14 @@ import java.io.File
 class LiveDocxSessionTest {
     private val out = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "render").apply { mkdirs() }
 
+    /** Model offset of [needle] in the main text rebuilt from the source map (across runs). */
     private fun offsetOf(path: String, needle: String): Long {
         val map = DocxSourceMap.get(path)!!
-        for (i in 0 until map.size) {
-            val l = map.leaf(i)
-            val k = l.text.indexOf(needle)
-            if (k >= 0) return l.start + k
-        }
-        return -1
+        val leaves = (0 until map.size).map { map.leaf(it) }
+        val end = leaves.maxOfOrNull { it.end } ?: 0L
+        val chars = CharArray(end.toInt()) { ' ' }
+        for (l in leaves) l.text.forEachIndexed { i, c -> chars[(l.start + i).toInt()] = c }
+        return String(chars).indexOf(needle).toLong()
     }
 
     private fun bold(reader: com.wxiwei.office.reader.OfficeReader, offset: Long): Boolean = onMain {
@@ -76,6 +76,67 @@ class LiveDocxSessionTest {
             val start = offsetOf(saved.absolutePath, "MidiConverter parse")
             assertTrue("saved bold", bold(reader, start + 2))
             assertEquals(false, bold(reader, start + "MidiConverter parse".length + 3))
+        }
+    }
+
+    private fun modelText(reader: com.wxiwei.office.reader.OfficeReader, from: Long, len: Int): String = onMain {
+        val doc = (reader.control!!.getView() as Word).getDocument()
+        val sb = StringBuilder()
+        var o = from
+        while (sb.length < len) {
+            val leaf = doc.getLeaf(o) ?: break
+            val t = leaf.getText(null) ?: break
+            val k = (o - leaf.getStartOffset()).toInt()
+            sb.append(t.substring(k))
+            o = leaf.getEndOffset()
+        }
+        sb.take(len).toString()
+    }
+
+    @Test
+    fun typeDeleteReplaceLive() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_text.docx")
+        val saved = OpenDocument.output("live_docx_text_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val a = offsetOf(source.absolutePath, "MidiConverter parse")
+            val b = offsetOf(source.absolutePath, "tách NoteOn/NoteOff")
+            val c = offsetOf(source.absolutePath, "Map mỗi MIDI note")
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            // type "Bộ " then "phân tích " at the same place: one queued insert
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(a, "Bộ ") })
+            assertTrue(onMain { session.insertText(a + 3, "phân tích ") })
+            assertEquals("Bộ phân tích MidiConverter", modelText(reader, a, 26))
+            // delete "tách " (after the typed text: current offset moved by 13)
+            val bNow = b + 13
+            assertEquals("tách ", modelText(reader, bNow, 5))
+            assertTrue(session.lastError?.toString(), onMain { session.deleteText(bNow, bNow + 5) })
+            assertEquals("NoteOn/NoteOff", modelText(reader, bNow, 14))
+            // replace "Map" in the next paragraph (moved by +13 -5)
+            val cNow = c + 8
+            assertEquals("Map mỗi", modelText(reader, cNow, 7))
+            assertTrue(session.lastError?.toString(), onMain { session.replaceText(cNow, cNow + 3, "Ánh xạ") })
+            assertEquals("Ánh xạ mỗi", modelText(reader, cNow, 10))
+            // format original text after the edits: offsets are mapped for the file
+            val mNow = cNow + "Ánh xạ ".length
+            assertTrue(session.lastError?.toString(), onMain { session.setBold(mNow, mNow + 3, true) })
+            // formatting typed text is refused until saved
+            assertTrue(!onMain { session.setBold(a, a + 3, true) })
+            // undo the bold and the replace, redo them
+            assertTrue(onMain { session.undo() }); assertTrue(onMain { session.undo() })
+            assertEquals("Map mỗi", modelText(reader, cNow, 7))
+            assertTrue(onMain { session.redo() }); assertTrue(onMain { session.redo() })
+            assertEquals("Ánh xạ mỗi", modelText(reader, cNow, 10))
+            assertTrue(!session.needsReopen)
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val a = offsetOf(saved.absolutePath, "Bộ phân tích MidiConverter parse")
+            assertTrue("typed text saved", a >= 0)
+            assertTrue("deleted text saved", offsetOf(saved.absolutePath, "tách NoteOn") < 0)
+            val m = offsetOf(saved.absolutePath, "Ánh xạ mỗi MIDI")
+            assertTrue("replace saved", m >= 0)
+            assertTrue("bold saved", bold(reader, m + "Ánh xạ ".length + 1))
         }
     }
 }

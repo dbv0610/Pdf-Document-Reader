@@ -5,6 +5,8 @@ import com.wxiwei.office.constant.wp.WPModelConstant
 import com.wxiwei.office.simpletext.model.AttrManage
 import com.wxiwei.office.simpletext.model.ElementCollectionImpl
 import com.wxiwei.office.simpletext.model.IElement
+import com.wxiwei.office.simpletext.model.LeafElement
+import com.wxiwei.office.simpletext.model.ParagraphElement
 import com.wxiwei.office.simpletext.model.STDocument
 import com.wxiwei.office.simpletext.model.SectionElement
 
@@ -178,6 +180,125 @@ class WPDocument : STDocument() {
     }
 
     fun getTextboxSectionElementForIndex(index: Int): IElement? = root?.get(5)?.getElementForIndex(index)
+
+    // ---- live text editing of the main text --------------------------------------------------
+
+    /**
+     * Moves every main-text element after [at] by [delta]: an element that starts after [at]
+     * moves, one that contains it grows (or shrinks). [skip] is left alone (already updated).
+     */
+    private fun shiftMain(at: Long, delta: Long, skip: IElement?) {
+        fun move(e: IElement?) {
+            if (e == null || e === skip) return
+            val s = e.getStartOffset()
+            val en = e.getEndOffset()
+            if (s > at) {
+                e.setStartOffset(s + delta); e.setEndOffset(en + delta)
+            } else if (en > at) {
+                e.setEndOffset(en + delta)
+            }
+        }
+        root?.get(0)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
+        para?.get(0)?.let { c ->
+            for (i in 0 until c.size()) {
+                val p = c.getElementForIndex(i)
+                move(p)
+                if (p is ParagraphElement) for (j in 0 until p.leafCount()) move(p.getElementForIndex(j))
+            }
+        }
+        table?.get(0)?.let { c ->
+            for (i in 0 until c.size()) {
+                val t = c.getElementForIndex(i) as? TableElement ?: continue
+                move(t)
+                for (r in 0 until t.rowCount()) {
+                    val row = t.getElementForIndex(r) as? RowElement ?: continue
+                    move(row)
+                    for (k in 0 until row.getCellNumber()) move(row.getElementForIndex(k))
+                }
+            }
+        }
+    }
+
+    /**
+     * Inserts [text] (no paragraph break) into the plain text run at [offset] of the main text.
+     * Returns false when [offset] is not inside a plain text run (shape, field, other area).
+     */
+    fun insertMainText(offset: Long, text: String): Boolean {
+        if (text.isEmpty() || (offset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
+        if (text.any { it == '\n' || it == '\r' || it == '\u0007' || it == '\u000C' }) return false
+        val paragraph = getParagraph(offset) as? ParagraphElement ?: return false
+        val leaf = paragraph.getLeaf(offset) as? LeafElement ?: return false
+        if (leaf.javaClass != LeafElement::class.java) return false
+        val old = leaf.getText(null) ?: return false
+        val k = (offset - leaf.getStartOffset()).toInt()
+        if (k < 0 || k > old.length) return false
+        leaf.setText(old.substring(0, k) + text + old.substring(k)) // also moves the leaf's end
+        shiftMain(offset, text.length.toLong(), leaf)
+        return true
+    }
+
+    /**
+     * Deletes [start, end) of the main text when it lies in one paragraph, leaves its paragraph
+     * mark, and covers plain text runs only. Returns false otherwise (nothing changed).
+     */
+    fun deleteMainText(start: Long, end: Long): Boolean {
+        if (end <= start || (start and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
+        val paragraph = getParagraph(start) as? ParagraphElement ?: return false
+        if (end > paragraph.getEndOffset() - 1) return false // the paragraph mark stays
+        // only plain runs in the range
+        val touched = ArrayList<Int>()
+        for (i in 0 until paragraph.leafCount()) {
+            val l = paragraph.getElementForIndex(i) ?: continue
+            if (l.getEndOffset() <= start || l.getStartOffset() >= end) continue
+            if (l.javaClass != LeafElement::class.java) return false
+            touched.add(i)
+        }
+        if (touched.isEmpty()) return false
+        val removed = ArrayList<Int>()
+        for (i in touched) {
+            val l = paragraph.getElementForIndex(i) as LeafElement
+            val ls = l.getStartOffset()
+            val text = l.getText(null) ?: continue
+            val a = (maxOf(start, ls) - ls).toInt()
+            val b = (minOf(end, l.getEndOffset()) - ls).toInt()
+            val kept = text.substring(0, a) + text.substring(b)
+            // a run starting inside the range starts at [start] now
+            if (ls > start) l.setStartOffset(start)
+            l.setText(kept)
+            if (kept.isEmpty()) removed.add(i)
+        }
+        val delta = end - start
+        // everything after the range moves back; the touched leaves are already right
+        val skip = touched.map { paragraph.getElementForIndex(it) }.toSet()
+        fun move(e: IElement?) {
+            if (e == null || e in skip) return
+            val s = e.getStartOffset()
+            val en = e.getEndOffset()
+            if (s >= end) { e.setStartOffset(s - delta); e.setEndOffset(en - delta) }
+            else if (en > start) e.setEndOffset(maxOf(start, en - delta))
+        }
+        root?.get(0)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
+        para?.get(0)?.let { c ->
+            for (i in 0 until c.size()) {
+                val p = c.getElementForIndex(i)
+                move(p)
+                if (p is ParagraphElement) for (j in 0 until p.leafCount()) move(p.getElementForIndex(j))
+            }
+        }
+        table?.get(0)?.let { c ->
+            for (i in 0 until c.size()) {
+                val t = c.getElementForIndex(i) as? TableElement ?: continue
+                move(t)
+                for (r in 0 until t.rowCount()) {
+                    val row = t.getElementForIndex(r) as? RowElement ?: continue
+                    move(row)
+                    for (k in 0 until row.getCellNumber()) move(row.getElementForIndex(k))
+                }
+            }
+        }
+        for (i in removed.asReversed()) paragraph.removeLeafAt(i)
+        return true
+    }
 
     fun setPageBackground(pageBG: BackgroundAndFill?) {
         this.pageBG = pageBG
