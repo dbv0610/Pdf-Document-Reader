@@ -1197,9 +1197,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         temp = pPr.element("jc")
         if (temp != null) {
             when (temp.attributeValue("val")) {
-                "left", "both", "distribute" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_LEFT.toInt())
+                "left", "start" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_LEFT.toInt())
+                "both", "distribute" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED.toInt())
                 "center" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt())
-                "right" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_RIGHT.toInt())
+                "right", "end" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_RIGHT.toInt())
             }
         }
 

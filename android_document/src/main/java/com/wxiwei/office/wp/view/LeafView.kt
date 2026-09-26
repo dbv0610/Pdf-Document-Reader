@@ -69,9 +69,25 @@ open class LeafView : AbstractView {
     /**
      * 初始化leaf属性
      */
+    /** Extra width (px at zoom 1) after each space, set by a justified line. */
+    var justifyExtra = 0f
+
+    /** Spaces in this leaf's text before [until] (an offset), for justification. */
+    fun spaceCount(until: Long = end): Int {
+        val text = elem?.getText(null) ?: return 0
+        val base = elem!!.getStartOffset()
+        var n = 0
+        for (o in start until minOf(until, end)) {
+            val i = (o - base).toInt()
+            if (i in text.indices && text[i] == ' ') n++
+        }
+        return n
+    }
+
     @Synchronized
     open fun initProperty(elem: IElement, paraElem: IElement) {
         this.elem = elem
+        justifyExtra = 0f
         drawWidths = null
         alternateDrawWidths = null
         if (paint == null) {
@@ -302,6 +318,9 @@ open class LeafView : AbstractView {
             if (ch == '\u0007' || ch == '\n' || ch == '\r') {
                 cw -= widths[e - s - 1]
             }
+            if (justifyExtra > 0f) {
+                for (i in s until e) if (text[i] == ' ') cw += justifyExtra * zoom
+            }
             var extW = 0f
             val nextView = getNextView()
             if (nextView != null
@@ -326,6 +345,7 @@ open class LeafView : AbstractView {
                 || c == '\u000C' || c == '\t' || c == ' ' || c == '\u0002'
             ) {
                 drawX += widths[i - s] - extX
+                if (c == ' ') drawX += justifyExtra * zoom
                 i++
                 continue
             }
@@ -367,7 +387,7 @@ open class LeafView : AbstractView {
         val s = (start - elem!!.getStartOffset()).toInt()
         val e = (offset - elem!!.getStartOffset()).toInt()
         text = text!!.substring(s, e)
-        rect.x = paint!!.measureText(text).toInt()
+        rect.x = (paint!!.measureText(text) + text.count { it == ' ' } * justifyExtra).toInt()
         rect.x += getX()
         rect.y += getY()
         rect.height = getLayoutSpan(WPViewConstant.Y_AXIS)
@@ -389,6 +409,9 @@ open class LeafView : AbstractView {
         val widths = FloatArray(text.length)
         paint!!.getTextWidths(text, widths)
         var count = 0
+        if (justifyExtra > 0f) {
+            for (i in text.indices) if (text[i] == ' ') widths[i] += justifyExtra
+        }
         for (i in 0 until text.length) {
             vX = (vX - widths[i]).toInt()
             if (vX <= 0) {
