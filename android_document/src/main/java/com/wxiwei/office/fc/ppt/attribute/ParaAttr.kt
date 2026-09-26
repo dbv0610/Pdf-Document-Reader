@@ -360,7 +360,7 @@ class ParaAttr {
                     if (`val` != null && `val`.length > 0) {
                         AttrManage.instance().setParaBefore(
                             attr,
-                            (`val`.toInt() / 100 * MainConstant.POINT_TO_TWIPS).toInt()
+                            (`val`.toInt() / 100f * MainConstant.POINT_TO_TWIPS).toInt()
                         )
                     }
                 }
@@ -379,7 +379,7 @@ class ParaAttr {
                     if (`val` != null && `val`.length > 0) {
                         AttrManage.instance().setParaAfter(
                             attr,
-                            (`val`.toInt() / 100 * MainConstant.POINT_TO_TWIPS).toInt()
+                            (`val`.toInt() / 100f * MainConstant.POINT_TO_TWIPS).toInt()
                         )
                     }
                 }
@@ -402,7 +402,7 @@ class ParaAttr {
                         // 行距
                         AttrManage.instance().setParaLineSpace(
                             attr,
-                            (`val`.toInt() / 100 * MainConstant.POINT_TO_TWIPS).toInt().toFloat()
+                            (`val`.toInt() / 100f * MainConstant.POINT_TO_TWIPS).toInt().toFloat()
                         )
                     }
                 }

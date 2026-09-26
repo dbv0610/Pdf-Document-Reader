@@ -107,6 +107,12 @@ class SampleRenderTest {
         for (i in 0 until sheets) {
             instrumentation.runOnMainSync { excel.showSheet(i) }
             delay(2500)
+            // the view restores the last scroll/zoom; capture every sheet from A1 at 100%
+            instrumentation.runOnMainSync {
+                excel.getSheetView()?.apply { setZoom(1f); scrollTo(0f, 0f) }
+                excel.invalidate()
+            }
+            delay(500)
             lateinit var bitmap: Bitmap
             instrumentation.runOnMainSync {
                 bitmap = Bitmap.createBitmap(excel.width, excel.height, Bitmap.Config.ARGB_8888)
