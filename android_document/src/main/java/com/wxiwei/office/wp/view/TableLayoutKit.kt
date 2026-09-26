@@ -7,6 +7,7 @@
 package com.wxiwei.office.wp.view
 
 import com.wxiwei.office.constant.MainConstant
+import com.wxiwei.office.constant.wp.AttrIDConstant
 import com.wxiwei.office.constant.wp.WPAttrConstant
 import com.wxiwei.office.constant.wp.WPViewConstant
 import com.wxiwei.office.simpletext.model.AttrManage
@@ -81,6 +82,16 @@ class TableLayoutKit {
         var tableHeight = 0
         var tableWidth = 0
         var rowView: RowView? = null
+        // A table continued from the previous page starts with its header rows again (w:tblHeader)
+        if (isBreakPages && docAttr.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt()) {
+            rowView = layoutRepeatedHeader(control, doc, root, docAttr, pageAttr, paraAttr, tableView, tableElem, w, h, flag)
+            if (rowView != null) {
+                tableHeight = rowView.getY() + rowView.getLayoutSpan(WPViewConstant.Y_AXIS)
+                tableWidth = rowView.getLayoutSpan(WPViewConstant.X_AXIS)
+                dy = tableHeight
+                span = h - tableHeight
+            }
+        }
         while (startOffset < maxEnd && span > 0
             || (breakRowElement != null && isBreakPages)
         ) {
@@ -164,6 +175,66 @@ class TableLayoutKit {
         }
         breakRowView = rowView
         return breakType
+    }
+
+    /** Rows marked tblHeader at the top of the table (only the leading run repeats, like Word). */
+    private fun headerRowCount(tableElem: TableElement): Int {
+        var n = 0
+        while (true) {
+            val row = tableElem.getElementForIndex(n) ?: break
+            if (row.getAttribute()!!.getAttribute(AttrIDConstant.TABLE_ROW_HEADER_ID) != 1) break
+            n++
+        }
+        return n
+    }
+
+    /**
+     * Lays out the header rows again at the top of a continued table. The state kept for the row
+     * being continued (split cells, the broken row view, merged cells) is restored afterwards.
+     * Returns the last header row view, or null when there is nothing to repeat or it does not fit.
+     */
+    private fun layoutRepeatedHeader(control: IControl, doc: IDocument, root: IRoot, docAttr: DocAttr, pageAttr: PageAttr?,
+                                     paraAttr: ParaAttr, tableView: TableView, tableElem: TableElement,
+                                     w: Int, h: Int, flag: Int): RowView? {
+        val headers = headerRowCount(tableElem)
+        // nothing to repeat, or the continued row is itself a header row
+        if (headers == 0 || rowIndex <= headers) return null
+        val savedBreakRowView = breakRowView
+        val savedBreakCells = LinkedHashMap(breakPagesCell)
+        val savedMerged = Vector(mergedCell)
+        val savedRowBreak = isRowBreakPages
+        breakPagesCell.clear()
+        var last: RowView? = null
+        var dy = 0
+        for (i in 0 until headers) {
+            val rowElem = tableElem.getElementForIndex(i) as RowElement
+            val view = ViewFactory.createView(control, rowElem, null, WPViewConstant.TABLE_ROW_VIEW.toInt()) as RowView
+            tableView.appendChlidView(view)
+            view.setStartOffset(rowElem.getStartOffset())
+            view.setLocation(0, dy)
+            layoutRow(control, doc, root, docAttr, pageAttr, paraAttr, view, rowElem.getStartOffset(), 0, dy, w, h - dy, flag, false)
+            val height = view.getLayoutSpan(WPViewConstant.Y_AXIS)
+            if (breakPagesCell.isNotEmpty() || height <= 0 || dy + height >= h) {
+                // the header does not fit with room for content: continue without it
+                var v = tableView.getChildView()
+                while (v != null) {
+                    val next = v.getNextView()
+                    tableView.deleteView(v, true)
+                    v = next
+                }
+                last = null
+                break
+            }
+            dy += height
+            last = view
+        }
+        breakPagesCell.clear()
+        breakPagesCell.putAll(savedBreakCells)
+        breakRowView = savedBreakRowView
+        mergedCell.clear()
+        mergedCell.addAll(savedMerged)
+        isRowBreakPages = savedRowBreak
+        return last
     }
 
     private fun clearCurrentRowBreakPageCell(currentElem: IElement) {
