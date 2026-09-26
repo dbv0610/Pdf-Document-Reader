@@ -44,6 +44,15 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     }
     fun setFontSize(start: Long, end: Long, pt: Number): Boolean =
         if (pt.toDouble().isFinite() && pt.toDouble() in 1.0..1638.0) queue(Op(start, end, "sz", (pt.toDouble() * 2).roundToInt().toString())) else invalid("Invalid font size")
+    /** Paragraph alignment of every paragraph touching [start, end): left, center, right, both. */
+    fun setParagraphAlignment(start: Long, end: Long, align: String): Boolean =
+        if (align in setOf("left", "center", "right", "both")) queue(Op(start, end, "pjc", align)) else invalid("Bad alignment")
+    /** Left indent in twips (1/20 pt) of every paragraph touching [start, end). */
+    fun setParagraphIndent(start: Long, end: Long, leftTwips: Int): Boolean =
+        if (leftTwips in 0..31680) queue(Op(start, end, "pind", leftTwips.toString())) else invalid("Bad indent")
+    /** Line spacing as a multiple of single (1.0, 1.5, 2.0...) of every paragraph touching [start, end). */
+    fun setLineSpacing(start: Long, end: Long, multiple: Float): Boolean =
+        if (multiple in 0.25f..10f) queue(Op(start, end, "pline", Math.round(multiple * 240).toString())) else invalid("Bad line spacing")
     fun insertText(offset: Long, text: String) = queue(Op(offset, offset, "insert", text))
     fun deleteText(start: Long, end: Long) = queue(Op(start, end, "delete"))
     fun replaceText(start: Long, end: Long, text: String) = queue(Op(start, end, "replace", text))
@@ -123,6 +132,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                         if (b != null) insert(b, op.value)?.let { insertionEnds[op.start] = it }
                         delete(op.start, op.end)
                     }
+                    "pjc", "pind", "pline" -> paragraphFormat(op)
                     else -> format(op)
                 }
             }
@@ -153,6 +163,33 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             pieces.removeAt(index)
             pieces.add(index, Piece(at, piece.end, right, piece.kind))
             pieces.add(index, Piece(piece.start, at, left, piece.kind))
+        }
+        fun paragraphFormat(op: Op) {
+            val end = maxOf(op.end, op.start + 1)
+            for (p in paras.filter { it.start < end && it.end > op.start }) {
+                val e = paragraphs.getOrNull(p.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
+                val pPr = e.firstChild(W, "pPr") ?: newElement(W, "pPr").also { addBefore(e, e.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
+                val (name, attrs) = when (op.type) {
+                    "pjc" -> "jc" to listOf("val" to op.value)
+                    "pind" -> "ind" to listOf("left" to op.value)
+                    else -> "spacing" to listOf("line" to op.value, "lineRule" to "auto")
+                }
+                val child = pPr.firstChild(W, name) ?: newElement(W, name).also { insertInPPr(pPr, it) }
+                // w:start is the bidi-neutral twin of w:left
+                if (name == "ind") child.attribute(QName("start", W))?.let { child.remove(it) }
+                attrs.forEach { (k, v) -> child.addAttribute(QName(k, W), v) }
+            }
+        }
+        /** CT_PPr is a sequence: Word rejects children out of order. */
+        fun insertInPPr(pPr: Element, child: Element) {
+            val order = listOf("pStyle", "keepNext", "keepLines", "pageBreakBefore", "framePr", "widowControl", "numPr",
+                "suppressLineNumbers", "pBdr", "shd", "tabs", "suppressAutoHyphens", "kinsoku", "wordWrap", "overflowPunct",
+                "topLinePunct", "autoSpaceDE", "autoSpaceDN", "bidi", "adjustRightInd", "snapToGrid", "spacing", "ind",
+                "contextualSpacing", "mirrorIndents", "suppressOverlap", "jc", "textDirection", "textAlignment",
+                "textboxTightWrap", "outlineLvl", "divId", "cnfStyle", "rPr", "sectPr", "pPrChange")
+            val rank = order.indexOf(child.name)
+            val next = pPr.elements()!!.filterIsInstance<Element>().firstOrNull { order.indexOf(it.name) > rank }
+            addBefore(pPr, next, child)
         }
         fun format(op: Op) {
             split(op.end); split(op.start)

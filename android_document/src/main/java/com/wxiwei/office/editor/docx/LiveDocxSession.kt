@@ -10,6 +10,8 @@ import com.wxiwei.office.simpletext.model.ParagraphElement
 import com.wxiwei.office.system.IControl
 import com.wxiwei.office.wp.control.Word
 import com.wxiwei.office.wp.model.WPDocument
+import com.wxiwei.office.constant.wp.WPAttrConstant
+import com.wxiwei.office.simpletext.model.IElement
 import java.io.File
 
 /**
@@ -103,6 +105,61 @@ class LiveDocxSession(control: IControl, private val source: File) {
     private fun refuse(message: String): Boolean {
         ownError = EditResult.Error(Reason.INVALID_ARGUMENT, message)
         return false
+    }
+
+    // ---- paragraph formatting ---------------------------------------------------------------
+
+    fun setAlignment(start: Long, end: Long, align: String): Boolean {
+        val value = when (align) {
+            "center" -> WPAttrConstant.PARA_HOR_ALIGN_CENTER
+            "right" -> WPAttrConstant.PARA_HOR_ALIGN_RIGHT
+            "both" -> WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED
+            else -> WPAttrConstant.PARA_HOR_ALIGN_LEFT
+        }.toInt()
+        return paragraphFormat(start, end, { e, s, t -> e.setParagraphAlignment(s, t, align) }) { am.setParaHorizontalAlign(it, value) }
+    }
+
+    fun setIndentLeft(start: Long, end: Long, twips: Int) =
+        paragraphFormat(start, end, { e, s, t -> e.setParagraphIndent(s, t, twips) }) { am.setParaIndentLeft(it, twips) }
+
+    fun setLineSpacing(start: Long, end: Long, multiple: Float) = paragraphFormat(start, end, { e, s, t -> e.setLineSpacing(s, t, multiple) }) {
+        am.setParaLineSpaceType(it, WPAttrConstant.LINE_SAPCE_MULTIPLE.toInt())
+        am.setParaLineSpace(it, multiple)
+    }
+
+    /** Left indent (twips) of the paragraph at [offset], to step it. */
+    fun indentLeftAt(offset: Long): Int = word.getDocument().getParagraph(offset)?.let { am.getParaIndentLeft(it.getAttribute()) } ?: 0
+
+    private fun paragraphFormat(start: Long, end: Long, fileOp: (DocxEditor, Long, Long) -> Boolean, apply: (IAttributeSet) -> Unit): Boolean {
+        ownError = null
+        val doc = word.getDocument()
+        val targets = ArrayList<IElement>()
+        var offset = start
+        while (true) {
+            val para = doc.getParagraph(offset) ?: break
+            targets.add(para)
+            if (para.getEndOffset() >= maxOf(end, start + 1) || para.getEndOffset() <= offset) break
+            offset = para.getEndOffset()
+        }
+        if (targets.isEmpty()) return refuse("No paragraph here")
+        // the file needs original offsets: use the paragraphs' own starts, which typed text never moves
+        val os = toOriginal(targets.first().getStartOffset())
+        val oe = toOriginal(targets.last().getEndOffset() - 1)
+        if (!fileOp(editor, os, maxOf(oe, os))) return false
+        val before = targets.map { it.getAttribute()!!.clone() }
+        targets.forEach { apply(it.getAttribute()!!) }
+        val after = targets.map { it.getAttribute()!!.clone() }
+        word.relayoutContent()
+        fun restore(states: List<IAttributeSet>) {
+            targets.forEachIndexed { i, p -> p.setAttribute(states[i].clone()) }
+            word.relayoutContent()
+        }
+        undoStack.add(Step(
+            undo = { editor.undoLast().also { if (it) restore(before) } },
+            redo = { fileOp(editor, os, maxOf(oe, os)).also { if (it) restore(after) } },
+        ))
+        redoStack.clear()
+        return true
     }
 
     fun insertText(offset: Long, text: String): Boolean {

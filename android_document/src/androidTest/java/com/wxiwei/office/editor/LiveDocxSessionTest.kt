@@ -189,4 +189,39 @@ class LiveDocxSessionTest {
             assertTrue(paragraphText(reader, at).startsWith("→ người dùng nạp"))
         }
     }
+
+    @Test
+    fun paragraphFormattingLive() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_para.docx")
+        val saved = OpenDocument.output("live_docx_para_saved.docx")
+        val am = AttrManage.instance()
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val at = offsetOf(source.absolutePath, "Tính năng Play-along cho phép")
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.setAlignment(at, at + 5, "center") })
+            assertTrue(session.lastError?.toString(), onMain { session.setIndentLeft(at, at + 5, 1440) })
+            assertTrue(session.lastError?.toString(), onMain { session.setLineSpacing(at, at + 5, 2f) })
+            onMain {
+                val p = (reader.control!!.getView() as Word).getDocument().getParagraph(at)!!
+                assertEquals(com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt(), am.getParaHorizontalAlign(p.getAttribute()))
+                assertEquals(1440, am.getParaIndentLeft(p.getAttribute()))
+            }
+            assertTrue(onMain { session.undo() }) // spacing
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val i = xml.indexOf("Tính năng Play-along cho phép")
+        val pPr = xml.substring(xml.lastIndexOf("<w:pPr>", i), xml.indexOf("</w:pPr>", xml.lastIndexOf("<w:pPr>", i)))
+        assertTrue(pPr, pPr.contains("<w:ind w:left=\"1440\"/>") && pPr.contains("<w:jc w:val=\"center\"/>"))
+        assertTrue("schema order: spacing, ind, jc: $pPr", pPr.indexOf("w:spacing") < pPr.indexOf("w:ind") && pPr.indexOf("w:ind") < pPr.indexOf("w:jc"))
+        assertTrue("undone spacing not saved", !pPr.contains("w:line=\"480\""))
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val at = offsetOf(saved.absolutePath, "Tính năng Play-along cho phép")
+            onMain {
+                val p = (reader.control!!.getView() as Word).getDocument().getParagraph(at)!!
+                assertEquals(com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt(), am.getParaHorizontalAlign(p.getAttribute()))
+            }
+        }
+    }
 }
