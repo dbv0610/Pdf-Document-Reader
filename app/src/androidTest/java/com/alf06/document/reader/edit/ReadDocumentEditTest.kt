@@ -314,5 +314,60 @@ class ReadDocumentEditTest {
             }
         }
     }
+
+    @Test
+    fun wordSelectionHandleDrag() {
+        val file = sample("sample.docx")
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            // long-press "CHƠI" to select it
+            var start = -1L
+            var point = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+                for (i in 0 until map.size) {
+                    val l = map.leaf(i); val k = l.text.indexOf("CHƠI CÙNG")
+                    if (k >= 0) { start = l.start + k; break }
+                }
+                val r = com.wxiwei.office.editor.word.WordSelection(word).rectsFor(start, start + 2).first()
+                val o = IntArray(2); word.getLocationOnScreen(o)
+                point = floatArrayOf(o[0] + r.exactCenterX(), o[1] + r.exactCenterY())
+            }
+            val down = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], down)
+            Thread.sleep(900)
+            inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], down)
+            Thread.sleep(800)
+            var knob = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val sel = com.wxiwei.office.editor.word.WordSelection(word)
+                assertEquals(start until start + 4, sel.selection())
+                val c = sel.caretRect(start + 4)!!
+                val o = IntArray(2); word.getLocationOnScreen(o)
+                val d = word.resources.displayMetrics.density
+                knob = floatArrayOf(o[0] + c.left.toFloat(), o[1] + c.bottom + 9 * d)
+            }
+            // drag the end handle to the right, over "CÙNG FILE"
+            val t = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, knob[0], knob[1], t)
+            for (i in 1..10) { Thread.sleep(16); inject(android.view.MotionEvent.ACTION_MOVE, knob[0] + i * 25, knob[1], t) }
+            inject(android.view.MotionEvent.ACTION_UP, knob[0] + 250, knob[1], t)
+            Thread.sleep(600)
+            screenshot("word_handles")
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val sel = com.wxiwei.office.editor.word.WordSelection(word).selection()!!
+                assertEquals(start, sel.first)
+                assertTrue("end moved right: $sel", sel.last + 1 > start + 6)
+            }
+        }
+    }
 }
 

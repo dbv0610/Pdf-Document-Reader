@@ -129,8 +129,20 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         }
     }
 
+    private val handles = WordSelectionHandles(
+        context,
+        source = { reader.control?.getView() },
+        range = { selection()?.selection() },
+        caret = { offset -> selection()?.caretRect(offset) },
+        offsetAt = { x, y -> selection()?.offsetAtScreen(x, y) ?: -1 },
+    ) { start, end ->
+        selection()?.let { select(it, start until end) }
+        anchor = start until end
+    }
+
     init {
         reader.addView(caret, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        reader.addView(handles, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         keepAboveKeyboard(true)
     }
 
@@ -139,6 +151,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         reader.onDocumentGesture = null
         stopTyping()
         reader.removeView(caret)
+        reader.removeView(handles)
         clearSelection()
     }
 
@@ -147,6 +160,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         session() ?: return false
         anchor = null
         selection()?.clearSelection()
+        handles.refresh()
         resetBuffer(offset)
         typing.requestFocus()
         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(typing, 0)
@@ -230,12 +244,14 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         selection.setSelection(range.first, range.last + 1)
         val t = selection.selectedText().replace('\n', ' ')
         selectionLabel.text = "Đã chọn: \"" + (if (t.length > 60) t.take(60) + "…" else t) + "\"" + pendingText()
+        handles.refresh()
     }
 
     private fun clearSelection() {
         anchor = null
         selection()?.clearSelection()
         selectionLabel.text = HINT + pendingText()
+        handles.refresh()
     }
 
     private fun pendingText() = if (session?.needsReopen == true) "  ·  một số thay đổi hiện sau khi Lưu" else ""
