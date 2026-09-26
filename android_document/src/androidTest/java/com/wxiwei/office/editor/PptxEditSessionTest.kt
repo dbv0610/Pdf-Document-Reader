@@ -46,6 +46,11 @@ class PptxEditSessionTest {
             assertTrue(session.lastError?.toString(), added > 0)
             val temp = onMain { session.addTextBox(1, Rect(0, 0, 914400, 914400), "tạm", 20f) }
             assertTrue(onMain { session.undo() }) // removes "tạm"
+            // format the title: bold, red, 60pt, right aligned; undo and redo
+            val fmt = com.wxiwei.office.editor.pptx.TextFormat(bold = true, rgbHex = "C00000", sizePt = 60f, align = "r")
+            assertTrue(session.lastError?.toString(), onMain { session.setTextFormat(1, title.id, fmt) })
+            assertTrue(onMain { session.undo() })
+            assertTrue(onMain { session.redo() })
             Log.i("PptxEditTest", "needsReopen=${session.needsReopen} temp=$temp added=$added")
             shot(reader, "pptx_edit_live")
             val result = onMain { session.save(saved) }
@@ -57,6 +62,10 @@ class PptxEditSessionTest {
         assertEquals(pictureRect, after.first { it.id == pictureId }.rectEmu)
         assertTrue(after.any { it.text == "Hộp mới" })
         assertTrue("undone box not saved", after.none { it.text == "tạm" })
+        // the saved title runs carry the format
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide2.xml")).readBytes().toString(Charsets.UTF_8) }
+        val titleXml = xml.substring(xml.indexOf("LỘ TRÌNH ĐÃ SỬA").let { xml.lastIndexOf("<p:sp>", it) }, xml.indexOf("LỘ TRÌNH ĐÃ SỬA"))
+        assertTrue(titleXml, titleXml.contains("b=\"1\"") && titleXml.contains("sz=\"6000\"") && titleXml.contains("C00000") && titleXml.contains("algn=\"r\""))
         OpenDocument.open(saved, { it.pageCount >= 10 }) { reader -> shot(reader, "pptx_edit_reopened") }
     }
 }

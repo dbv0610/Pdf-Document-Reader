@@ -80,6 +80,17 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         return true
     }
 
+    /** Bold, italic, underline, size, color or alignment for all the text of a shape. */
+    fun setTextFormat(slideIndex: Int, shapeId: Int, format: TextFormat): Boolean {
+        if (!editor.setTextFormat(slideIndex, shapeId, format)) return false
+        var token = display.setTextFormat(slideIndex, shapeId, format)
+        live(token != null)
+        record({ editor.setTextFormat(slideIndex, shapeId, format) },
+            { display.setTextFormat(slideIndex, shapeId, format).also { token = it } != null },
+            { token?.let { display.restoreFormat(slideIndex, it) } ?: false })
+        return true
+    }
+
     fun moveShape(slideIndex: Int, shapeId: Int, rectEmu: Rect): Boolean {
         val old = display.shapeRect(slideIndex, shapeId) ?: listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rectEmu
         if (!editor.moveShape(slideIndex, shapeId, rectEmu)) return false

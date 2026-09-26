@@ -14,6 +14,12 @@ data class Rect(val x: Long, val y: Long, val width: Long, val height: Long)
 data class Size(val width: Long, val height: Long)
 data class Point(val x: Long, val y: Long)
 enum class ShapeKind { TEXT, PICTURE, TABLE, GROUP, OTHER }
+/** Text formatting for a whole shape; null fields stay as they are. [align]: l, ctr, r, just. */
+data class TextFormat(
+    val bold: Boolean? = null, val italic: Boolean? = null, val underline: Boolean? = null,
+    val sizePt: Float? = null, val rgbHex: String? = null, val align: String? = null,
+)
+
 data class PptxShapeInfo(val id: Int, val name: String, val kind: ShapeKind, val rectEmu: Rect,
                          val text: String, val isPlaceholder: Boolean)
 
@@ -186,6 +192,43 @@ class PptxEditor(private val source: File) {
         val pp = body.firstChild(A, "p")?.firstChild(A, "pPr")?.createCopy()
         paragraphs(body, text, rp, pp)
     }
+    /** Formats every run (and paragraph for [TextFormat.align]) of a shape's text. */
+    fun setTextFormat(slideIndex: Int, shapeId: Int, format: TextFormat): Boolean = queue { pkg ->
+        val e = find(pkg, slideIndex, shapeId).first
+        val body = e.firstChild(P, "txBody") ?: throw IllegalArgumentException("Shape has no editable text body")
+        format.rgbHex?.let { require(it.removePrefix("#").matches(Regex("(?i)[0-9a-f]{6}"))) { "Expected RRGGBB" } }
+        format.align?.let { require(it in setOf("l", "ctr", "r", "just")) { "Bad alignment" } }
+        for (p in body.childrenNamed(A, "p")) {
+            format.align?.let { al ->
+                val pPr = p.firstChild(A, "pPr") ?: newElement(A, "pPr").also { (p.content() as MutableList<Any?>).add(0, it) }
+                pPr.addAttribute("algn", al)
+            }
+            // the run properties of text runs, fields and the paragraph end
+            val props = p.elements()!!.filterIsInstance<Element>().mapNotNull { r ->
+                when {
+                    r.namespaceURI != A.uRI -> null
+                    r.name == "r" || r.name == "fld" -> r.firstChild(A, "rPr") ?: newElement(A, "rPr").also { (r.content() as MutableList<Any?>).add(0, it) }
+                    r.name == "endParaRPr" -> r
+                    else -> null
+                }
+            }
+            for (rPr in props) {
+                format.bold?.let { rPr.addAttribute("b", if (it) "1" else "0") }
+                format.italic?.let { rPr.addAttribute("i", if (it) "1" else "0") }
+                format.underline?.let { rPr.addAttribute("u", if (it) "sng" else "none") }
+                format.sizePt?.let { rPr.addAttribute("sz", Math.round(it * 100).toString()) }
+                format.rgbHex?.let { rgb ->
+                    // CT_TextCharacterProperties: ln, then the fill, before effects and fonts
+                    listOf("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill").forEach { n -> rPr.childrenNamed(A, n).forEach { rPr.remove(it) } }
+                    val fill = newElement(A, "solidFill").apply { add(newElement(A, "srgbClr").apply { addAttribute("val", rgb.removePrefix("#").uppercase()) }) }
+                    val content = rPr.content() as MutableList<Any?>
+                    val ln = rPr.firstChild(A, "ln")
+                    content.add(if (ln == null) 0 else content.indexOf(ln) + 1, fill)
+                }
+            }
+        }
+    }
+
     fun moveShape(slideIndex: Int, shapeId: Int, rectEmu: Rect): Boolean = queue { pkg ->
         val (e, t) = find(pkg, slideIndex, shapeId)
         val r = t.inverse(rectEmu)

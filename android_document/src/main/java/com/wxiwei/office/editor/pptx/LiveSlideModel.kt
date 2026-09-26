@@ -38,6 +38,9 @@ interface LiveSlideDisplay {
     /** Remove the model shapes with [id]; returns a token that [restoreShape] puts back, or null. */
     fun removeShape(slideIndex: Int, id: Int): Any?
     fun restoreShape(slideIndex: Int, token: Any): Boolean
+    /** Formats the shape's text; returns a token for [restoreFormat], or null when not shown live. */
+    fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? = null
+    fun restoreFormat(slideIndex: Int, token: Any): Boolean = false
 }
 
 /**
@@ -169,6 +172,54 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         }
         repaint()
         return true
+    }
+
+    override fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? {
+        val slide = slide(slideIndex) ?: return null
+        val box = find(slide, id).filterIsInstance<TextBox>().firstOrNull() ?: return null
+        val section = box.element ?: return null
+        val am = AttrManage.instance()
+        val saved = ArrayList<Pair<com.wxiwei.office.simpletext.model.IElement, IAttributeSet>>()
+        val count = section.getParaCollection()?.size() ?: 0
+        for (i in 0 until count) {
+            val para = section.getParaCollection()!!.getElementForIndex(i) as? ParagraphElement ?: continue
+            saved.add(para to para.getAttribute()!!.clone())
+            format.align?.let {
+                am.setParaHorizontalAlign(para.getAttribute(), when (it) {
+                    "ctr" -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt()
+                    "r" -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_RIGHT.toInt()
+                    "just" -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED.toInt()
+                    else -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_LEFT.toInt()
+                })
+            }
+            for (j in 0 until para.leafCount()) {
+                val leaf = para.getElementForIndex(j) ?: continue
+                val attr = leaf.getAttribute()!!
+                saved.add(leaf to attr.clone())
+                format.bold?.let { am.setFontBold(attr, it) }
+                format.italic?.let { am.setFontItalic(attr, it) }
+                format.underline?.let { am.setFontUnderline(attr, if (it) 1 else 0) }
+                format.sizePt?.let { am.setFontSize(attr, it) }
+                format.rgbHex?.let { am.setFontColor(attr, (0xFF shl 24) or it.removePrefix("#").toInt(16)) }
+            }
+        }
+        relayout(box)
+        return FormatToken(box, saved)
+    }
+
+    private class FormatToken(val box: TextBox, val saved: List<Pair<com.wxiwei.office.simpletext.model.IElement, IAttributeSet>>)
+
+    override fun restoreFormat(slideIndex: Int, token: Any): Boolean {
+        val t = token as? FormatToken ?: return false
+        for ((element, attr) in t.saved) element.setAttribute(attr.clone())
+        relayout(t.box)
+        return true
+    }
+
+    private fun relayout(box: TextBox) {
+        box.rootView?.dispose()
+        box.rootView = null // laid out again on the next draw
+        repaint()
     }
 
     override fun shapeRect(slideIndex: Int, id: Int): Rect? {
