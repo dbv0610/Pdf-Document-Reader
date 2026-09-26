@@ -152,7 +152,7 @@ class RowHeader(sheetView: SheetView?) {
         canvas.drawRect(rect, paint)
 
         // 绘线
-        paint.color = SSConstant.GRIDLINE_COLOR
+        paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
         canvas.drawRect(0f, y, rightBound, y + 1, paint)
         //head line
         paint.color = SSConstant.HEADER_GRIDLINE_COLOR
@@ -214,7 +214,7 @@ class RowHeader(sheetView: SheetView?) {
             canvas.drawRect(rect, paint)
 
             // 绘线
-            paint.color = SSConstant.GRIDLINE_COLOR
+            paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
             canvas.drawRect(0f, y, rightBound.toFloat(), y + 1, paint)
             //head line
             paint.color = SSConstant.HEADER_GRIDLINE_COLOR
@@ -237,7 +237,7 @@ class RowHeader(sheetView: SheetView?) {
         }
 
         // 绘线最后一根线
-        paint.color = SSConstant.GRIDLINE_COLOR
+        paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
         canvas.drawRect(0f, y, rightBound.toFloat(), y + 1, paint)
         //head line
         paint.color = SSConstant.HEADER_GRIDLINE_COLOR

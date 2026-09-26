@@ -103,8 +103,9 @@ class LayoutKit private constructor() {
             para.setY(para.getY() + paraAttr.beforeSpace)
         } else {
             if (paraAttr.beforeSpace > 0) {
-                var beforeSpace = paraAttr.beforeSpace - prePara.getBottomIndent()
-                beforeSpace = Math.max(0, beforeSpace)
+                // Word adds the previous paragraph's space after and this space before; it does not
+                // collapse them like HTML margins
+                val beforeSpace = paraAttr.beforeSpace
                 spanH -= beforeSpace
                 para.setTopIndent(beforeSpace)
                 para.setY(para.getY() + beforeSpace)
@@ -117,7 +118,6 @@ class LayoutKit private constructor() {
             return WPViewConstant.BREAK_LIMIT.toInt()
         }
         var line = ViewFactory.createView(control, elem, elem, WPViewConstant.LINE_VIEW.toInt()) as LineView
-        Log.e("LayoutKit.layoutPara", "line.setStartOffset = " + lineStart)
         line.setStartOffset(lineStart)
         para.appendChlidView(line)
         flag = ViewKit.instance().setBitValue(flag, WPViewConstant.LAYOUT_FLAG_KEEPONE.toInt(), true)
@@ -163,7 +163,6 @@ class LayoutKit private constructor() {
             maxWidth = Math.max(maxWidth, line.getLayoutSpan(WPViewConstant.X_AXIS))
             if (lineStart < elemEnd && spanH > 0) {
                 line = ViewFactory.createView(control, elem, elem, WPViewConstant.LINE_VIEW.toInt()) as LineView
-                Log.e("LayoutKit.204", "line.setStartOffset = " + lineStart)
                 line.setStartOffset(lineStart)
                 para.appendChlidView(line)
             }
@@ -218,7 +217,6 @@ class LayoutKit private constructor() {
             }
             leaf = ViewFactory.createView(control, run, elem, WPViewConstant.LEAF_VIEW.toInt()) as LeafView
             line.appendChlidView(leaf)
-            Log.e("LayoutKit.layoutLine", "leaf.setStartOffset = " + pos)
             leaf.setStartOffset(pos)
             leaf.setLocation(dx, dy)
 
@@ -231,7 +229,6 @@ class LayoutKit private constructor() {
                 break
             }
             pos = leaf.getEndOffset(null)
-            Log.e("LayoutKit.360", "line.setEndOffset = " + pos)
             line.setEndOffset(pos)
             val leafWidth = leaf.getLayoutSpan(WPViewConstant.X_AXIS)
             lineWidth += leafWidth
@@ -256,7 +253,6 @@ class LayoutKit private constructor() {
         if (breakType == WPViewConstant.BREAK_LIMIT.toInt()) {
             var str = elem!!.getText(doc)
             val paraStart = elem!!.getStartOffset()
-            Log.e("LayoutKit.381 str", "" + str + " ; paraStart = " + paraStart + " ; start = " + start)
             if (start >= paraStart) {
                 str = str!!.substring((start - paraStart).toInt())
                 val newPos = FontKit.instance().findBreakOffset(str, (pos - start).toInt()) + start
@@ -301,7 +297,6 @@ class LayoutKit private constructor() {
         // 同一leaf，需要折分
         var leafWidth: Int
         if (view != null && view.getEndOffset(null) > newPos) {
-            Log.e("LayoutKit.456", "view.setEndOffset = " + newPos)
             view.setEndOffset(newPos)
             lineWidth -= view.getWidth()
             leafWidth = (view as LeafView).getTextWidth().toInt()
@@ -309,7 +304,6 @@ class LayoutKit private constructor() {
             view.setWidth(leafWidth)
             lineWidth += leafWidth
         }
-        Log.e("LayoutKit.464", "view.setEndOffset = " + newPos)
         line.setEndOffset(newPos)
         line.setWidth(lineWidth)
     }

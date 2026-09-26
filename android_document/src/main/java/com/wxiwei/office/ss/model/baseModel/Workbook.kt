@@ -206,24 +206,17 @@ open class Workbook(before07: Boolean) {
     @Synchronized
     fun addColor(argb: Int): Int {
         val colors = colors!!
-        if (colors.containsValue(argb)) {
-            val iter = colors.keys.iterator()
-            var index = 0
-            while (iter.hasNext()) {
-                index = iter.next()
-                if (colors[index]!! == argb) {
-                    break
-                }
-            }
-            return index
-        } else {
-            var index = colors.size - 1
-            while (colors[index] != null) {
-                index++
-            }
-            colors[index] = argb
-            return index
+        // Never hand out a palette slot (0..65): the file may redefine it later (styles.xml
+        // indexedColors, XLS PALETTE record), which would silently recolor theme/RGB colors.
+        for ((index, value) in colors) {
+            if (index >= FIRST_FREE_COLOR_INDEX && value == argb) return index
         }
+        var index = FIRST_FREE_COLOR_INDEX
+        while (colors[index] != null) {
+            index++
+        }
+        colors[index] = argb
+        return index
     }
 
     /**
@@ -589,3 +582,6 @@ open class Workbook(before07: Boolean) {
         }
     }
 }
+
+/** First color index after the legacy palette (0..63) and the system colors 64, 65. */
+private const val FIRST_FREE_COLOR_INDEX = 66

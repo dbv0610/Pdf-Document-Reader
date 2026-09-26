@@ -123,7 +123,7 @@ class CellView(sheetView: SheetView?) {
         val oldColor = paint.color
         val oldStyle = paint.style
 
-        paint.color = SSConstant.GRIDLINE_COLOR
+        paint.color = SSConstant.gridlineColor(sheetView?.getCurrentSheet())
         paint.style = Style.STROKE
         canvas.drawRect(
             left,

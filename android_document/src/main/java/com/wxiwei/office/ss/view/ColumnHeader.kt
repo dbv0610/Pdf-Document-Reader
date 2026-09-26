@@ -202,7 +202,7 @@ class ColumnHeader(sheetView: SheetView?) {
 
             if (colIndex != minRowAndColumnInformation.getMinColumnIndex()) {
                 // 绘线
-                paint.color = SSConstant.GRIDLINE_COLOR
+                paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
                 canvas.drawRect(x, 0f, x + 1, bottomBound.toFloat(), paint)
             }
             //header line
@@ -227,7 +227,7 @@ class ColumnHeader(sheetView: SheetView?) {
 
         // 绘线最后一根线
         // 绘线
-        paint.color = SSConstant.GRIDLINE_COLOR
+        paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
         canvas.drawRect(x, 0f, x + 1, bottomBound.toFloat(), paint)
         //header line
         paint.color = SSConstant.HEADER_GRIDLINE_COLOR

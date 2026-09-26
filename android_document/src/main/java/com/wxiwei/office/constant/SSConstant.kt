@@ -28,6 +28,11 @@ object SSConstant {
     const val HEADER_GRIDLINE_COLOR = -0x939393
     // 网格线颜色
     const val GRIDLINE_COLOR = -0x382e27
+
+    /** Grid line color of [sheet], transparent when the sheet hides grid lines (showGridLines="0"). */
+    @JvmStatic
+    fun gridlineColor(sheet: com.wxiwei.office.ss.model.baseModel.Sheet?): Int =
+        if (sheet == null || sheet.isShowGridLines()) GRIDLINE_COLOR else android.graphics.Color.TRANSPARENT
     // 标题的字号
     const val HEADER_TEXT_FONTSZIE = 16
     //active color

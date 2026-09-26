@@ -475,6 +475,15 @@ open class Sheet {
         this.paneInformation = paneInformation
     }
 
+    // sheetView@showGridLines
+    private var showGridLines = true
+
+    fun isShowGridLines(): Boolean = showGridLines
+
+    fun setShowGridLines(show: Boolean) {
+        showGridLines = show
+    }
+
     /**
      * @return Returns the ColumnHidden.
      */

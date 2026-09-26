@@ -245,12 +245,12 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
 - [ ] **D8. Font theo theme** (D-j): đọc `theme1.xml` `majorFont/minorFont` (latin/ea/cs); `rFonts asciiTheme="minorHAnsi"` → font minor; ưu tiên `ascii` cho ký tự ASCII, `hAnsi` cho Latin mở rộng (tiếng Việt), `eastAsia` cho CJK (có thể chia leaf theo script — bước sau).
 - [ ] **D9. Crop ảnh `srcRect`** (D-k): áp `srcRect` l/t/r/b (1/1000 %) khi vẽ `PictureShape` DOCX, giá trị âm = thêm lề trống.
 - [ ] **D10. Thuộc tính run còn thiếu** (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
-- [ ] **D12. Số trang trong footer trống** — render thấy "Trang  • Internal Dev Doc" thiếu số: field `PAGE` dạng
+- [x] **D12. Số trang trong footer trống** (26/09 — placeholder "1" khi field PAGE/NUMPAGES trong header/footer không có kết quả cache; LeafView thay bằng số trang thật) — render thấy "Trang  • Internal Dev Doc" thiếu số: field `PAGE` dạng
   `fldChar begin / instrText PAGE / separate / end` **không có run kết quả** giữa separate và end (WPS ghi vậy) → reader
   phải tự tạo leaf số trang (`setFontPageNumberType`) khi gặp instrText `PAGE`/`NUMPAGES` dù không có kết quả cache. Xem `processRun` quanh `fldChar`.
-- [ ] **D13. Khoảng cách giữa 2 đoạn**: `LayoutKit.layoutPara` (~l.105) lấy `max(before, after trước)` kiểu HTML; Word
+- [x] **D13. Khoảng cách giữa 2 đoạn** (26/09 — đã đổi sang cộng; còn `contextualSpacing` chưa đọc): `LayoutKit.layoutPara` (~l.105) lấy `max(before, after trước)` kiểu HTML; Word
   **cộng** `after` của đoạn trước + `before` của đoạn sau (trừ khi `contextualSpacing` cùng style). Sửa + so ảnh tham chiếu.
-- [ ] **D14. Hiệu năng layout**: `LayoutKit.layoutPara` gọi `Log.e` cho **mỗi dòng** (l.~121, ~204) — xóa.
+- [x] **D14. Hiệu năng layout** (26/09 — xóa toàn bộ `Log.e` debug trong `LayoutKit`/`WPLayouter`): `LayoutKit.layoutPara` gọi `Log.e` cho **mỗi dòng** (l.~121, ~204) — xóa.
 - [ ] **D15. TOC rỗng + các đoạn trống tạo khoảng trắng lớn** sau bảng đầu (trang 1) — so với ảnh tham chiếu WPS rồi quyết định.
 - [ ] **D11. Kiểm tra hồi quy**: danh sách lặp, header/footer, field PAGE ("Trang 1 • Internal Dev Doc" 9pt màu 4DB6AC căn phải), emoji tiêu đề 36pt căn giữa.
 
@@ -258,20 +258,23 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
 
 ## 7. Giai đoạn 3 — XLSX render
 
-- [ ] **X1. Builtin number format theo locale** (X-a)
+- [x] **X1. Builtin number format theo locale** (26/09 — id 27–36, 50–58 → ngày ngắn theo locale thiết bị / giờ; `BuiltinFormats.localeShortDate`) (X-a)
   - Sửa: `ss/model/style/BuiltinFormats.kt` + `StyleReader.getBuiltinNumberFormats`.
   - Làm: bổ sung ID 27–36, 50–58 (ngày/giờ Đông Á — trong file WPS/Excel CJK, 58 = "m月d日"), 59–62, 67–81 (Thái). Với app tiếng Việt: map 14, 27–36, 50–58 → định dạng ngày ngắn theo locale thiết bị (`dd/MM/yyyy`); 20–22, 32–35 → giờ.
   - Xong khi: `Dữ liệu chi tiết!E2` (46202) hiện thành ngày (serial 46202 = 29/06/2026), không còn số.
-- [ ] **X2. Ẩn lưới** (X-b): đọc `sheetView@showGridLines` (và `showRowColHeaders`, `zoomScale`, `topLeftCell`) → lưu vào `Sheet`; `ss/view` bỏ vẽ gridline khi tắt.
+- [x] **X2. Ẩn lưới** (26/09 — `Sheet.isShowGridLines`, `SSConstant.gridlineColor`; đọc trong pull parser của `SheetReader`) (X-b): đọc `sheetView@showGridLines` (và `showRowColHeaders`, `zoomScale`, `topLeftCell`) → lưu vào `Sheet`; `ss/view` bỏ vẽ gridline khi tắt.
 - [ ] **X3. Font ô thật** (X-c) — xong cùng C2/C4.
 - [ ] **X4. Table style tùy biến** (X-d)
   - Reader: trong `StyleReader` đọc `<tableStyles><tableStyle name=…><tableStyleElement type=… dxfId=…>`, map sang `SSTableStyle` (wholeTable, headerRow, totalRow, firstColumn, lastColumn, firstRowStripe, secondRowStripe, firstColumnStripe).
   - `TableStyleKit`: nếu tên style có trong bảng tùy biến → dùng, không thì builtin như cũ. Áp `tableStyleInfo showRowStripes/showFirstColumn…`.
   - Màu `dxf` dùng `theme` + `tint` → đi qua `ThemeColorReader`/`SchemeColorUtil` (đã có xử lý tint).
 - [ ] **X5. Nút AutoFilter** (X-e): đọc `autoFilter@ref` (sheet và table) → vẽ icon ▼ ở góc phải ô header; cột đang lọc (`filterColumn`) dùng icon phễu.
-- [ ] **X6. Freeze pane 2 chiều**: kiểm tra sheet3 (`xSplit=1 ySplit=5`, `topLeftCell=B19`) cuộn đúng, đường freeze đúng vị trí.
+- [ ] **X6. Freeze pane 2 chiều** — ⚠️ `Sheet.getPaneInformation()` đang **trả `null` cố định** (`ss/model/baseModel/Sheet.kt`, comment `/*paneInformation*/`) → freeze pane bị tắt hoàn toàn; tìm lý do tắt (có thể lỗi vẽ) trước khi bật lại.: kiểm tra sheet3 (`xSplit=1 ySplit=5`, `topLeftCell=B19`) cuộn đúng, đường freeze đúng vị trí.
+- [x] **X0. Màu sai do palette** (26/09 — `Workbook.addColor(argb)` tái dùng slot palette 0..65; `indexedColors` trong styles.xml (đọc SAU theme/font/fill) ghi đè slot đó → nền chart `bg1` và chữ trắng hóa **xanh lá 008000**. Giờ màu động luôn ở index ≥ 66.)
 - [ ] **X7. Chart** (X-f): kiểm tra 4 chart với ảnh tham chiếu; ưu tiên: màu `schemeClr + lumMod/lumOff` trên `dPt` pie, data label `showVal/showPercent`, tiêu đề chart rich text, `manualLayout` plot area.
 - [ ] **X8. Ảnh qua vùng dòng ẩn** (X-g): khi tính `twoCellAnchor` bỏ qua dòng hidden theo `editAs` (mặc định `twoCell` → ảnh co theo; nếu ≈0 thì dùng `a:ext` làm kích thước).
+- [ ] **X10. Test render Excel không ổn định vị trí cuộn** — `SampleRenderTest.xlsx` chụp sheet ở vị trí cuộn khác nhau giữa các lần chạy; cần cuộn về `topLeftCell` (hoặc A1) trước khi chụp.
+- [ ] **X11. Tiêu đề chart**: chart 1 hiện "Series 1" thay vì tiêu đề thật, pie (chart 4) mất tiêu đề — kiểm tra đọc `c:title/c:tx/c:rich` và `autoTitleDeleted`.
 - [ ] **X9. Kiểm tra lại**: merge + căn giữa + wrapText (dashboard B5:C5…), chiều cao dòng customHeight, độ rộng cột theo *max digit width* của font mặc định (Calibri 11 → 7px @96dpi), numFmt 41–44 accounting, `%`.
 
 ---
@@ -384,4 +387,5 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 26/09/2026 | **Bug PPTX** | `PictureManage.getPicTempPath()` tự gọi chính nó (lỗi convert Java→Kotlin) → **StackOverflow, mọi PPTX có font nhúng không mở được**. Đã sửa; đã quét toàn module, không còn getter đệ quy nào khác. |
 | 26/09/2026 | G0.2, G0.4 | Harness `SampleRenderTest` + 3 file mẫu; ảnh "trước" và "sau" đã chụp trên SM-A165F. |
 | 26/09/2026 | D1–D5 | Cỡ chữ, style Normal, nền/viền/lề ô, bỏ hack chữ trắng→đen, viền + nền đoạn. Kiểm tra bằng ảnh: header bảng nền 00695C chữ trắng, viền xám mảnh, callout có vạch trái, khối code nền F2F7F6, header/footer có đường kẻ. |
-| — | **Làm tiếp** | D12 (số trang footer) → D14 → D13 → X1 → X2 → C1/C2 (font). |
+| 26/09/2026 | D12, D13, D14, X1, X2, X0 | Số trang footer, spacing cộng, bỏ log layout, ngày builtin 58, ẩn lưới, sửa màu palette (chart xanh lá / chữ trắng thành xanh). Đã kiểm bằng ảnh. |
+| — | **Làm tiếp** | C1/C2 (font metric-compatible + bỏ fake bold) → P2/P3 → X11 → X10 → D6 (justify). |

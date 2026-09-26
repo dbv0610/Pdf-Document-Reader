@@ -1536,6 +1536,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                                     }
                                     else -> str = fieldText.toString()
                                 }
+                                // WPS writes PAGE/NUMPAGES without a cached result; the leaf text is
+                                // only a placeholder, LeafView draws the real number of the page
+                                if (str.isEmpty() && pageNumberType > 0 && isProcessHF) {
+                                    str = "1"
+                                }
 
                                 if (str.isNotEmpty()) {
                                     hasLeaf = true

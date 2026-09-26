@@ -108,7 +108,6 @@ class WPLayouter(root: PageRoot) {
         pageView.setSize(pageAttr.pageWidth, pageAttr.pageHeight)
         pageView.setIndent(pageAttr.leftMargin, pageAttr.topMargin, pageAttr.rightMargin, pageAttr.bottomMargin)
         pageView.setStartOffset(currentLayoutOffset)
-        Log.e("WPLayouter.LayoutPage", "pageView.setStartOffset = " + currentLayoutOffset)
 
         val dx = pageAttr.leftMargin
         var dy = pageAttr.topMargin
@@ -152,10 +151,8 @@ class WPLayouter(root: PageRoot) {
         }
         pageView.appendChlidView(para)
 
-        Log.e("WPLayouter.LayoutPage", "para.setStartOffset = " + currentLayoutOffset)
         para.setStartOffset(currentLayoutOffset)
-        Log.e("WPLayouter.115", "para.setEndOffset = " + elem!!.getEndOffset())
-        para.setEndOffset(elem.getEndOffset())
+        para.setEndOffset(elem!!.getEndOffset())
         var keepOne = true
         // The last paragraph or table did not fit at all and was removed, the next page starts with it again
         var removedUnfitPara = false
@@ -221,7 +218,6 @@ class WPLayouter(root: PageRoot) {
             } else {
                 currentLayoutOffset = calculatedEndOffset
             }
-            Log.e("currentLayoutOffset", "" + currentLayoutOffset)
             spanH -= paraHeight
             if (spanH > 0 && currentLayoutOffset < maxEnd && breakType != WPViewConstant.BREAK_LIMIT.toInt()
                 && breakType != WPViewConstant.BREAK_PAGE.toInt()
@@ -236,7 +232,6 @@ class WPLayouter(root: PageRoot) {
                 } else {
                     para = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.PARAGRAPH_VIEW.toInt()) as ParagraphView
                 }
-                Log.e("WPLayouter.LayoutPage.166", "para.setStartOffset = " + currentLayoutOffset)
                 para.setStartOffset(currentLayoutOffset)
                 pageView.appendChlidView(para)
             }
@@ -252,10 +247,8 @@ class WPLayouter(root: PageRoot) {
             breakPara = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.TABLE_VIEW.toInt()) as ParagraphView
             pageView.setHasBreakTable(true)
             (para as TableView).setBreakPages(true)
-            Log.e("WPLayouter.layoutPage", "para.getType() = " + "WPViewConstant.TABLE_VIEW and " + (if (breakPara != null) "breakPara != null" else "breakPara == null"))
         } else if (elem != null && currentLayoutOffset < elem.getEndOffset()) {
             breakPara = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.PARAGRAPH_VIEW.toInt()) as ParagraphView
-            Log.e("WPLayouter.layoutPage", "else para.getType() other breakPara " + (if (breakPara != null) "breakPara != null" else "breakPara == null"))
         }
         // A DOCX may leave a stale break paragraph after the last paragraph has
         // already been consumed. Keeping it makes LayoutThread create empty pages
@@ -266,7 +259,6 @@ class WPLayouter(root: PageRoot) {
             }
             breakPara = null
         }
-        Log.e("WPLayouter.185", "pageView.setEndOffset = " + currentLayoutOffset)
         pageView.setEndOffset(currentLayoutOffset)
         //
         root.getViewContainer().sort()
@@ -362,10 +354,8 @@ class WPLayouter(root: PageRoot) {
         }
         titleView.appendChlidView(para)
 
-        Log.e("WPLayouter.layoutHFParagraph.272", "para.setStartOffset = " + offset)
         para.setStartOffset(offset)
-        Log.e("WPLayouter.275", "para.setEndOffset = " + paraElem!!.getEndOffset())
-        para.setEndOffset(paraElem.getEndOffset())
+        para.setEndOffset(paraElem!!.getEndOffset())
         var keepOne = true
         val dx = 0
         var dy = 0
@@ -401,7 +391,6 @@ class WPLayouter(root: PageRoot) {
                 } else {
                     para = ViewFactory.createView(root.getControl()!!, paraElem, null, WPViewConstant.PARAGRAPH_VIEW.toInt()) as ParagraphView
                 }
-                Log.e("WPLayouter.310", "para.setStartOffset = " + offset)
                 para.setStartOffset(offset)
                 titleView.appendChlidView(para)
             }
@@ -466,8 +455,6 @@ class WPLayouter(root: PageRoot) {
     }
 
     fun isLayoutFinish(): Boolean {
-        Log.e("WPLAYOUTER", "isLayoutFinish currentLayoutOffset " + currentLayoutOffset + " doc.getAreaEnd(WPModelConstant.MAIN) = " + doc!!.getAreaEnd(WPModelConstant.MAIN))
-        Log.e("WPLAYOUTER", "breakPara " + (if (breakPara != null) " != null" else "== null"))
         // areaEnd is the authoritative end of the main document. breakPara can
         // be stale after the final paragraph and must not keep pagination alive.
         return currentLayoutOffset >= doc!!.getAreaEnd(WPModelConstant.MAIN)

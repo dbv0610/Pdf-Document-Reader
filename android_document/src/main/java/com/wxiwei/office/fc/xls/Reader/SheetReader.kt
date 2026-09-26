@@ -142,6 +142,9 @@ class SheetReader private constructor() {
                         return true
                     }
                     XmlPullParser.START_TAG -> when (parser.name) {
+                        "sheetView" -> {
+                            if (parser.attr("showGridLines").let { it == "0" || it == "false" }) target.setShowGridLines(false)
+                        }
                         "sheetFormatPr" -> {
                             parser.attr("defaultRowHeight")?.let {
                                 defaultRowHeight = (it.toDouble() * MainConstant.POINT_TO_PIXEL).toInt()
@@ -442,6 +445,9 @@ class SheetReader private constructor() {
             if (iReader?.isAborted() == true) throw AbortReaderError("abort Reader")
             val elem = elementPath?.current
             when (elem!!.name) {
+                "sheetView" -> {
+                    if (elem.attributeValue("showGridLines").let { it == "0" || it == "false" }) sheet!!.setShowGridLines(false)
+                }
                 "sheetFormatPr" -> {
                     elem!!.attributeValue("defaultRowHeight")?.let { defaultRowHeight = (it.toDouble() * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultRowHeight(defaultRowHeight) }
                     elem!!.attributeValue("defaultColWidth")?.let { defaultColWidth = (it.toDouble() * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultColWidth(defaultColWidth) }
