@@ -10,8 +10,8 @@ import com.wxiwei.office.system.IMainFrame
 import java.io.File
 
 /**
- * Word: long-press a word to select it, tap another word to extend the selection. Formatting
- * shows at once; replace/insert/delete are saved and shown after Save (the document reopens).
+ * Word: long-press a word to select it, tap another word to extend the selection. Formatting and
+ * text changes inside a paragraph show at once; Save writes the .docx in place.
  */
 internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocumentView, file: File) :
     OfficeEditPanel(activity, reader, file) {
@@ -85,7 +85,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         selectionLabel.text = "Nhấn giữ một từ để chọn" + pendingText()
     }
 
-    private fun pendingText() = if (session?.needsReopen == true) "  ·  sửa chữ sẽ hiện sau khi Lưu" else ""
+    private fun pendingText() = if (session?.needsReopen == true) "  ·  một số thay đổi hiện sau khi Lưu" else ""
 
     private fun session(): LiveDocxSession? {
         session?.let { return it }
@@ -104,7 +104,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         // the pages were laid out again: show the selection on the new layout, refresh thumbnails
         selection()?.let { select(it, range) }
         reader.thumbnails?.invalidateAll()
-        if (s.needsReopen) toast("Đã ghi nhận, bấm Lưu để thấy thay đổi chữ")
+        if (s.needsReopen) toast("Đã ghi nhận, sẽ hiện sau khi Lưu")
     }
 
     private fun replace() {
@@ -115,7 +115,10 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     private fun insert() {
         val t = text.text.toString()
         if (t.isEmpty()) return toast("Nhập chữ cần chèn")
-        op { e, r -> e.insertText(r.first, t) }
+        val at = selection()?.selection()?.first ?: return toast("Chọn chữ trước")
+        op { e, _ -> e.insertText(at, t) }
+        // show the inserted text selected (Thay / B / I apply to it after saving)
+        selection()?.let { select(it, at until at + t.length) }
     }
 
     private fun save() {
