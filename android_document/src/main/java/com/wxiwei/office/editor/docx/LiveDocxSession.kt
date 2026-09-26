@@ -166,10 +166,20 @@ class LiveDocxSession(control: IControl, private val source: File) {
         }
     }
 
+    /** Inserts [text] before [offset]; line breaks in it split the paragraph (pasting several lines). */
     fun insertText(offset: Long, text: String): Boolean {
         synchronized(layoutLock) {
             ownError = null
             if (text.isEmpty()) return refuse("Nothing to insert")
+            val lines = text.replace("\r\n", "\n").replace('\r', '\n')
+            if (lines.length > 1 && lines.contains('\n')) {
+                var at = offset
+                for ((i, part) in lines.split('\n').withIndex()) {
+                    if (i > 0) { if (!insertText(at, "\n")) return false; at += 1 }
+                    if (part.isNotEmpty()) { if (!insertText(at, part)) return false; at += part.length }
+                }
+                return true
+            }
             val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
             val last = undoStack.lastOrNull() as? TypingStep
             // typing on at the end of the previous insert: one queued insert, one undo step
@@ -285,7 +295,13 @@ class LiveDocxSession(control: IControl, private val source: File) {
             if (text.isEmpty()) return deleteText(start, end)
             ownError = null
             if (end <= start) return refuse("Empty range")
-            if (!text.contains('\n')) editTyping(start, end, text)?.let { return it }
+            val nl = text.indexOf('\n')
+            if (nl >= 0) {
+                // several lines: the first replaces the range, the rest is inserted after it
+                if (nl == 0) return insertText(start, "\n") && (if (text.length > 1) replaceText(start + 1, end + 1, text.substring(1)) else deleteText(start + 1, end + 1))
+                return replaceText(start, end, text.substring(0, nl)) && insertText(start + nl, text.substring(nl))
+            }
+            editTyping(start, end, text)?.let { return it }
             if (touchesTyped(start, end)) return refuse("Save first to replace text typed in this session")
             val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
             val os = toOriginal(start)

@@ -191,6 +191,45 @@ class LiveDocxSessionTest {
     }
 
     @Test
+    fun pasteLinesAndEditTyping() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_paste.docx")
+        val saved = OpenDocument.output("live_docx_paste_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val doc = { (reader.control!!.getView() as Word).getDocument() }
+            val at = offsetOf(source.absolutePath, "người dùng nạp một file MIDI")
+            val count = onMain { doc().getParaCount(0) }
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            // pasting two lines splits the paragraph once
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(at, "Dòng một\r\nDòng hai ") })
+            assertEquals(count + 1, onMain { doc().getParaCount(0) })
+            assertTrue(paragraphText(reader, at).endsWith("Dòng một\n"))
+            assertTrue(paragraphText(reader, at + 9).startsWith("Dòng hai người dùng nạp"))
+            // an IME rewriting the word being typed ("hai " -> "hai! ") and a Backspace inside it
+            val typed = at + 9 + "Dòng hai".length
+            assertTrue(session.lastError?.toString(), onMain { session.replaceText(typed, typed + 1, "! ") })
+            assertTrue(session.lastError?.toString(), onMain { session.deleteText(typed + 1, typed + 2) })
+            assertTrue(paragraphText(reader, at + 9).startsWith("Dòng hai!người dùng nạp"))
+            // replacing original text with two lines
+            val other = offsetOf(source.absolutePath, "Luồng từ file .mid") + "Dòng một\nDòng hai!".length
+            assertEquals("Luồng", onMain { doc().getText(other, other + 5) })
+            assertTrue(session.lastError?.toString(), onMain { session.replaceText(other, other + 5, "Dòng A\nDòng B") })
+            assertTrue(paragraphText(reader, other).endsWith("Dòng A\n"))
+            assertTrue(paragraphText(reader, other + 7).startsWith("Dòng B từ file .mid"))
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val a = offsetOf(saved.absolutePath, "Dòng hai!người dùng nạp")
+            assertTrue("pasted lines saved", a >= 0)
+            assertTrue(paragraphText(reader, a).startsWith("Dòng hai!người"))
+            assertTrue(paragraphText(reader, a - 1).endsWith("Dòng một\n"))
+            val b = offsetOf(saved.absolutePath, "Dòng B từ file .mid")
+            assertTrue("multi-line replace saved", b >= 0)
+            assertTrue(paragraphText(reader, b - 1).endsWith("Dòng A\n"))
+        }
+    }
+
+    @Test
     fun paragraphFormattingLive() {
         val source = OpenDocument.copySample("sample.docx", "live_docx_para.docx")
         val saved = OpenDocument.output("live_docx_para_saved.docx")

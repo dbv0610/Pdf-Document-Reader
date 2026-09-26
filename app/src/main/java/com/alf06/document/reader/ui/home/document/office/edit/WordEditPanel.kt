@@ -1,5 +1,7 @@
 package com.alf06.document.reader.ui.home.document.office.edit
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.text.Editable
 import android.text.InputType
@@ -81,6 +83,9 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("Chữ xanh") { op { e, r -> e.setTextColor(r.first, r.last + 1, "1F4E79") } },
             button("Cỡ 16") { op { e, r -> e.setFontSize(r.first, r.last + 1, 16f) } },
             button("Tô vàng") { op { e, r -> e.highlight(r.first, r.last + 1, "FFFF00") } },
+            button("Chép") { copy() },
+            button("Cắt") { copy(); op { e, r -> e.deleteText(r.first, r.last + 1) } },
+            button("Dán") { paste() },
             button("Xóa", color = 0xFFC00000.toInt()) { op { e, r -> e.deleteText(r.first, r.last + 1) } },
             button("↵ Xuống dòng") { op { e, r -> e.insertText(r.first, "\n") } },
             button("⇤") { op { e, r -> e.setAlignment(r.first, r.last + 1, "left") } },
@@ -183,6 +188,28 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         caret.touch()
         revealCaret()
         reader.thumbnails?.invalidateAll()
+    }
+
+    private val clipboard get() = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+    private fun copy() {
+        val t = selection()?.let { if (it.selection() != null) it.selectedText() else null }
+        if (t.isNullOrEmpty()) return toast("Chọn chữ trước")
+        clipboard.setPrimaryClip(ClipData.newPlainText("text", t))
+        toast("Đã chép")
+    }
+
+    /** Pastes plain text at the caret while typing, else over the selection. */
+    private fun paste() {
+        val t = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+        if (t.isNullOrEmpty()) return toast("Bộ nhớ tạm trống")
+        if (base >= 0) {
+            // through the typing buffer, so it stays in step with the document
+            val at = typing.selectionEnd.coerceAtLeast(0)
+            typing.text.replace(typing.selectionStart.coerceAtLeast(0), at, t)
+            return
+        }
+        op { e, r -> e.replaceText(r.first, r.last + 1, t) }
     }
 
     /** Keeps the caret above the keyboard and inside the screen. */
