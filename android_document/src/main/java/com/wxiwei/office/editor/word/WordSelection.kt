@@ -62,28 +62,47 @@ class WordSelection(private val word: Word) {
                 if (line.getPreView() == null) { top -= p.getTopIndent(); height += p.getTopIndent() }
                 if (line.getNextView() == null) height += p.getBottomIndent()
             }
-            var dx = -word.scrollX.toFloat(); var dy = -word.scrollY.toFloat()
-            var visible = true
-            if (printMode) {
-                val list = word.getPrintWord().getListView()
-                var page: IView? = line
-                while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
-                val item = (0 until list.childCount).map { list.getChildAt(it) }.filterIsInstance<APageListItem>().firstOrNull {
-                    (root as PageRoot).getPageView(it.pageIndex) === page
-                }
-                if (item == null || page == null) visible = false else {
-                    val origin = IntArray(2); val location = IntArray(2)
-                    word.getLocationOnScreen(origin); item.getLocationOnScreen(location)
-                    dx = location[0] - origin[0] - page.getX() * z
-                    dy = location[1] - origin[1] - page.getY() * z
-                }
+            val shift = shift(root, line)
+            if (shift != null) {
+                val (dx, dy) = shift
+                result.add(Rect(floor(a.x * z + dx).toInt(), floor(top * z + dy).toInt(),
+                    ceil(maxOf(a.x, b.x) * z + dx).toInt(), ceil((top + height) * z + dy).toInt()))
             }
-            if (visible) result.add(Rect(floor(a.x * z + dx).toInt(), floor(top * z + dy).toInt(),
-                ceil(maxOf(a.x, b.x) * z + dx).toInt(), ceil((top + height) * z + dy).toInt()))
             at = stop
         }
         return result
     }
+    /** View offset of model coordinates (times zoom) on [line]'s page, or null when that page is not shown. */
+    private fun shift(root: IView, line: IView): Pair<Float, Float>? {
+        if (!printMode) return -word.scrollX.toFloat() to -word.scrollY.toFloat()
+        val list = word.getPrintWord().getListView()
+        var page: IView? = line
+        while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
+        page ?: return null
+        val item = (0 until list.childCount).map { list.getChildAt(it) }.filterIsInstance<APageListItem>().firstOrNull {
+            (root as PageRoot).getPageView(it.pageIndex) === page
+        } ?: return null
+        val origin = IntArray(2); val location = IntArray(2)
+        word.getLocationOnScreen(origin); item.getLocationOnScreen(location)
+        val z = word.getZoom()
+        return location[0] - origin[0] - page.getX() * z to location[1] - origin[1] - page.getY() * z
+    }
+
+    /**
+     * Caret before [offset] in Word view coordinates: a zero-width rectangle as tall as the text
+     * line, or null when the line is not laid out or its page is not shown.
+     */
+    fun caretRect(offset: Long): Rect? {
+        val root = root() ?: return null
+        val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), false) ?: return null
+        val a = word.modelToView(offset, Rectangle(), false)
+        val lineRect = com.wxiwei.office.wp.view.WPViewKit.instance().getAbsoluteCoordinate(line, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
+        val (dx, dy) = shift(root, line) ?: return null
+        val z = word.getZoom()
+        val x = floor(a.x * z + dx).toInt()
+        return Rect(x, floor(lineRect.y * z + dy).toInt(), x, ceil((lineRect.y + line.getLayoutSpan(WPViewConstant.Y_AXIS)) * z + dy).toInt())
+    }
+
     fun setSelection(start: Long, end: Long) {
         require(start >= 0 && end >= start)
         word.getHighlight().addHighlight(start, end); repaint()

@@ -42,6 +42,8 @@ class ErrorUtil(sysKitValue: SysKit) {
     fun writerLog(exValue: Throwable, isReaderFile: Boolean, isShowErrorDialog: Boolean) {
         val ex = exValue
         if (OpenFileErrors.isCancellation(ex)) return
+        // the error dialog alone does not say what failed
+        Log.w("ErrorUtil", "engine error", ex)
         try {
             val file = logFile
             if (file != null && sysKit?.getControl()?.getMainFrame()?.isWriteLog() == true && ex !is OutOfMemoryError) {

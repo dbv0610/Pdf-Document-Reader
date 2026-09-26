@@ -32,7 +32,12 @@ class LayoutThread(private var root: IRoot?) {
                     val currentRoot = root ?: break
                     if (currentRoot.canBackLayout()) {
                         Log.d("OfficePageLayout", "layout coroutine backLayout")
-                        currentRoot.backLayout()
+                        // Live editing changes the document on the main thread under this lock and
+                        // then replaces the root, cancelling this job: never lay out a page meanwhile.
+                        val lock = (currentRoot as? IView)?.getDocument() ?: currentRoot
+                        synchronized(lock) {
+                            if (isActive) currentRoot.backLayout()
+                        }
                         delay(50L)
                     } else {
                         delay(1000L)

@@ -216,4 +216,67 @@ class ReadDocumentEditTest {
         assertEquals(expected.rectEmu.y, after.y)
         assertEquals(expected.rectEmu.width, after.width)
     }
+
+    @Test
+    fun wordTapAndType() {
+        val file = sample("sample.docx")
+        var start = -1L
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            // tap the left half of the first letter of "CHƠI CÙNG"
+            var screen = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+                for (i in 0 until map.size) {
+                    val l = map.leaf(i); val k = l.text.indexOf("CHƠI CÙNG")
+                    if (k >= 0) { start = l.start + k; break }
+                }
+                val r = com.wxiwei.office.editor.word.WordSelection(word).rectsFor(start, start + 1).first()
+                val o = IntArray(2); word.getLocationOnScreen(o)
+                screen = floatArrayOf(o[0] + r.left + r.width() * 0.25f, o[1] + r.exactCenterY())
+            }
+            val down = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, screen[0], screen[1], down)
+            inject(android.view.MotionEvent.ACTION_UP, screen[0], screen[1], down)
+            Thread.sleep(1200)
+            // type like a Telex keyboard: committed text, then a composing syllable that changes
+            instrumentation.runOnMainSync {
+                lateinit var typing: EditText
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                assertTrue("typing field focused", typing.hasFocus())
+                val ic = typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!
+                ic.commitText("Xin ", 1)
+                ic.setComposingText("cha", 1)
+                ic.setComposingText("chaa", 1)
+                ic.setComposingText("châ", 1)
+                ic.setComposingText("chào", 1)
+                ic.finishComposingText()
+                ic.commitText("! ", 1)
+                // one Backspace inside the typed text
+                ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DEL))
+                ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DEL))
+            }
+            Thread.sleep(800)
+            screenshot("word_typed")
+            scenario.onActivity {
+                val doc = (viewer.control!!.getView() as com.wxiwei.office.wp.control.Word).getDocument()
+                val text = doc.getText(start, start + 30)
+                assertTrue(text, text.startsWith("Xin chào!CHƠI CÙNG"))
+            }
+            scenario.onActivity { a ->
+                find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
+            }
+            Thread.sleep(2000)
+        }
+        val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val plain = Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>").findAll(xml).joinToString("") { it.groupValues[1] }
+        assertTrue("saved", plain.contains("Xin chào!CHƠI CÙNG"))
+    }
 }
+

@@ -1,6 +1,16 @@
 package com.alf06.document.reader.ui.home.document.office.edit
 
+import android.content.Context
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import com.wxiwei.office.editor.EditResult
 import com.wxiwei.office.editor.docx.LiveDocxSession
@@ -10,18 +20,57 @@ import com.wxiwei.office.system.IMainFrame
 import java.io.File
 
 /**
- * Word: long-press a word to select it, tap another word to extend the selection. Formatting and
- * text changes inside a paragraph show at once; Save writes the .docx in place.
+ * Word: tap the text to put the caret there and type with the keyboard (Vietnamese IMEs
+ * included); long-press a word to select it, tap another word to extend the selection.
+ * Formatting and text changes show at once; Save writes the .docx in place.
  */
 internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocumentView, file: File) :
     OfficeEditPanel(activity, reader, file) {
 
     private var session: LiveDocxSession? = null
     private var anchor: LongRange? = null
-    private val selectionLabel = label("Nhấn giữ một từ để chọn")
+    private val selectionLabel = label(HINT)
     private val text = input("Chữ để chèn / thay thế")
 
+    // Typing: the keyboard edits [typing], a hidden buffer whose text mirrors the document from
+    // [base] on; every change of the buffer is replayed on the document at base + its index.
+    private var base = -1L
+    private var muted = false
+    private val caret = WordCaretOverlay(context, { reader.control?.getView() }) {
+        if (base < 0) null else selection()?.caretRect(base + typing.selectionEnd.coerceAtLeast(0))
+    }
+    private val typing: EditText = object : EditText(context) {
+        override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+            super.onSelectionChanged(selStart, selEnd)
+            if (base >= 0) caret.touch()
+        }
+    }.apply {
+        alpha = 0f
+        isCursorVisible = false
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
+        addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun afterTextChanged(s: Editable?) {}
+            override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {
+                if (!muted && base >= 0) typed(start, before, s.subSequence(start, start + count).toString())
+            }
+        })
+        setOnKeyListener { _, keyCode, event ->
+            // Backspace with nothing typed before the caret deletes the document text before it
+            if (keyCode == KeyEvent.KEYCODE_DEL && event.action == KeyEvent.ACTION_DOWN && base > 0 &&
+                selectionStart == 0 && selectionEnd == 0) {
+                val s = session() ?: return@setOnKeyListener true
+                if (s.deleteText(base - 1, base)) { base -= 1; caret.touch(); reader.thumbnails?.invalidateAll() }
+                else toast(s.lastError?.message ?: "Không xóa được")
+                true
+            } else false
+        }
+        setOnFocusChangeListener { _, focused -> if (!focused) stopTyping() }
+    }
+
     override val view: View = column().apply {
+        addView(typing, LinearLayout.LayoutParams(1, 1))
         addView(selectionLabel)
         addView(line(text, button("Thay") { replace() }, button("Chèn") { insert() }, weights = floatArrayOf(1f, 0f, 0f)))
         addView(toolRow(
@@ -42,8 +91,8 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("Thụt −") { op { e, r -> e.setIndentLeft(r.first, r.last + 1, maxOf(0, e.indentLeftAt(r.first) - 720)) } },
             button("Dòng 1.0") { op { e, r -> e.setLineSpacing(r.first, r.last + 1, 1f) } },
             button("Dòng 1.5") { op { e, r -> e.setLineSpacing(r.first, r.last + 1, 1.5f) } },
-            button("↶") { session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },
-            button("↷") { session?.let { if (!it.redo()) toast("Không còn gì để làm lại") } },
+            button("↶") { stopTyping(); session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },
+            button("↷") { stopTyping(); session?.let { if (!it.redo()) toast("Không còn gì để làm lại") } },
             button("Bỏ chọn") { clearSelection() },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
         ))
@@ -54,6 +103,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             val selection = selection() ?: return@gesture false
             when (type) {
                 IMainFrame.ON_LONG_PRESS -> {
+                    stopTyping()
                     val offset = selection.offsetAtScreen(event.rawX, event.rawY)
                     if (offset < 0) return@gesture false
                     val word = selection.wordAt(offset)
@@ -62,9 +112,9 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
                     true
                 }
                 IMainFrame.ON_SINGLE_TAP_CONFIRMED -> {
-                    val start = anchor ?: return@gesture false
                     val offset = selection.offsetAtScreen(event.rawX, event.rawY)
                     if (offset < 0) return@gesture false
+                    val start = anchor ?: return@gesture startTyping(offset)
                     val word = selection.wordAt(offset)
                     select(selection, minOf(start.first, word.first)..maxOf(start.last, word.last))
                     true
@@ -74,9 +124,62 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         }
     }
 
+    init {
+        reader.addView(caret, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
     override fun close() {
         reader.onDocumentGesture = null
+        stopTyping()
+        reader.removeView(caret)
         clearSelection()
+    }
+
+    /** Puts the caret before [offset] and opens the keyboard. */
+    private fun startTyping(offset: Long): Boolean {
+        session() ?: return false
+        anchor = null
+        selection()?.clearSelection()
+        resetBuffer(offset)
+        typing.requestFocus()
+        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(typing, 0)
+        caret.active = true
+        selectionLabel.text = "Đang gõ — chạm chỗ khác để dời con trỏ, nhấn giữ để chọn" + pendingText()
+        return true
+    }
+
+    private fun resetBuffer(offset: Long) {
+        muted = true
+        typing.setText("")
+        muted = false
+        base = offset
+    }
+
+    private fun stopTyping() {
+        if (base < 0) return
+        base = -1
+        caret.active = false
+        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(typing.windowToken, 0)
+    }
+
+    /** Replays a change of the typing buffer on the document. */
+    private fun typed(start: Int, removed: Int, added: String) {
+        val s = session() ?: return
+        val at = base + start
+        val ok = when {
+            removed > 0 && added.isNotEmpty() -> s.replaceText(at, at + removed, added)
+            removed > 0 -> s.deleteText(at, at + removed)
+            added.isNotEmpty() -> s.insertText(at, added)
+            else -> true
+        }
+        if (!ok) {
+            toast(s.lastError?.message ?: "Không gõ được ở đây")
+            // the document did not change: start over at the caret the document still has
+            resetBuffer(at)
+            return
+        }
+        caret.touch()
+        reader.thumbnails?.invalidateAll()
     }
 
     private fun selection(): WordSelection? = reader.control?.let { runCatching { WordSelection(it) }.getOrNull() }
@@ -91,7 +194,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     private fun clearSelection() {
         anchor = null
         selection()?.clearSelection()
-        selectionLabel.text = "Nhấn giữ một từ để chọn" + pendingText()
+        selectionLabel.text = HINT + pendingText()
     }
 
     private fun pendingText() = if (session?.needsReopen == true) "  ·  một số thay đổi hiện sau khi Lưu" else ""
@@ -107,6 +210,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
 
     /** Runs [action] on the selection: formatting shows at once, text changes after Save. */
     private fun op(action: (LiveDocxSession, LongRange) -> Boolean) {
+        stopTyping()
         val range = selection()?.selection() ?: return toast("Chọn chữ trước")
         val s = session() ?: return
         if (!action(s, range)) return toast(s.lastError?.message ?: "Không thực hiện được")
@@ -138,9 +242,14 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         if (result is EditResult.Ok) {
             session = null
             anchor = null
-            selectionLabel.text = "Nhấn giữ một từ để chọn"
+            stopTyping()
+            selectionLabel.text = HINT
             // show the saved text: reopen the document
             reader.open(file.absolutePath)
         }
+    }
+
+    private companion object {
+        const val HINT = "Chạm vào chữ để gõ, nhấn giữ một từ để chọn"
     }
 }
