@@ -139,4 +139,34 @@ class SheetEditSessionTest {
             assertEquals("table A1:R74 -> A1:S73", listOf(0, 0, 72, 18), listOf(table.getFirstRow(), table.getFirstColumn(), table.getLastRow(), table.getLastColumn()))
         }
     }
+
+    @Test
+    fun rowsAndColumnsMoveCharts() {
+        val source = OpenDocument.copySample("sample.xlsx", "xlsx_shapes.xlsx")
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val b = book(reader)
+            val index = (0 until b.getSheetCount()).first { (b.getSheet(it)?.getShapeCount() ?: 0) > 0 }
+            val sheet = b.getSheet(index)!!
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            val shape = sheet.getShapes().maxByOrNull { it.bounds!!.y }!!
+            val before = onMain { com.wxiwei.office.java.awt.Rectangle(shape.bounds!!) }
+            val rowH = sheet.getDefaultRowHeight()
+            // two rows above the chart push it down by two row heights
+            assertTrue(onMain { session.insertRows(index, 0, 2) })
+            val down = onMain { shape.bounds!! }
+            assertEquals((before.y + 2 * rowH).toDouble(), down.y.toDouble(), 1.0)
+            assertEquals(before.height, down.height)
+            assertTrue(onMain { session.undo() })
+            assertEquals(before, onMain { shape.bounds!! })
+            // a column inserted left of it moves it right
+            assertTrue(onMain { session.insertColumns(index, 0, 1) })
+            assertTrue("moved right", onMain { shape.bounds!!.x } > before.x)
+            assertTrue(onMain { session.undo() })
+            // deleting a row above moves it up
+            assertTrue(onMain { session.deleteRows(index, 0, 1) })
+            assertTrue("moved up", onMain { shape.bounds!!.y } < before.y)
+        }
+    }
 }
+

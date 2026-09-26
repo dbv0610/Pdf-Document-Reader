@@ -15,6 +15,10 @@ import com.wxiwei.office.ss.model.style.CellStyle
 import com.wxiwei.office.ss.model.style.NumberFormat
 import com.wxiwei.office.ss.model.CellRangeAddress
 import com.wxiwei.office.system.IControl
+import com.wxiwei.office.common.shape.GroupShape
+import com.wxiwei.office.common.shape.IShape
+import com.wxiwei.office.java.awt.Rectangle
+import com.wxiwei.office.ss.util.ModelUtil
 import java.io.File
 import java.util.Locale
 
@@ -73,6 +77,20 @@ class SheetEditSession internal constructor(
     fun deleteColumns(sheetIndex: Int, at: Int, count: Int = 1) = structural(sheetIndex, false, at, -count)
 
     /**
+     * A shape span ([pos], [len]) after inserting a band of [band] pixels at [start] (it moves
+     * down, or grows when the band opens inside it) or deleting the band [start, start + band)
+     * (the part inside the band goes).
+     */
+    private fun moveSpan(pos: Int, len: Int, start: Float, band: Float, insert: Boolean): Pair<Int, Int> {
+        val b = Math.round(band)
+        val s = Math.round(start)
+        if (insert) return if (pos >= s) (pos + b) to len else if (pos + len > s) pos to (len + b) else pos to len
+        fun cut(v: Int) = when { v >= s + b -> v - b; v > s -> s; else -> v }
+        val from = cut(pos)
+        return from to maxOf(0, cut(pos + len) - from)
+    }
+
+    /**
      * Inserts ([count] > 0) or deletes rows/columns at [at]: cells, merged ranges, tables and
      * filters move, every formula of the workbook referring to them is rewritten (#REF! for
      * deleted cells), and the change is replayed on the file by [save]. One undoable step.
@@ -116,8 +134,20 @@ class SheetEditSession internal constructor(
             return if (rows) k.copy(row = moved) else k.copy(col = moved)
         }
 
+        // pictures and charts were placed in pixels when read: move them with the rows/columns
+        fun shapes(list: Array<IShape>): List<IShape> = list.flatMap { s -> listOf(s) + if (s is GroupShape) shapes(s.getShapes()) else emptyList() }
+        val placed = shapes(sheet.getShapes()).mapNotNull { s -> s.bounds?.let { s to Rectangle(it.x, it.y, it.width, it.height) } }
+        fun edge(i: Int) = if (rows) ModelUtil.instance().getValueY(sheet, i, 0) else ModelUtil.instance().getValueX(sheet, i, 0)
+
         val apply = {
+            val bandStart = edge(at)
+            var band = if (count < 0) edge(at - count) - bandStart else 0f
             if (rows) removedRows = sheet.shiftRows(at, count) else removedCells = sheet.shiftColumns(at, count)
+            if (count > 0) band = edge(at + count) - bandStart
+            for ((shape, r) in placed) {
+                val (pos, len) = moveSpan(if (rows) r.y else r.x, if (rows) r.height else r.width, bandStart, band, count > 0)
+                shape.bounds = if (rows) Rectangle(r.x, pos, r.width, len) else Rectangle(pos, r.y, len, r.height)
+            }
             // merged ranges moved with the rows; tables and filters here
             sheet.getTables()?.forEach { t -> t.getTableReference()?.let { sheet.shiftRange(it, rows, at, count) } }
             sheet.getAutoFilters().forEach { sheet.shiftRange(it.range, rows, at, count) }
@@ -134,6 +164,7 @@ class SheetEditSession internal constructor(
         }
         val revert = {
             structure.remove(write)
+            for ((shape, r) in placed) shape.bounds = Rectangle(r.x, r.y, r.width, r.height)
             if (rows) {
                 sheet.shiftRows(at, -count) // the inverse change; deleted rows come back below
                 if (count < 0) sheet.restoreRows(removedRows)

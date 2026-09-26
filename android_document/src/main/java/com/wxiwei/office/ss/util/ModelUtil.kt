@@ -293,7 +293,8 @@ class ModelUtil {
      * @param dx
      * @return
      */
-    private fun getValueX(sheet: Sheet, columnIndex: Int, dx: Int): Float {
+    /** Left of column [columnIndex] plus [dx], in sheet pixels at zoom 1 (hidden columns take no room). */
+    fun getValueX(sheet: Sheet, columnIndex: Int, dx: Int): Float {
         var x = 0f
         for (i in 0 until columnIndex) {
             if (sheet.isColumnHidden(i)) {
@@ -306,7 +307,8 @@ class ModelUtil {
         return dx + x
     }
 
-    private fun getValueY(sheet: Sheet, rowIndex: Int, dy: Int): Float {
+    /** Top of row [rowIndex] plus [dy], in sheet pixels at zoom 1. */
+    fun getValueY(sheet: Sheet, rowIndex: Int, dy: Int): Float {
         var y = 0f
         var h = 0f
         for (i in 0 until rowIndex) {
