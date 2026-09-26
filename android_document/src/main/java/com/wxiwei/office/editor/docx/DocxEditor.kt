@@ -51,6 +51,10 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         if (widthPx <= 0 || heightPx <= 0 || !imageFile.isFile) invalid("Image file and positive dimensions required")
         else queue(Op(offset, offset, "image", image = imageFile, width = widthPx, height = heightPx))
     fun appendParagraph(text: String) = queue(Op(0, 0, "append", text))
+    /** Drops the last queued operation (undo of a live edit). */
+    fun undoLast(): Boolean = if (ops.isEmpty()) false else { ops.removeAt(ops.lastIndex); true }
+    /** Number of queued operations. */
+    val pendingCount: Int get() = ops.size
 
     private class Failure(val reason: Reason, message: String) : Exception(message)
     private fun fail(reason: Reason, message: String): Nothing = throw Failure(reason, message)

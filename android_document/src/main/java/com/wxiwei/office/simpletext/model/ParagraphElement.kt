@@ -48,6 +48,46 @@ open class ParagraphElement : AbstractElement() {
     }
 
     /**
+     * Plain text leaves overlapping [start, end), after splitting the ones that cross a boundary
+     * (the halves keep copies of the attributes). Other leaves (shapes, fields) are never split
+     * and are left out. Used by live editing to format part of a run.
+     */
+    fun leavesFor(start: Long, end: Long): List<LeafElement> {
+        val leaves = leaf ?: return emptyList()
+        fun splitAt(offset: Long) {
+            for (i in 0 until leaves.size()) {
+                val l = leaves.getElementForIndex(i) as? LeafElement ?: continue
+                if (l.javaClass != LeafElement::class.java) continue
+                val ls = l.getStartOffset()
+                val le = l.getEndOffset()
+                if (offset <= ls || offset >= le) continue
+                val text = l.getText(null) ?: return
+                val k = (offset - ls).toInt()
+                if (k <= 0 || k >= text.length) return
+                val left = LeafElement(text.substring(0, k)).apply {
+                    setAttribute(l.getAttribute().clone()); setStartOffset(ls); setEndOffset(offset)
+                }
+                val right = LeafElement(text.substring(k)).apply {
+                    setAttribute(l.getAttribute().clone()); setStartOffset(offset); setEndOffset(le)
+                }
+                leaves.removeElementForIndex(i)
+                leaves.insertElementForIndex(left, i)
+                leaves.insertElementForIndex(right, i + 1)
+                return
+            }
+        }
+        splitAt(start)
+        splitAt(end)
+        val result = ArrayList<LeafElement>()
+        for (i in 0 until leaves.size()) {
+            val l = leaves.getElementForIndex(i) as? LeafElement ?: continue
+            if (l.javaClass != LeafElement::class.java) continue
+            if (l.getStartOffset() >= start && l.getEndOffset() <= end && l.getEndOffset() > l.getStartOffset()) result.add(l)
+        }
+        return result
+    }
+
+    /**
      * 得到指定index的Offset
      */
     open fun getElementForIndex(index: Int): IElement? {

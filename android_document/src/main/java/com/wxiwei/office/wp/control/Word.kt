@@ -262,6 +262,33 @@ class Word : LinearLayout, IWord {
         post { control?.actionEvent(EventConstant.APP_GENERATED_PICTURE_ID, null) }
     }
 
+    /**
+     * Lays the document out again from the model after an edit, keeping the scroll position.
+     * The first page is laid out now, the rest in the background like when opening.
+     */
+    fun relayoutContent() {
+        when (currentRootType) {
+            WPViewConstant.PAGE_ROOT.toInt() -> {
+                val old = pageRoot ?: return
+                val sx = scrollX
+                val sy = scrollY
+                old.dispose()
+                val root = PageRoot(this)
+                pageRoot = root
+                root.doLayout(0, 0, mWidth, mHeight, Int.MAX_VALUE, 0)
+                LayoutKit.instance().layoutAllPage(root, zoom)
+                scrollTo(sx, sy)
+                postInvalidate()
+            }
+            WPViewConstant.NORMAL_ROOT.toInt() -> {
+                val root = normalRoot ?: return
+                root.stopBackLayout()
+                root.layoutAll()
+                postInvalidate()
+            }
+        }
+    }
+
     fun layoutNormal() {
         val normalRoot = normalRoot ?: return
         normalRoot.stopBackLayout()

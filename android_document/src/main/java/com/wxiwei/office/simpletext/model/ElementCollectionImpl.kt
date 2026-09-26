@@ -44,7 +44,7 @@ open class ElementCollectionImpl(capacity: Int) : IElementCollection {
             ensureCapacity()
         }
         var i = size
-        while (i >= index) {
+        while (i > index) {
             elems!![i] = elems!![i - 1]
             i--
         }
@@ -77,7 +77,7 @@ open class ElementCollectionImpl(capacity: Int) : IElementCollection {
         for (i in index + 1 until size) {
             elems!![i - 1] = elems!![i]
         }
-        elems!![size] = null
+        elems!![size - 1] = null
         size--
         e!!.dispose()
     }
