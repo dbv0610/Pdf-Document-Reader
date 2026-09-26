@@ -329,17 +329,17 @@ Save luôn ghi ra file tạm rồi thay thế nguyên tử (đã làm trong các
 Khó ở 3 điểm: (a) layout Word chạy nền (`wp/view/LayoutThread.kt`) và phân trang toàn bộ; (b) offset model dịch
 chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhập liệu IME (tiếng Việt Telex/VNI có composing text).
 
-- [ ] **E-D0. Khảo sát relayout cục bộ** (1–2 ngày, viết kết quả vào đây):
+- [x] **E-D0. Khảo sát relayout cục bộ** (27/09 — chọn (B): `Word.relayoutContent()` dựng lại `PageRoot` từ model, giữ vị trí cuộn; trang đầu dàn ngay, phần còn lại dàn nền như khi mở) (1–2 ngày, viết kết quả vào đây):
   - Có thể layout lại **một `ParagraphView`** rồi dời các view phía sau không? (`LayoutKit.buildLine`, `WPLayouter`, `PageRoot`).
   - Nếu chiều cao đoạn đổi: phân trang lại **từ trang chứa đoạn đó** trở đi (dừng khi các trang sau không đổi vị trí bắt đầu).
   - Kết luận chọn: (A) relayout cục bộ, hoặc (B) relayout toàn bộ nhưng giữ vị trí cuộn (chấp nhận cho doc ngắn < 30 trang).
-- [ ] **E-D1. Live formatting (không đổi offset)**: bold/italic/underline/màu/cỡ/highlight trên vùng chọn
+- [x] **E-D1. Live formatting (không đổi offset)** (27/09 — `LiveDocxSession`, `ParagraphElement.leavesFor` tách leaf; *kèm sửa* `ElementCollectionImpl.insert/removeElementForIndex` lỗi convert): bold/italic/underline/màu/cỡ/highlight trên vùng chọn
   - Model: tách `LeafElement` tại biên vùng chọn, set attribute → relayout đoạn (cỡ chữ đổi → cao dòng đổi).
   - File: op tương ứng trong `DocxEditor` (đã có). Undo/redo theo mẫu `LivePptxSession`.
   - Tạo `editor/docx/LiveDocxSession.kt`.
-- [ ] **E-D2. Bảng ánh xạ offset hiện tại ↔ gốc** (`OffsetMapper`, piece list): mỗi insert/delete thêm 1 mảnh; `DocxEditor` nhận offset gốc qua mapper; text mới chèn không có offset gốc → op "insert sau offset gốc X" (đã có kiểu `insert`).
+- [x] **E-D2. Bảng ánh xạ offset hiện tại ↔ gốc** (27/09 — `LiveDocxSession.toOriginal/touchesTyped`; gõ nối tiếp gộp 1 thao tác; thay chữ = 1 thao tác `replaceText`) (`OffsetMapper`, piece list): mỗi insert/delete thêm 1 mảnh; `DocxEditor` nhận offset gốc qua mapper; text mới chèn không có offset gốc → op "insert sau offset gốc X" (đã có kiểu `insert`).
   - Test JVM: chuỗi 100 thao tác ngẫu nhiên → áp lên model và lên XML → text của 2 bên bằng nhau.
-- [ ] **E-D3. Gõ chữ trong 1 đoạn**: con trỏ nhấp nháy (vị trí từ `WordSelection.rectsFor`), `onCreateInputConnection` (hỗ trợ `setComposingText` cho bộ gõ tiếng Việt), chèn vào leaf tại con trỏ (thừa hưởng thuộc tính run bên trái), xóa lùi.
+- [~] **E-D3. Gõ chữ trong 1 đoạn** (27/09 — chèn/xóa/thay trong 1 đoạn realtime qua thanh sửa: `WPDocument.insertMainText/deleteMainText` dời offset section/đoạn/leaf/bảng/dòng/ô. **Chưa có**: con trỏ + bàn phím IME gõ thẳng trên trang; định dạng chữ vừa gõ phải lưu trước): con trỏ nhấp nháy (vị trí từ `WordSelection.rectsFor`), `onCreateInputConnection` (hỗ trợ `setComposingText` cho bộ gõ tiếng Việt), chèn vào leaf tại con trỏ (thừa hưởng thuộc tính run bên trái), xóa lùi.
 - [ ] **E-D4. Enter / Backspace đầu đoạn**: tách/gộp `ParagraphElement` (+ XML: tách `w:p` giữ `pPr`), số thứ tự danh sách tự cập nhật.
 - [ ] **E-D5. Tay nắm chọn chữ, copy/cut/paste** (plain text trước, sau đó giữ định dạng từ chính tài liệu).
 - [ ] **E-D6. Sửa trong ô bảng, header/footer** (offset không thuộc MAIN — hiện `DocxEditor` từ chối: "Only MAIN offsets are editable"; mở rộng `DocxSourceMap` cho HEADER/FOOTER/textbox).
@@ -399,6 +399,7 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 
 | 27/09/2026 | D7, X6, D10~, X4, X5, X10, shape trong bảng căn giữa/phải | Test render 7 mẫu pass (docx, doc_test, shape_in_table, xlsx, custom_table_style, pptx, ppt2). |
 | 27/09/2026 | Realtime edit: E-X1, E-X2, E-X4, E-X5 + tích hợp app | Nút ✎ trong `ReadDocumentActivity` mở thanh sửa theo loại file (Excel live, PowerPoint live, Word lưu rồi mở lại). App đã cài lên SM-A165F. |
+| 27/09/2026 | Word realtime: E-D0, E-D1, E-D2, E-D3~ | Định dạng + chèn/xóa/thay trong đoạn hiện ngay; `LiveDocxSessionTest` (2 case) + `DocxEditorTest` + `PptxEditSessionTest` pass. |
 | 27/09/2026 | **Zoom Excel giật** | Pinch cũ nhảy bậc 10% và vẽ lại cả sheet mỗi bậc (20ms TB, 35ms max/frame). Giờ phóng ảnh frame cuối theo ngón tay, vẽ thật 1 lần khi nhả (7.5ms TB, 11ms max). `PinchZoomTest`. |
 
 ### Khi làm tiếp — phần đọc còn lại (theo thứ tự đề xuất)
