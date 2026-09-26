@@ -429,11 +429,9 @@ class ModelUtil {
                     if (cached == null && value != null) {
                         synchronized(numericFormatCache) { numericFormatCache[cacheKey] = value!! }
                     }
-                    if (numericType == Cell.CELL_TYPE_NUMERIC_SIMPLEDATE) {
-                        //store string content, so no need to convert any more
-                        cell.setCellType(Cell.CELL_TYPE_STRING)
-                        cell.setCellValue(book.addSharedString(value))
-                    }
+                    // The formatted date used to replace the cell's number here, which broke every
+                    // formula reading that cell (#VALUE!) and edits/saves; numericFormatCache already
+                    // spares the formatting work.
                 } catch (ex: Exception) {
                     value = cell.getNumberValue().toString()
                 }
