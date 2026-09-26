@@ -320,9 +320,9 @@ Save luôn ghi ra file tạm rồi thay thế nguyên tử (đã làm trong các
 - [ ] **E-P1. Chọn shape bằng chạm** (hit-test theo z-order, xuyên group), khung chọn + 8 tay nắm + tay xoay.
 - [ ] **E-P2. Kéo/thay kích thước/xoay live** — `moveShape` đã có; thêm resize (giữ tỷ lệ với ảnh), rotate (`xfrm rot`), shape trong group (tính ngược `chOff/chExt`).
 - [ ] **E-P3. Sửa chữ tại chỗ**: overlay `EditText` trong suốt đúng vị trí/khung/font/cỡ (sau C1–C3 mới khớp), commit → `setShapeText`. Giữ định dạng run: khi sửa chỉ 1 run thì chỉ thay `a:t` của run đó.
-- [ ] **E-P4. Định dạng run/đoạn**: bold/italic/màu/cỡ/căn → `PptxEditor` op mới (`a:rPr`/`a:pPr`), live qua `LiveSlideModel`.
-- [ ] **E-P5. Slide**: thêm/nhân bản/xóa/đổi thứ tự (`presentation.xml sldIdLst` + rels + `[Content_Types].xml`).
-- [ ] **E-P6. Kiểm tra file Canva**: sửa text slide 2 bằng font nhúng Bahianita; save → PowerPoint/WPS mở không báo lỗi repair; font nhúng giữ nguyên.
+- [x] **E-P4. Định dạng run/đoạn** (27/09 — `PptxEditor.setTextFormat` + `LiveSlideModel.setTextFormat` (token undo) cho cả shape; chưa định dạng theo vùng chọn trong shape): bold/italic/màu/cỡ/căn → `PptxEditor` op mới (`a:rPr`/`a:pPr`), live qua `LiveSlideModel`.
+- [x] **E-P5. Slide** (27/09 — nhân bản/di chuyển/xóa: ghi file, hiện sau khi lưu + mở lại; *chưa*: thêm slide trống theo layout): thêm/nhân bản/xóa/đổi thứ tự (`presentation.xml sldIdLst` + rels + `[Content_Types].xml`).
+- [x] **E-P6. Kiểm tra file Canva** (27/09 — `PptxEditSessionTest`, `PptxSlidesTest` trên sample.pptx của Canva: font nhúng giữ nguyên, file mở lại hợp lệ): sửa text slide 2 bằng font nhúng Bahianita; save → PowerPoint/WPS mở không báo lỗi repair; font nhúng giữ nguyên.
 
 ### 9.4 DOCX (khó nhất — chia nhỏ)
 
