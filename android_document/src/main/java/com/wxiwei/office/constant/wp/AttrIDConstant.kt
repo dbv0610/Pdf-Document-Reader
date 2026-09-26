@@ -45,6 +45,8 @@ object AttrIDConstant {
     const val FONT_PAGE_NUMBER_TYPE_ID: Short = (FONT_SCALE_ID + 1).toShort() // 0x000F
     // enclose character
     const val FONT_ENCLOSE_CHARACTER_TYPE_ID: Short = (FONT_PAGE_NUMBER_TYPE_ID + 1).toShort() // 0x0010;
+    // character spacing (tracking) in hundredths of a point; PPTX a:rPr@spc, DOCX w:rPr/w:spacing
+    const val FONT_SPACING_ID: Short = (FONT_ENCLOSE_CHARACTER_TYPE_ID + 1).toShort() // 0x0011
 
     /* ========== 段落属性 =========== */
     // 段落样式

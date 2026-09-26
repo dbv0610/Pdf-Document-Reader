@@ -112,6 +112,12 @@ open class LeafView : AbstractView {
             paint.textSize = charAttr.fontSizeF * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
         }
 
+        // character spacing: Paint wants ems of the text size; the paint is scaled with the zoom,
+        // so ems keep the spacing proportional
+        if (charAttr.spacingPt != 0f && charAttr.fontSizeF > 0f) {
+            paint.letterSpacing = charAttr.spacingPt / (charAttr.fontSizeF * (charAttr.fontScale / 100f))
+        }
+
         // 颜色
         paint.color = charAttr.fontColor
     }

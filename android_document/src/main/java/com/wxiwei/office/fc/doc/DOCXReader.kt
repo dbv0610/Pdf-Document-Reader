@@ -3357,6 +3357,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 styleStrID[v]?.let { am.setParaStyleID(attr, it) }
             }
         }
+        // character spacing, twips -> hundredths of a point
+        rPr.element("spacing")?.attributeValue("val")?.toIntOrNull()?.let { am.setFontSpacing(attr, it * 5) }
         // highlight
         temp = rPr.element("highlight")
         if (temp != null) {

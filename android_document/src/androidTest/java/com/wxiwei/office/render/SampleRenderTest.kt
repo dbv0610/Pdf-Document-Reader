@@ -118,6 +118,12 @@ class SampleRenderTest {
         renderPages(reader, "shapeintable", 1240) { it.layout != null }
     }
 
+    /** Canva deck: titles with strong negative character spacing (spc) must stay on one line. */
+    @Test
+    fun ppt2() = withReader("ppt2.pptx") { reader ->
+        renderPages(reader, "ppt2", 1920) { it.pageCount >= 10 }
+    }
+
     @Test
     fun pptx() = withReader("sample.pptx") { reader ->
         renderPages(reader, "pptx", 1920) { it.pageCount >= 10 }

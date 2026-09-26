@@ -26,6 +26,10 @@ class CharAttr {
     @JvmField
     var fontSizeF = 0f
 
+    // character spacing in points (0 = normal)
+    @JvmField
+    var spacingPt = 0f
+
     // 字体
     @JvmField
     var fontIndex = 0

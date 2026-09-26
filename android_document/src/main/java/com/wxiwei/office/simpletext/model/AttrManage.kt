@@ -87,6 +87,17 @@ class AttrManage {
         )
     }
 
+    /** Extra space after each character, in hundredths of a point (negative tightens). */
+    fun setFontSpacing(attr: IAttributeSet?, hundredths: Int) {
+        attr!!.setAttribute(AttrIDConstant.FONT_SPACING_ID, hundredths)
+    }
+
+    fun getFontSpacing(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_SPACING_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_SPACING_ID) ?: Int.MIN_VALUE
+        return if (a == Int.MIN_VALUE) 0 else a
+    }
+
     /** Copies the raw size (whole or fractional) of [from] to [to]. */
     fun copyFontSize(from: IAttributeSet?, to: IAttributeSet?) {
         to!!.setAttribute(AttrIDConstant.FONT_SIZE_ID, from!!.getAttribute(AttrIDConstant.FONT_SIZE_ID))
@@ -1482,6 +1493,7 @@ class AttrManage {
         charAttr!!.reset()
         charAttr.fontIndex = getFontName(paraAttr, leafAttr)
         charAttr.fontSizeF = getFontSizeF(paraAttr, leafAttr)
+        charAttr.spacingPt = getFontSpacing(paraAttr, leafAttr) / 100f
         charAttr.fontSize = Math.round(charAttr.fontSizeF)
         charAttr.fontScale = getFontScale(paraAttr, leafAttr)
         charAttr.fontColor = getFontColor(paraAttr, leafAttr)

@@ -302,6 +302,8 @@ class RunAttr {
     ) {
         if (rPr != null) {
             var `val`: String?
+            // character spacing (hundredths of a point)
+            rPr.attributeValue("spc")?.toIntOrNull()?.let { AttrManage.instance().setFontSpacing(attr, it) }
             // 字号
             if (rPr.attribute("sz") != null) {
                 `val` = rPr.attributeValue("sz")
@@ -581,6 +583,8 @@ class RunAttr {
     ) {
         if (rPr != null) {
             var `val`: String?
+            // character spacing (hundredths of a point)
+            rPr.attributeValue("spc")?.toIntOrNull()?.let { AttrManage.instance().setFontSpacing(attr, it) }
             // 字号
             if (rPr.attribute("sz") != null) {
                 `val` = rPr.attributeValue("sz")
