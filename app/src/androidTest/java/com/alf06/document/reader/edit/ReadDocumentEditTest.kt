@@ -151,4 +151,62 @@ class ReadDocumentEditTest {
             screenshot("word_toolbar")
         }
     }
+
+    private fun inject(action: Int, x: Float, y: Float, downTime: Long) {
+        val event = android.view.MotionEvent.obtain(downTime, android.os.SystemClock.uptimeMillis(), action, x, y, 0)
+        event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+        instrumentation.uiAutomation.injectInputEvent(event, true)
+        event.recycle()
+    }
+
+    @Test
+    fun slideTapSelectAndDrag() {
+        val file = sample("ppt2.pptx")
+        val shapes = com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0)
+        // the top shape under the centre of the last text shape of slide 1
+        val target = shapes.last { it.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT && it.rectEmu.width > 0 }
+        val r = target.rectEmu
+        val center = com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)
+        val expected = com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, center)!!
+        launch(file, DocumentType.Ppt).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            var screen = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val p = viewer.control!!.getView() as com.wxiwei.office.pg.control.Presentation
+                val v = com.wxiwei.office.editor.slide.SlideGeometry.emuToView(p, com.wxiwei.office.editor.pptx.Rect(center.x, center.y, 1, 1))!!
+                val o = IntArray(2); p.getLocationOnScreen(o)
+                screen = floatArrayOf(v.left + o[0], v.top + o[1])
+            }
+            val down = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, screen[0], screen[1], down)
+            inject(android.view.MotionEvent.ACTION_UP, screen[0], screen[1], down)
+            Thread.sleep(1000)
+            scenario.onActivity { a ->
+                val panel = a.findViewById<ViewGroup>(R.id.editPanel)
+                assertTrue("tap selects #${expected.id}", find<TextView>(panel) { it is TextView && it.text.startsWith("#${expected.id} ") } != null)
+            }
+            screenshot("slide_selected")
+            // drag the selection 120 px to the right
+            val start = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, screen[0], screen[1], start)
+            for (i in 1..10) { Thread.sleep(16); inject(android.view.MotionEvent.ACTION_MOVE, screen[0] + i * 12, screen[1], start) }
+            inject(android.view.MotionEvent.ACTION_UP, screen[0] + 120, screen[1], start)
+            Thread.sleep(1000)
+            screenshot("slide_dragged")
+            scenario.onActivity { a ->
+                val panel = a.findViewById<ViewGroup>(R.id.editPanel)
+                find<TextView>(panel) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
+            }
+            Thread.sleep(1500)
+        }
+        val after = com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0).first { it.id == expected.id }.rectEmu
+        assertTrue("moved right: ${expected.rectEmu} -> $after", after.x > expected.rectEmu.x)
+        assertEquals(expected.rectEmu.y, after.y)
+        assertEquals(expected.rectEmu.width, after.width)
+    }
 }

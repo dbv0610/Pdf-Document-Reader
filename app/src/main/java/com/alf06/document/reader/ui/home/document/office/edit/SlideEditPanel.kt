@@ -1,17 +1,23 @@
 package com.alf06.document.reader.ui.home.document.office.edit
 
 import android.view.View
+import android.widget.FrameLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.wxiwei.office.editor.EditResult
 import com.wxiwei.office.editor.pptx.LivePptxSession
+import com.wxiwei.office.editor.pptx.PptxShapeInfo
+import com.wxiwei.office.editor.pptx.ShapeKind
 import com.wxiwei.office.editor.pptx.Rect
 import com.wxiwei.office.editor.pptx.TextFormat
+import com.wxiwei.office.editor.slide.SlideGeometry
+import com.wxiwei.office.pg.control.Presentation
 import com.wxiwei.office.reader.OfficeDocumentView
+import com.wxiwei.office.system.IMainFrame
 import java.io.File
 
 /**
- * PowerPoint: pick a shape of the current slide, change its text, move or delete it, or add a
+ * PowerPoint: tap a shape on the slide (or pick it from a list), change its text, move or delete it, or add a
  * text box; the slide updates at once and Save writes the .pptx in place.
  */
 internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumentView, file: File) :
@@ -21,11 +27,11 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     private var shapeId = -1
     // position of the selected shape including moves not saved yet (listShapes reads the file)
     private var rect: Rect? = null
-    private val selected = label("Chưa chọn shape")
+    private val selected = label("Chạm vào shape trên slide để chọn")
     private val text = input("Nội dung chữ")
 
     override val view: View = column().apply {
-        addView(line(button("Chọn shape", bold = true) { pickShape() }, selected, weights = floatArrayOf(0f, 1f)))
+        addView(line(button("Danh sách", bold = true) { pickShape() }, selected, weights = floatArrayOf(0f, 1f)))
         addView(line(text, button("Đổi chữ") { setText() }, button("+ Text box") { addTextBox() }, weights = floatArrayOf(1f, 0f, 0f)))
         addView(toolRow(
             button("B", bold = true) { format(TextFormat(bold = true)) },
@@ -56,6 +62,49 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         ))
     }
 
+    private val overlay = SlideSelectionOverlay(context) { reader.control?.getView() as? Presentation }
+
+    init {
+        reader.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        reader.onDocumentGesture = gesture@{ type, event ->
+            if (type != IMainFrame.ON_SINGLE_TAP_CONFIRMED) return@gesture false
+            tapAt(event.rawX, event.rawY) || shapeId >= 0
+        }
+        overlay.onTap = { x, y -> tapAt(x, y) }
+        overlay.onChange = { r -> setRect(r) }
+    }
+
+    /** Selects the top shape under a screen point, or clears the selection. */
+    private fun tapAt(rawX: Float, rawY: Float): Boolean {
+        val p = reader.control?.getView() as? Presentation ?: return false
+        val origin = IntArray(2)
+        p.getLocationOnScreen(origin)
+        val point = SlideGeometry.viewToEmu(p, rawX - origin[0], rawY - origin[1])
+        val hit = point?.let { SlideGeometry.hitTest(session.listShapes(slide()), it) }
+        select(hit)
+        return hit != null
+    }
+
+    override fun close() {
+        reader.onDocumentGesture = null
+        reader.removeView(overlay)
+    }
+
+    private fun describe(s: PptxShapeInfo): String {
+        val t = s.text.replace('\n', ' ').take(40)
+        return "#${s.id} ${s.kind.name.lowercase()}" + if (t.isNotEmpty()) ": $t" else " (${s.name})"
+    }
+
+    private fun select(s: PptxShapeInfo?) {
+        shapeId = s?.id ?: -1
+        rect = s?.rectEmu
+        overlay.keepAspect = s?.kind == ShapeKind.PICTURE
+        overlay.slideIndex = slide()
+        overlay.selection = rect
+        selected.text = s?.let { describe(it) } ?: "Chưa chọn shape"
+        text.setText(s?.text ?: "")
+    }
+
     private fun slide(): Int = (reader.state.value.pageNumber - 1).coerceAtLeast(0)
 
     private fun pickShape() {
@@ -64,18 +113,10 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             toast("Slide không có shape")
             return
         }
-        val labels = shapes.map { s ->
-            val t = s.text.replace('\n', ' ').take(40)
-            "#${s.id} ${s.kind.name.lowercase()}" + if (t.isNotEmpty()) ": $t" else " (${s.name})"
-        }.toTypedArray()
+        val labels = shapes.map { describe(it) }.toTypedArray()
         AlertDialog.Builder(context)
             .setTitle("Slide ${slide() + 1}")
-            .setItems(labels) { _, i ->
-                shapeId = shapes[i].id
-                rect = shapes[i].rectEmu
-                selected.text = labels[i]
-                text.setText(shapes[i].text)
-            }
+            .setItems(labels) { _, i -> select(shapes[i]) }
             .show()
     }
 
@@ -95,10 +136,16 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         val r = rect ?: return toast("Chọn shape trước")
         val size = session.slideSizeEmu()
         val step = maxOf(size.width, size.height) / 100 // 1% of the slide per tap
-        val moved = Rect(r.x + dx * step, r.y + dy * step, r.width, r.height)
+        setRect(Rect(r.x + dx * step, r.y + dy * step, r.width, r.height))
+    }
+
+    /** Moves or resizes the selected shape. */
+    private fun setRect(moved: Rect) {
+        if (shapeId < 0) return
         if (!session.moveShape(slide(), shapeId, moved)) toast(session.lastError?.message ?: "Không di chuyển được")
         else {
             rect = moved
+            overlay.selection = moved
             reopenHint()
         }
     }
@@ -107,8 +154,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         if (shapeId < 0) return toast("Chọn shape trước")
         if (!session.deleteShape(slide(), shapeId)) toast(session.lastError?.message ?: "Không xóa được")
         else {
-            shapeId = -1
-            rect = null
+            select(null)
             selected.text = "Đã xóa"
             reopenHint()
         }
@@ -122,6 +168,8 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         if (id < 0) toast(session.lastError?.message ?: "Không thêm được") else {
             shapeId = id
             this.rect = rect
+            overlay.slideIndex = slide()
+            overlay.selection = rect
             selected.text = "#$id text: $content"
             reopenHint()
         }
@@ -143,9 +191,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         val result = saveOver(file) { target -> session.save(target) }
         report(result, "Đã lưu " + file.name)
         if (result is EditResult.Ok) {
-            shapeId = -1
-            rect = null
-            selected.text = "Chưa chọn shape"
+            select(null)
             // slide changes and some shape edits only show after reading the file again
             if (reopen) reader.open(file.absolutePath)
             session = LivePptxSession(reader.control!!, file)
