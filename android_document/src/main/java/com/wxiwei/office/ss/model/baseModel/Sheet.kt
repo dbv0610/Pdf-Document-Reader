@@ -126,6 +126,78 @@ open class Sheet {
     fun getWorkbook(): Workbook? = book
 
     /**
+     * Moves the rows at or after [at] by [delta] (insert when > 0); with a negative [delta] the
+     * rows at..at-delta-1 are taken out and returned. Merged ranges move along.
+     */
+    fun shiftRows(at: Int, delta: Int): List<Row> {
+        val rows = rows!!
+        val removed = ArrayList<Row>()
+        if (delta < 0) for (r in at until at - delta) rows.remove(r)?.let { removed.add(it) }
+        val from = if (delta < 0) at - delta else at
+        val moving = rows.keys.filter { it >= from }.sorted().let { if (delta > 0) it.reversed() else it }
+        for (k in moving) {
+            val row = rows.remove(k) ?: continue
+            val n = k + delta
+            row.setRowNumber(n)
+            row.cellCollection().forEach { it.setRowNumber(n) }
+            rows[n] = row
+        }
+        recomputeRowBounds()
+        for (m in merges!!) shiftRange(m, true, at, delta)
+        return removed
+    }
+
+    /** Puts rows taken out by [shiftRows] back (after the band was inserted again). */
+    fun restoreRows(list: List<Row>) {
+        for (row in list) rows!![row.getRowNumber()] = row
+        recomputeRowBounds()
+    }
+
+    /** Moves columns at or after [at] by [delta]; returns the removed cells by row, then column. */
+    fun shiftColumns(at: Int, delta: Int): Map<Int, Map<Int, Cell>> {
+        val removed = HashMap<Int, Map<Int, Cell>>()
+        for ((r, row) in rows!!) row.shiftCells(at, delta).takeIf { it.isNotEmpty() }?.let { removed[r] = it }
+        for (m in merges!!) shiftRange(m, false, at, delta)
+        columnInfoList?.let { list ->
+            val it = list.iterator()
+            while (it.hasNext()) {
+                val info = it.next()
+                val range = CellRangeAddress(0, info.getFirstCol(), 0, info.getLastCol())
+                if (!shiftRange(range, false, at, delta)) { it.remove(); continue }
+                info.setFirstCol(range.getFirstColumn()); info.setLastCol(range.getLastColumn())
+            }
+        }
+        return removed
+    }
+
+    /**
+     * Moves [range] for an insert (delta > 0) or delete before/at [at]; a range entirely deleted
+     * is parked out of reach and false is returned.
+     */
+    fun shiftRange(range: CellRangeAddress, rows: Boolean, at: Int, delta: Int): Boolean {
+        var lo = if (rows) range.getFirstRow() else range.getFirstColumn()
+        var hi = if (rows) range.getLastRow() else range.getLastColumn()
+        if (delta > 0) {
+            if (lo >= at) lo += delta
+            if (hi >= at) hi += delta
+        } else {
+            val end = at - delta
+            lo = when { lo < at -> lo; lo >= end -> lo + delta; else -> at }
+            hi = when { hi < at -> hi; hi >= end -> hi + delta; else -> at - 1 }
+        }
+        val alive = hi >= lo
+        if (!alive) { lo = if (rows) 1048575 else 16383; hi = lo }
+        if (rows) { range.setFirstRow(lo); range.setLastRow(hi) } else { range.setFirstColumn(lo); range.setLastColumn(hi) }
+        return alive
+    }
+
+    private fun recomputeRowBounds() {
+        val keys = rows!!.keys
+        firstRow = keys.minOrNull() ?: 0
+        lastRow = keys.maxOrNull() ?: 0
+    }
+
+    /**
      * add a row to the sheet
      */
     fun addRow(row: Row?) {

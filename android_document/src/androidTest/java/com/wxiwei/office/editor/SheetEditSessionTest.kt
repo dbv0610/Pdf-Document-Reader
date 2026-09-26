@@ -95,4 +95,48 @@ class SheetEditSessionTest {
             }
         }
     }
+
+    private fun formula(book: Workbook, sheet: Int, row: Int, col: Int): String? = book.getSheet(sheet)!!.getRow(row)?.getCell(col)?.formula
+
+    @Test
+    fun insertAndDeleteRowsAndColumns() {
+        val source = OpenDocument.copySample("sample.xlsx", "rows_source.xlsx")
+        val saved = OpenDocument.output("rows_saved.xlsx")
+        var g2 = 0.0
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val book = book(reader)
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            g2 = onMain { num(book, 1, 1, 6) }
+            // two rows before row 4 of "Dữ liệu chi tiết"
+            assertTrue(session.lastError?.toString(), onMain { session.insertRows(1, 3, 2) })
+            assertEquals("COUNTA('Dữ liệu chi tiết'!B2:B76)", onMain { formula(book, 0, 5, 1) })
+            assertEquals("SUM('Dữ liệu chi tiết'!G2:G76)", onMain { formula(book, 0, 5, 3) })
+            assertEquals(279.0, onMain { num(book, 0, 5, 3) }, 0.0)
+            assertEquals("the old row 4 moved to row 6", "F6-E6+1", onMain { formula(book, 1, 5, 6) })
+            assertTrue(onMain { session.undo() })
+            assertEquals("SUM('Dữ liệu chi tiết'!G2:G74)", onMain { formula(book, 0, 5, 3) })
+            assertEquals("F4-E4+1", onMain { formula(book, 1, 3, 6) })
+            // delete row 2: the SUM loses G2
+            assertTrue(onMain { session.deleteRows(1, 1, 1) })
+            assertEquals("SUM('Dữ liệu chi tiết'!G2:G73)", onMain { formula(book, 0, 5, 3) })
+            assertEquals(279.0 - g2, onMain { num(book, 0, 5, 3) }, 0.0)
+            assertEquals("F2-E2+1", onMain { formula(book, 1, 1, 6) })
+            // a column before B on "Dữ liệu chi tiết"
+            assertTrue(onMain { session.insertColumns(1, 1, 1) })
+            assertEquals("SUM('Dữ liệu chi tiết'!H2:H73)", onMain { formula(book, 0, 5, 3) })
+            assertEquals("G2-F2+1", onMain { formula(book, 1, 1, 7) })
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved) { reader ->
+            loadAll(reader)
+            val book = book(reader)
+            assertEquals("SUM('Dữ liệu chi tiết'!H2:H73)", onMain { formula(book, 0, 5, 3) })
+            assertEquals(279.0 - g2, onMain { num(book, 0, 5, 3) }, 0.0)
+            assertEquals("G2-F2+1", onMain { formula(book, 1, 1, 7) })
+            val table = onMain { book.getSheet(1)!!.getTables()!!.first().getTableReference()!! }
+            assertEquals("table A1:R74 -> A1:S73", listOf(0, 0, 72, 18), listOf(table.getFirstRow(), table.getFirstColumn(), table.getLastRow(), table.getLastColumn()))
+        }
+    }
 }

@@ -13,6 +13,7 @@ import com.wxiwei.office.simpletext.font.Font
 import com.wxiwei.office.ss.model.style.BuiltinFormats
 import com.wxiwei.office.ss.model.style.CellStyle
 import com.wxiwei.office.ss.model.style.NumberFormat
+import com.wxiwei.office.ss.model.CellRangeAddress
 import com.wxiwei.office.system.IControl
 import java.io.File
 import java.util.Locale
@@ -36,7 +37,9 @@ class SheetEditSession internal constructor(
         ss.postInvalidate()
     })
 
-    val engine = XlsxFormulaEngine(book)
+    /** Formula engine of the workbook; rebuilt after rows or columns are inserted or deleted. */
+    var engine = XlsxFormulaEngine(book)
+        private set
     /** Warnings of the last recalculation (unsupported function, sheet still loading...). */
     var warnings: List<String> = emptyList(); private set
     var lastError: EditResult.Error? = null; private set
@@ -47,7 +50,10 @@ class SheetEditSession internal constructor(
         data class Input(val key: Key, val before: String, val after: String) : Step()
         data class Format(val key: Key, val beforeStyle: Int, val afterStyle: Int, val format: CellFormat) : Step()
         data class Group(val steps: List<Step>) : Step()
+        class Structure(val apply: () -> Unit, val revert: () -> Unit) : Step()
     }
+    /** Rows/columns inserted or deleted, in order; save replays them on the file first. */
+    private val structure = ArrayList<StructureWrite>()
     private val undoStack = ArrayList<Step>()
     private val redoStack = ArrayList<Step>()
     /** Format changes applied to each cell, in order; merged relative to the file's style on save. */
@@ -57,7 +63,110 @@ class SheetEditSession internal constructor(
 
     fun canUndo() = undoStack.isNotEmpty()
     fun canRedo() = redoStack.isNotEmpty()
-    fun hasChanges() = undoStack.isNotEmpty() || dirty.isNotEmpty() || formats.values.any { it.isNotEmpty() }
+    fun hasChanges() = undoStack.isNotEmpty() || dirty.isNotEmpty() || formats.values.any { it.isNotEmpty() } || structure.isNotEmpty()
+
+    // ---- rows and columns ---------------------------------------------------------------
+
+    fun insertRows(sheetIndex: Int, at: Int, count: Int = 1) = structural(sheetIndex, true, at, count)
+    fun deleteRows(sheetIndex: Int, at: Int, count: Int = 1) = structural(sheetIndex, true, at, -count)
+    fun insertColumns(sheetIndex: Int, at: Int, count: Int = 1) = structural(sheetIndex, false, at, count)
+    fun deleteColumns(sheetIndex: Int, at: Int, count: Int = 1) = structural(sheetIndex, false, at, -count)
+
+    /**
+     * Inserts ([count] > 0) or deletes rows/columns at [at]: cells, merged ranges, tables and
+     * filters move, every formula of the workbook referring to them is rewritten (#REF! for
+     * deleted cells), and the change is replayed on the file by [save]. One undoable step.
+     */
+    private fun structural(sheetIndex: Int, rows: Boolean, at: Int, count: Int): Boolean {
+        val sheet = book.getSheet(sheetIndex) ?: return fail(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
+        val limit = if (rows) 1048576 else 16384
+        if (count == 0 || at < 0 || at >= limit || Math.abs(count) > limit - at) return fail(Reason.INVALID_ARGUMENT, "Bad row/column range")
+        if (sheet.getState() != Sheet.State_Accomplished) return fail(Reason.INVALID_ARGUMENT, "Sheet is still loading")
+        val change = RefShifter.Change(sheet.getSheetName() ?: "", rows, at, count)
+        // snapshots for undo
+        val formulasBefore = HashMap<Cell, String>()
+        for (i in 0 until book.getSheetCount()) {
+            val s = book.getSheet(i) ?: continue
+            for (r in s.getFirstRowNum()..s.getLastRowNum()) {
+                val row = s.getRow(r) ?: continue
+                for (cell in row.cellCollection()) cell.formula?.let { formulasBefore[cell] = it }
+            }
+        }
+        fun ranges(): List<CellRangeAddress> = ArrayList<CellRangeAddress>().apply {
+            for (i in 0 until sheet.getMergeRangeCount()) sheet.getMergeRange(i)?.let { add(it) }
+            sheet.getTables()?.forEach { t -> t.getTableReference()?.let { add(it) } }
+            sheet.getAutoFilters().forEach { add(it.range) }
+        }
+        val rangesBefore = ranges().map { it to intArrayOf(it.getFirstRow(), it.getFirstColumn(), it.getLastRow(), it.getLastColumn()) }
+        val dirtyBefore = LinkedHashSet(dirty)
+        val formatsBefore = formats.mapValues { ArrayList(it.value) }
+        var removedRows: List<Row> = emptyList()
+        var removedCells: Map<Int, Map<Int, Cell>> = emptyMap()
+        val write = StructureWrite(sheetIndex, rows, at, count)
+
+        fun moveKey(k: Key): Key? {
+            if (k.sheet != sheetIndex) return k
+            val v = if (rows) k.row else k.col
+            val moved = when {
+                count > 0 -> if (v >= at) v + count else v
+                v < at -> v
+                v >= at - count -> v + count
+                else -> return null
+            }
+            return if (rows) k.copy(row = moved) else k.copy(col = moved)
+        }
+
+        val apply = {
+            if (rows) removedRows = sheet.shiftRows(at, count) else removedCells = sheet.shiftColumns(at, count)
+            // merged ranges moved with the rows; tables and filters here
+            sheet.getTables()?.forEach { t -> t.getTableReference()?.let { sheet.shiftRange(it, rows, at, count) } }
+            sheet.getAutoFilters().forEach { sheet.shiftRange(it.range, rows, at, count) }
+            for ((cell, f) in formulasBefore) {
+                val owner = cell.getSheet()?.getSheetName() ?: continue
+                cell.formula = RefShifter.shift(f, owner, change)
+            }
+            val keys = dirtyBefore.mapNotNull { moveKey(it) }
+            dirty.clear(); dirty.addAll(keys)
+            val fmts = formatsBefore.entries.mapNotNull { (k, v) -> moveKey(k)?.let { it to ArrayList(v) } }
+            formats.clear(); fmts.forEach { (k, v) -> formats[k] = v }
+            structure.add(write)
+            refreshFormulas()
+        }
+        val revert = {
+            structure.remove(write)
+            if (rows) {
+                sheet.shiftRows(at, -count) // the inverse change; deleted rows come back below
+                if (count < 0) sheet.restoreRows(removedRows)
+            } else {
+                sheet.shiftColumns(at, -count)
+                if (count < 0) for ((r, cells) in removedCells) sheet.getRow(r)?.restoreCells(cells)
+            }
+            for ((range, v) in rangesBefore) {
+                range.setFirstRow(v[0]); range.setFirstColumn(v[1]); range.setLastRow(v[2]); range.setLastColumn(v[3])
+            }
+            for ((cell, f) in formulasBefore) cell.formula = f
+            dirty.clear(); dirty.addAll(dirtyBefore)
+            formats.clear(); formatsBefore.forEach { (k, v) -> formats[k] = ArrayList(v) }
+            refreshFormulas()
+        }
+        apply()
+        undoStack.add(Step.Structure(apply, revert)); redoStack.clear()
+        lastError = null
+        repaint()
+        return true
+    }
+
+    /** New engine for the moved formulas; values that changed (#REF! after a delete) are saved. */
+    private fun refreshFormulas() {
+        engine = XlsxFormulaEngine(book)
+        val w = ArrayList<String>()
+        for (changed in engine.recalc(w)) dirty.add(Key(changed.sheetIndex, changed.cell.getRowNumber(), changed.cell.getColNumber()))
+        warnings = w
+        for (i in 0 until book.getSheetCount()) {
+            val s = book.getSheet(i) ?: continue
+            for (r in s.getFirstRowNum()..s.getLastRowNum()) s.getRow(r)?.cellCollection()?.forEach { it.removeSTRoot() }
+        }
+    }
 
     fun sheetIndexOf(sheet: Sheet): Int = book.getSheetIndex(sheet)
 
@@ -187,6 +296,7 @@ class SheetEditSession internal constructor(
         is Step.Input -> apply(step.key, if (redo) step.after else step.before)
         is Step.Format -> { applyFormat(step, redo); true }
         is Step.Group -> (if (redo) step.steps else step.steps.asReversed()).all { replay(it, redo) }
+        is Step.Structure -> { if (redo) step.apply() else step.revert(); true }
     }
 
     private fun fail(reason: Reason, message: String): Boolean { lastError = EditResult.Error(reason, message); return false }
@@ -262,7 +372,7 @@ class SheetEditSession internal constructor(
         }
         val styles = formats.filterValues { it.isNotEmpty() }
             .map { (k, list) -> StyleWrite(k.sheet, k.row, k.col, list.reduce { a, b -> a + b }) }
-        val result = XlsxWriter(source) { s, r, c -> book.getSheet(s)?.getRow(r)?.getCell(c)?.formula }.save(target, writes, styles)
+        val result = XlsxWriter(source) { s, r, c -> book.getSheet(s)?.getRow(r)?.getCell(c)?.formula }.save(target, writes, styles, structure)
         return if (result is EditResult.Ok) result.copy(warnings = warnings) else result
     }
 

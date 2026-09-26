@@ -213,6 +213,32 @@ open class Row
     }
 
     /**
+     * Moves the cells at or after column [at] by [delta] (insert when > 0). With a negative
+     * [delta] the cells of columns at..at-delta-1 are taken out and returned by column.
+     */
+    fun shiftCells(at: Int, delta: Int): Map<Int, Cell> {
+        val cells = cells ?: return emptyMap()
+        val removed = HashMap<Int, Cell>()
+        if (delta < 0) for (c in at until at - delta) cells.remove(c)?.let { removed[c] = it }
+        val from = if (delta < 0) at - delta else at
+        val moving = cells.keys.filter { it >= from }.sorted().let { if (delta > 0) it.reversed() else it }
+        for (k in moving) {
+            val cell = cells.remove(k) ?: continue
+            cell.setColNumber(k + delta)
+            cells[k + delta] = cell
+        }
+        return removed
+    }
+
+    /** Puts cells taken out by [shiftCells] back (after the columns were inserted again). */
+    fun restoreCells(cells: Map<Int, Cell>) {
+        for ((c, cell) in cells) {
+            cell.setColNumber(c)
+            this.cells!![c] = cell
+        }
+    }
+
+    /**
      * @return Returns the isEmpty.
      */
     fun isEmpty(): Boolean {

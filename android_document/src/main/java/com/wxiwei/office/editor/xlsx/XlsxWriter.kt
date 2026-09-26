@@ -24,6 +24,9 @@ sealed class CellWrite {
     val formulaText: String? get() = when (this) { is Number -> formula; is Text -> formula; is Bool -> formula; is Error -> formula; is Blank -> null }
 }
 
+/** Rows ([rows]) or columns inserted ([count] > 0) or deleted at [at] of a sheet. */
+data class StructureWrite(val sheetIndex: Int, val rows: Boolean, val at: Int, val count: Int)
+
 /** A format change for one cell, relative to the cell's format in the original file. */
 data class StyleWrite(val sheetIndex: Int, val row: Int, val col: Int, val format: CellFormat)
 
@@ -35,7 +38,8 @@ data class StyleWrite(val sheetIndex: Int, val row: Int, val col: Int, val forma
  */
 class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: Int, row: Int, col: Int) -> String? = { _, _, _ -> null }) {
 
-    fun save(target: File, writes: Collection<CellWrite>, styles: Collection<StyleWrite> = emptyList()): EditResult {
+    fun save(target: File, writes: Collection<CellWrite>, styles: Collection<StyleWrite> = emptyList(),
+             structure: List<StructureWrite> = emptyList()): EditResult {
         if (!source.extension.equals("xlsx", true) && !source.extension.equals("xlsm", true))
             return EditResult.Error(Reason.UNSUPPORTED_FORMAT, "Only .xlsx/.xlsm can be saved")
         if (source.canonicalFile == target.canonicalFile)
@@ -43,6 +47,8 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
         return runEdit {
             val pkg = OoxmlPackage.open(source)
             val parts = sheetParts(pkg)
+            // rows/columns first: the cell writes use the coordinates after them
+            if (structure.isNotEmpty()) XlsxStructure(pkg, parts).apply(structure)
             for ((sheetIndex, cells) in writes.groupBy { it.sheetIndex }) {
                 val part = parts.getOrNull(sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
                 writeSheet(pkg, part, sheetIndex, cells)
