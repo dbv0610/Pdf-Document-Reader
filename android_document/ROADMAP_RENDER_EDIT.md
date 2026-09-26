@@ -317,8 +317,8 @@ Save luôn ghi ra file tạm rồi thay thế nguyên tử (đã làm trong các
 
 ### 9.3 PPTX
 
-- [ ] **E-P1. Chọn shape bằng chạm** (hit-test theo z-order, xuyên group), khung chọn + 8 tay nắm + tay xoay.
-- [ ] **E-P2. Kéo/thay kích thước/xoay live** — `moveShape` đã có; thêm resize (giữ tỷ lệ với ảnh), rotate (`xfrm rot`), shape trong group (tính ngược `chOff/chExt`).
+- [x] **E-P1. Chọn shape bằng chạm** (27/09 — app `SlideSelectionOverlay` + `SlideGeometry.viewToEmu/hitTest` (shape trên cùng, con trong group thắng group); khung nét đứt + 8 tay nắm theo cuộn/zoom (OnPreDraw); chạm ngoài shape bỏ chọn; *chưa*: tay xoay, hit-test theo góc xoay) (hit-test theo z-order, xuyên group), khung chọn + 8 tay nắm + tay xoay.
+- [ ] **E-P2. Kéo/thay kích thước/xoay live** (27/09 — xong kéo di chuyển + tay nắm đổi kích thước (ảnh giữ tỷ lệ ở góc), 1 bước undo mỗi lần thả, test app `slideTapSelectAndDrag`; *còn*: xoay `xfrm rot`, thumbnail slide chưa cập nhật sau sửa) — `moveShape` đã có; thêm resize (giữ tỷ lệ với ảnh), rotate (`xfrm rot`), shape trong group (tính ngược `chOff/chExt`).
 - [ ] **E-P3. Sửa chữ tại chỗ**: overlay `EditText` trong suốt đúng vị trí/khung/font/cỡ (sau C1–C3 mới khớp), commit → `setShapeText`. Giữ định dạng run: khi sửa chỉ 1 run thì chỉ thay `a:t` của run đó.
 - [x] **E-P4. Định dạng run/đoạn** (27/09 — `PptxEditor.setTextFormat` + `LiveSlideModel.setTextFormat` (token undo) cho cả shape; chưa định dạng theo vùng chọn trong shape): bold/italic/màu/cỡ/căn → `PptxEditor` op mới (`a:rPr`/`a:pPr`), live qua `LiveSlideModel`.
 - [x] **E-P5. Slide** (27/09 — nhân bản/di chuyển/xóa: ghi file, hiện sau khi lưu + mở lại; *chưa*: thêm slide trống theo layout): thêm/nhân bản/xóa/đổi thứ tự (`presentation.xml sldIdLst` + rels + `[Content_Types].xml`).
