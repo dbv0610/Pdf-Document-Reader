@@ -47,6 +47,8 @@ class ShapeView : LeafView {
     // 字符属性
     private var wpShape: WPAutoShape? = null
 
+    fun getShape(): WPAutoShape? = wpShape
+
     //
     private val rect = Rect()
 
@@ -77,12 +79,10 @@ class ShapeView : LeafView {
         isInlineFlag = docAttr!!.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()
                 || (wpShape.wrap.toInt() != com.wxiwei.office.common.shape.WPAbstractShape.WRAP_TOP.toInt() && wpShape.wrap.toInt() != com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM.toInt())
 
+        // Floating shapes of headers/footers stay floating (drawn on every page by PageView);
+        // laying them out inline made a page-sized header background push the body off the page.
         if (wpShape.isWatermarkShape) {
             isInlineFlag = false
-        } else if (WPViewKit.instance().getArea(start + 1) == WPModelConstant.HEADER
-            || WPViewKit.instance().getArea(start + 1) == WPModelConstant.FOOTER
-        ) {
-            isInlineFlag = true
         }
 
         var width = 0

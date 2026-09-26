@@ -262,15 +262,20 @@ class PageView(elem: IElement) : AbstractView() {
         canvas.drawRect(right, bottom, right + bm, bottom + 1, paint)
     }
 
+    private fun zOrderOf(view: LeafView): Long =
+        ((view as? ShapeView)?.getShape() ?: (view as? ObjView)?.getShape())?.zOrder ?: 0L
+
     private fun drawShape(canvas: Canvas, originX: Int, originY: Int, zoom: Float, drawBehindDocShape: Boolean) {
         val shapeViews = shapeViews
         if (shapeViews == null || shapeViews.size == 0) {
             return
         }
 
+        // stacking order of the document, not the order the anchors appear in (stable sort)
+        val ordered = shapeViews.sortedBy { zOrderOf(it) }
         if (drawBehindDocShape) {
             //behind doc
-            for (shape in shapeViews) {
+            for (shape in ordered) {
                 if (shape is ShapeView && shape.isBehindDoc()) {
                     shape.drawForWrap(canvas, originX, originY, zoom)
                 } else if (shape is ObjView && shape.isBehindDoc()) {
@@ -278,7 +283,7 @@ class PageView(elem: IElement) : AbstractView() {
                 }
             }
         } else {
-            for (shape in shapeViews) {
+            for (shape in ordered) {
                 if (shape is ShapeView && !shape.isBehindDoc()) {
                     shape.drawForWrap(canvas, originX, originY, zoom)
                 } else if (shape is ObjView && !shape.isBehindDoc()) {

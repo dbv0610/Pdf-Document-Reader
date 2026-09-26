@@ -118,6 +118,9 @@ open class WPAbstractShape : ArbitraryPolygonShape() {
     //default is top of text;
     private var wrapType: Short = 3
 
+    // DOCX wp:anchor@relativeHeight: floating shapes are drawn in increasing order
+    var zOrder: Long = 0
+
     /**
      * @return Returns the elementIndex.
      */

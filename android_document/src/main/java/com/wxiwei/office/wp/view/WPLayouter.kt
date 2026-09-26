@@ -123,7 +123,7 @@ class WPLayouter(root: PageRoot) {
                 "elemStart=${elem?.getStartOffset()} elemEnd=${elem?.getEndOffset()} maxEnd=$maxEnd " +
                 "page=${pageAttr.pageWidth}x${pageAttr.pageHeight} margins=" +
                 "${pageAttr.leftMargin},${pageAttr.topMargin},${pageAttr.rightMargin},${pageAttr.bottomMargin} " +
-                "span=$spanW x $spanH"
+                "span=$spanW x $spanH pitch=${pageAttr.pageLinePitch}"
         )
         // Header/footer layout can enlarge margins. Never let that remove the
         // entire body area; otherwise the first page cannot advance its model
@@ -336,6 +336,7 @@ class WPLayouter(root: PageRoot) {
         val oldLinePitch = pageAttr.pageLinePitch
         pageAttr.pageLinePitch = -1f
 
+        val firstShape = shapeViews.size
         val titleView = ViewFactory.createView(root.getControl()!!, hfElem, null, WPViewConstant.TITLE_VIEW.toInt()) as TitleView
         titleView.setPageRoot(root)
         titleView.setLocation(pageAttr.leftMargin, pageAttr.headerMargin)
@@ -400,6 +401,17 @@ class WPLayouter(root: PageRoot) {
         titleView.setSize(spanW, titleHeight)
         if (!isHeader) {
             titleView.setY(pageAttr.pageHeight - titleHeight - pageAttr.footerMargin)
+        }
+        // shapes anchored to a header/footer paragraph were placed relative to the title view
+        for (i in firstShape until shapeViews.size) {
+            val sv = shapeViews[i]
+            val shape = (sv as? ShapeView)?.getShape() ?: (sv as? ObjView)?.getShape() ?: continue
+            val v = shape.verticalRelativeTo.toInt()
+            if (v == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PARAGRAPH.toInt()
+                || v == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LINE.toInt()
+            ) {
+                sv.setY(sv.getY() + titleView.getY())
+            }
         }
 
         //restore line pitch
@@ -470,7 +482,7 @@ class WPLayouter(root: PageRoot) {
                 while (cell != null) {
                     var paraView = cell.getChildView()
                     while (paraView != null) {
-                        collectShapeViewForPara(page, para, isHF)
+                        (paraView as? ParagraphView)?.let { collectShapeViewForPara(page, it, isHF) }
                         paraView = paraView.getNextView()
                     }
                     cell = cell.getNextView()

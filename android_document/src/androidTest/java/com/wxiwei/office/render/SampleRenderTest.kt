@@ -94,6 +94,24 @@ class SampleRenderTest {
         renderPages(reader, "docx", 1240) { it.layout != null }
     }
 
+    /** Thesis template: nearly every page item is a floating text box or picture (wps/wpg). */
+    @Test
+    fun docTest() = withReader("doc_test.docx") { reader ->
+        renderPages(reader, "doctest", 1240) { it.layout != null }
+        // diagnosis: every floating shape the reader produced
+        val manage = reader.control!!.getSysKit().getWPShapeManage()
+        var i = 0
+        while (i < 500) {
+            val shape = manage.getShape(i) ?: break
+            val wp = shape as? com.wxiwei.office.common.shape.WPAbstractShape
+            Log.i(TAG, "shape#$i ${shape.javaClass.simpleName} bounds=${shape.bounds} wrap=${wp?.wrap} " +
+                "h=${wp?.horizontalRelativeTo}/${wp?.horRelativeValue}/${wp?.horizontalAlignment} " +
+                "v=${wp?.verticalRelativeTo}/${wp?.verRelativeValue}/${wp?.verticalAlignment} elem=${wp?.elementIndex}")
+            i++
+        }
+        Log.i(TAG, "shapes=$i")
+    }
+
     @Test
     fun pptx() = withReader("sample.pptx") { reader ->
         renderPages(reader, "pptx", 1920) { it.pageCount >= 10 }

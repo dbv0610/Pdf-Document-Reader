@@ -1864,6 +1864,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     }
 
     private fun processWrapAndPosition_Drawing(shape: WPAbstractShape, anchor: Element, rect: Rectangle) {
+        // stacking order among floating shapes (higher is drawn later, on top)
+        anchor.attributeValue("relativeHeight")?.toLongOrNull()?.let { shape.zOrder = it }
         //behindDoc or not
         if ("1".equals(anchor.attributeValue("behindDoc"), ignoreCase = true)) {
             shape.setWrap(WPAbstractShape.WRAP_BOTTOM)

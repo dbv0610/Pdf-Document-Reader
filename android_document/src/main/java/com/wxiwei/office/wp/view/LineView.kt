@@ -220,14 +220,18 @@ class LineView : AbstractView {
         }
 
         if (processline) {
-            value = (value - heightExceptShape) / 2
-            setTopIndent(value.toInt())
-            setBottomIndent(value.toInt())
-            setY(getY() + value.toInt())
+            // split the extra height without losing pixels: truncating both halves made every
+            // grid line up to 1px short, so pages held extra lines and anchors drifted
+            val extra = Math.round(value) - heightExceptShape
+            val top = Math.floorDiv(extra, 2)
+            val bottom = extra - top
+            setTopIndent(top)
+            setBottomIndent(bottom)
+            setY(getY() + top)
             if (bnView != null) {
-                bnView.setTopIndent(value.toInt())
-                bnView.setBottomIndent(value.toInt())
-                bnView.setY(value.toInt())
+                bnView.setTopIndent(top)
+                bnView.setBottomIndent(bottom)
+                bnView.setY(top)
             }
         }
     }

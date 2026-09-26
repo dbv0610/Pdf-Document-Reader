@@ -393,7 +393,10 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 26/09/2026 | P2, D6, D16, D8, D9, C3/P3 | spcPts lẻ, căn đều, bảng sang trang, font theme, cỡ chữ lẻ. Test render 3 định dạng pass, không hồi quy. |
 | 26/09/2026 | **TẠM DỪNG** | Theo yêu cầu: dừng sau phần đọc/render, **chưa làm realtime edit**. Commit cuối: xem `git log`. |
 
+| 27/09/2026 | **doc_test.docx** (template luận văn WPS, trang toàn text box/ảnh nổi) | Trước: trang 1 trắng, 4 trang. Nguyên nhân + sửa: (1) `ShapeView`/`ObjView` **ép shape nổi trong header/footer thành inline** → group nền toàn trang làm header cao 1181px, thân bài bị đẩy khỏi trang → giờ giữ nổi, cộng vị trí TitleView cho shape neo theo đoạn; (2) **lưới dòng `docGrid`**: Word chia đều pitch (312 → 317.2 twips, 44 dòng/trang) + `LineView` cắt `.toInt()` cả hai nửa phần bù làm mỗi dòng hụt ~1px → neo text box trôi sang trang trước; (3) **z-order** `relativeHeight` chưa đọc → nền trắng header che trang trí; (4) shape trong ô bảng không được thu thập (`collectShapeView` truyền nhầm `para`). Giờ 5 trang, bố cục đúng. Mẫu: `androidTest/assets/samples/doc_test.docx`, test `SampleRenderTest.docTest` (có in danh sách shape vào logcat). |
+
 ### Khi làm tiếp — phần đọc còn lại (theo thứ tự đề xuất)
+0. **Shape neo trong ô bảng / footer**: vị trí dọc theo đoạn trong ô bảng đang tính theo tọa độ ô (PositionLayoutKit dùng `paraView.getY()`), chưa cộng vị trí bảng/ô. Text box/grid: kiểm tra `docGrid` có nên áp vào text box không (Word không bắt lưới trong text box).
 1. **G0.3** ảnh tham chiếu (xuất PDF/PNG 3 file mẫu từ WPS) — cần để chốt X11, D15, X4 và spacing.
 2. **D7** lặp dòng tiêu đề bảng khi sang trang (`tblHeader` đã đọc, `TableLayoutKit` chưa lặp) — thấy ở trang 3 file mẫu.
 3. **X6** bật lại freeze pane (`Sheet.getPaneInformation()` trả `null` từ bản gốc vendor) — kiểm tra vẽ kỹ trước khi bật.
