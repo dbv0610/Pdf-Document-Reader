@@ -278,5 +278,41 @@ class ReadDocumentEditTest {
         val plain = Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>").findAll(xml).joinToString("") { it.groupValues[1] }
         assertTrue("saved", plain.contains("Xin chào!CHƠI CÙNG"))
     }
+
+    @Test
+    fun wordCaretScrollsAboveKeyboard() {
+        val file = sample("sample.docx")
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            var point = floatArrayOf(0f, 0f)
+            var height = 0; var scroll = 0
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val o = IntArray(2); word.getLocationOnScreen(o)
+                height = word.height; scroll = word.scrollY
+                point = floatArrayOf(o[0] + word.width / 2f, o[1] + word.height * 0.85f)
+            }
+            val down = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], down)
+            inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], down)
+            Thread.sleep(2500)
+            screenshot("word_caret_keyboard")
+            scenario.onActivity { a ->
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val ime = androidx.core.view.ViewCompat.getRootWindowInsets(word)!!.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
+                if (ime > 0) {
+                    assertTrue("scrolled for the keyboard: $scroll -> ${word.scrollY}", word.scrollY > scroll)
+                    val panel = a.findViewById<View>(R.id.editPanel)
+                    val p = IntArray(2); panel.getLocationOnScreen(p)
+                    assertTrue("toolbar above the keyboard", p[1] + panel.height <= word.rootView.height - ime + 1)
+                }
+            }
+        }
+    }
 }
 

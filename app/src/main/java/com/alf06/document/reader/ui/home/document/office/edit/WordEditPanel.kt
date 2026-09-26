@@ -126,9 +126,11 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
 
     init {
         reader.addView(caret, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        keepAboveKeyboard(true)
     }
 
     override fun close() {
+        super.close()
         reader.onDocumentGesture = null
         stopTyping()
         reader.removeView(caret)
@@ -179,7 +181,19 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             return
         }
         caret.touch()
+        revealCaret()
         reader.thumbnails?.invalidateAll()
+    }
+
+    /** Keeps the caret above the keyboard and inside the screen. */
+    private fun revealCaret() {
+        if (base < 0) return
+        val word = reader.control?.getView() ?: return
+        selection()?.revealCaret(base + typing.selectionEnd.coerceAtLeast(0), dp(24), visibleBottom(word))
+    }
+
+    override fun onKeyboardMoved() {
+        reader.post { revealCaret() }
     }
 
     private fun selection(): WordSelection? = reader.control?.let { runCatching { WordSelection(it) }.getOrNull() }

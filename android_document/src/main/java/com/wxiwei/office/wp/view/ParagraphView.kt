@@ -114,16 +114,7 @@ open class ParagraphView(elem: IElement) : AbstractView(), IMemObj {
         val vX = x - getX()
         val vY = y - getY()
         //IView view = getView(x, y, WPViewConstant.LINE_VIEW, isBack);
-        var view: IView? = getChildView()
-        if (view != null && vY > view.getY()) {
-            while (view != null) {
-                if (vY >= view.getY() && vY < view.getY() + view.getLayoutSpan(WPViewConstant.Y_AXIS)) {
-                    break
-                }
-                view = view.getNextView()
-            }
-        }
-        view = view ?: getChildView()
+        val view = WPViewKit.instance().nearestChild(getChildView(), vY) { it.getLayoutSpan(WPViewConstant.Y_AXIS) }
         if (view != null) {
             return view.viewToModel(vX, vY, isBack)
         }

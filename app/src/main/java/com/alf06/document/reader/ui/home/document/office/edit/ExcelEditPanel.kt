@@ -63,6 +63,7 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     }
 
     init {
+        keepAboveKeyboard(true)
         // the sheet selects a cell on tap; follow it
         watcher = activity.lifecycleScope.launch {
             while (isActive) {
@@ -73,6 +74,7 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     }
 
     override fun close() {
+        super.close()
         watcher.cancel()
     }
 

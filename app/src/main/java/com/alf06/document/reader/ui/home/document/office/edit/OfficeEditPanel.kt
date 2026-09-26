@@ -30,8 +30,49 @@ internal abstract class OfficeEditPanel(
 ) {
     abstract val view: View
 
-    /** Called when the panel is hidden; stop listening to the document. */
-    open fun close() {}
+    /** Called when the panel is hidden; stop listening to the document. Call super. */
+    open fun close() {
+        keepAboveKeyboard(false)
+    }
+
+    // The app draws edge to edge, so the keyboard does not resize the window: lift the panel's
+    // container above it instead.
+    private val imeWatcher = android.view.ViewTreeObserver.OnPreDrawListener { liftAboveKeyboard(); true }
+    private var watching = false
+
+    /** Starts (or stops) keeping the toolbar above the soft keyboard. */
+    fun keepAboveKeyboard(on: Boolean) {
+        val observer = reader.rootView.viewTreeObserver
+        if (on && !watching) observer.addOnPreDrawListener(imeWatcher)
+        if (!on && watching && observer.isAlive) observer.removeOnPreDrawListener(imeWatcher)
+        watching = on
+        if (!on) (view.parent as? View)?.translationY = 0f
+    }
+
+    private fun liftAboveKeyboard() {
+        val container = view.parent as? View ?: return
+        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(container) ?: return
+        val ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
+        val location = IntArray(2)
+        container.getLocationInWindow(location)
+        val bottom = location[1] - container.translationY + container.height
+        val lift = if (ime <= 0) 0f else maxOf(0f, bottom - (container.rootView.height - ime))
+        if (container.translationY != -lift) {
+            container.translationY = -lift
+            onKeyboardMoved()
+        }
+    }
+
+    /** The toolbar moved with the keyboard; the visible part of the document changed. */
+    protected open fun onKeyboardMoved() {}
+
+    /** Bottom of the document area not covered by the toolbar, in [of]'s coordinates. */
+    protected fun visibleBottom(of: View): Int {
+        val container = view.parent as? View ?: return of.height
+        val a = IntArray(2); val b = IntArray(2)
+        container.getLocationOnScreen(a); of.getLocationOnScreen(b)
+        return minOf(of.height, a[1] - b[1])
+    }
 
     protected val context: Context get() = activity
 

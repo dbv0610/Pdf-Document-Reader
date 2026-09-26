@@ -70,6 +70,28 @@ class WPViewKit : ViewKit() {
     /**
      * 得到指定视图到指定视图的类型的绝对坐标
      */
+    /**
+     * The sibling from [first] on that contains [y] (a coordinate in their parent), else the one
+     * nearest to it: points in paragraph spacing or below the last child still hit text.
+     */
+    fun nearestChild(first: IView?, y: Int, height: (IView) -> Int): IView? {
+        var best: IView? = null
+        var distance = Int.MAX_VALUE
+        var view = first
+        while (view != null) {
+            val top = view.getY()
+            val bottom = top + height(view)
+            val d = when {
+                y < top -> top - y
+                y >= bottom -> y - bottom + 1
+                else -> return view
+            }
+            if (d < distance) { best = view; distance = d }
+            view = view.getNextView()
+        }
+        return best
+    }
+
     fun getAbsoluteCoordinate(view: IView?, type: Int, rect: Rectangle): Rectangle {
         var view = view
         rect.setBounds(0, 0, 0, 0)

@@ -332,16 +332,8 @@ class PageView(elem: IElement) : AbstractView() {
         var vY = y
         vX -= getX()
         vY -= getY()
-        var view: IView? = getChildView()
-        if (view != null && vY > view.getY()) {
-            while (view != null) {
-                if (vY >= view.getY() && vY < view.getY() + view.getHeight()) {
-                    break
-                }
-                view = view.getNextView()
-            }
-        }
-        view = if (view == null) getChildView() else view
+        // a point between two paragraphs (their spacing) or below the last one belongs to the nearest
+        val view = WPViewKit.instance().nearestChild(getChildView(), vY) { it.getHeight() }
         if (view != null) {
             return view.viewToModel(vX, vY, isBack)
         }

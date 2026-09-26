@@ -67,6 +67,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     init {
         reader.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        keepAboveKeyboard(true)
         reader.onDocumentGesture = gesture@{ type, event ->
             if (type != IMainFrame.ON_SINGLE_TAP_CONFIRMED) return@gesture false
             tapAt(event.rawX, event.rawY) || shapeId >= 0
@@ -88,6 +89,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     }
 
     override fun close() {
+        super.close()
         reader.onDocumentGesture = null
         reader.removeView(overlay)
     }

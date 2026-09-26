@@ -103,6 +103,29 @@ class WordSelection(private val word: Word) {
         return Rect(x, floor(lineRect.y * z + dy).toInt(), x, ceil((lineRect.y + line.getLayoutSpan(WPViewConstant.Y_AXIS)) * z + dy).toInt())
     }
 
+    /**
+     * Scrolls the page view so the caret before [offset] is at least [margin] px inside the
+     * visible area, which ends [visibleBottom] px below the top of the Word view (above a keyboard
+     * or toolbar covering it). Only the page view scrolls; returns true when it moved.
+     */
+    fun revealCaret(offset: Long, margin: Int, visibleBottom: Int = word.height): Boolean {
+        if (printMode || word.getCurrentRootType() != WPViewConstant.PAGE_ROOT.toInt()) return false
+        val r = caretRect(offset) ?: return false
+        val dy = when {
+            r.bottom > visibleBottom - margin -> r.bottom - (visibleBottom - margin)
+            r.top < margin -> r.top - margin
+            else -> 0
+        }
+        val dx = when {
+            r.left > word.width - margin -> r.left - (word.width - margin)
+            r.left < margin -> r.left - margin
+            else -> 0
+        }
+        if (dx == 0 && dy == 0) return false
+        word.scrollTo(maxOf(0, word.scrollX + dx), maxOf(0, word.scrollY + dy))
+        return true
+    }
+
     fun setSelection(start: Long, end: Long) {
         require(start >= 0 && end >= start)
         word.getHighlight().addHighlight(start, end); repaint()
