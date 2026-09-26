@@ -43,6 +43,7 @@ internal object EmbeddedFontReader {
                 val fontData = extractFontData(data) ?: continue
                 val typeface = createTypeface(dir, fontData) ?: continue
                 FontTypefaceManage.instance().addEmbeddedFont(name, typeface)
+                if (weightClass(fontData) >= 600) FontTypefaceManage.instance().markBoldFace(name)
             } catch (e: Exception) {
                 control.getSysKit().getErrorKit().writerLog(e)
             }
@@ -75,6 +76,22 @@ internal object EmbeddedFontReader {
             }
         }
         return if (isSfnt(fontData, 0)) fontData else null
+    }
+
+    /** usWeightClass of the OS/2 table (400 regular, 700 bold), or 0 when absent. */
+    internal fun weightClass(font: ByteArray): Int {
+        if (font.size < 12) return 0
+        val buf = ByteBuffer.wrap(font).order(ByteOrder.BIG_ENDIAN)
+        val numTables = buf.getShort(4).toInt() and 0xFFFF
+        for (i in 0 until numTables) {
+            val record = 12 + i * 16
+            if (record + 16 > font.size) return 0
+            if (buf.getInt(record) == 0x4F532F32 /* OS/2 */) {
+                val offset = buf.getInt(record + 8)
+                return if (offset >= 0 && offset + 6 <= font.size) buf.getShort(offset + 4).toInt() and 0xFFFF else 0
+            }
+        }
+        return 0
     }
 
     private fun isSfnt(data: ByteArray, offset: Int): Boolean {

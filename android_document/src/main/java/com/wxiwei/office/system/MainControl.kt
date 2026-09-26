@@ -51,6 +51,11 @@ open class MainControl(frameValue: IMainFrame?) : AbstractControl() {
 
     init {
         sysKit = SysKit(this)
+        try {
+            com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().setAssets(frameValue!!.getActivity().applicationContext.assets)
+        } catch (e: RuntimeException) {
+            // no activity yet: bundled fonts stay off, system fonts are used
+        }
         handler = Handler(Looper.getMainLooper()) { message ->
             if (isCancel) return@Handler true
             when (message.what) {

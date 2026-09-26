@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">A210 Pdf Reader</string>
+    <string name="app_name" translatable="false">Document Reader</string>
     <string name="fb_app_id" translatable="false">1111111111</string>
     <string name="fb_client_token" translatable="false">2222222222222222222222</string>
 

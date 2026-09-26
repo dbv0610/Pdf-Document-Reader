@@ -46,19 +46,6 @@ class FontKit {
         val font = wb?.getFont(s!!.getFontIndex().toInt())
         val isbold = font!!.isBold() //getBoldweight() > HSSFFont.BOLDWEIGHT_NORMAL;
         val isitalics = font.isItalic()
-        // 精斜体
-        if (isbold && isitalics) {
-            paint.textSkewX = -0.2f
-            paint.isFakeBoldText = true
-        }
-        // 粗体
-        else if (isbold) {
-            paint.isFakeBoldText = true
-        }
-        // 斜体
-        else if (isitalics) {
-            paint.textSkewX = -0.2f
-        }
 
         //Strike
         if (font.isStrikeline()) {
@@ -72,8 +59,12 @@ class FontKit {
 
         // 字符样式
         val fontIndex = s!!.getFontIndex().toInt()
+        // the cell font's own family (resolved like Word text), real bold/italic faces
         paint.typeface = typefaceCache.getOrPut(fontIndex) {
-            Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+            val manage = FontTypefaceManage.instance()
+            val name = font.getName()
+            if (name.isNullOrEmpty()) Typeface.create(Typeface.SANS_SERIF, (if (isbold) Typeface.BOLD else 0) or (if (isitalics) Typeface.ITALIC else 0))
+            else manage.getFontTypeface(manage.addFontName(name), isbold, isitalics)
         }
         // fontsize
         paint.textSize = (font.getFontSize() * MainConstant.POINT_TO_PIXEL + 0.5f).toFloat()

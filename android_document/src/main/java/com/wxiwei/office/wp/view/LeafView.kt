@@ -87,21 +87,8 @@ open class LeafView : AbstractView {
         val charAttr = charAttr!!
 
         AttrManage.instance().fillCharAttr(charAttr, paraElem.getAttribute(), elem.getAttribute())
-        // 粗斜体
-        if (charAttr.isBold && charAttr.isItalic) {
-            paint.textSkewX = -0.2f
-            paint.isFakeBoldText = true
-        }
-        // 粗体
-        else if (charAttr.isBold) {
-            paint.isFakeBoldText = true
-        }
-        // 斜体
-        else if (charAttr.isItalic) {
-            paint.textSkewX = -0.25f
-        }
-        // 字体没有什么好改变的，用统一的吧
-        paint.typeface = FontTypefaceManage.instance().getFontTypeface(charAttr.fontIndex)
+        // real bold/italic faces when the font has them, synthesized by Android otherwise
+        paint.typeface = FontTypefaceManage.instance().getFontTypeface(charAttr.fontIndex, charAttr.isBold, charAttr.isItalic)
         // 字号
         if (charAttr.subSuperScriptType > 0) {
             paint.textSize = charAttr.fontSize * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL / 2

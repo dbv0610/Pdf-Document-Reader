@@ -13,6 +13,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import com.wxiwei.office.common.bulletnumber.ListLevel
 import com.wxiwei.office.constant.MainConstant
+import com.wxiwei.office.simpletext.font.FontTypefaceManage
 import com.wxiwei.office.constant.wp.WPViewConstant
 import com.wxiwei.office.simpletext.model.AttrManage
 import com.wxiwei.office.simpletext.model.IDocument
@@ -123,21 +124,8 @@ class BNView : AbstractView() {
         val paint = paint!!
         val charAttr = charAttr!!
         AttrManage.instance().fillCharAttr(charAttr, paraElem!!.getAttribute(), leafElem!!.getAttribute())
-        // 粗斜体
-        if (charAttr.isBold && charAttr.isItalic) {
-            paint.textSkewX = -0.2f
-            paint.isFakeBoldText = true
-        }
-        // 粗体
-        else if (charAttr.isBold) {
-            paint.isFakeBoldText = true
-        }
-        // 斜体
-        else if (charAttr.isItalic) {
-            paint.textSkewX = -0.25f
-        }
-        // 字体没有什么好改变的，用统一的吧
-        paint.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        // the number takes the paragraph's font, like Word ("1." in Arial, not a serif)
+        paint.typeface = FontTypefaceManage.instance().getFontTypeface(charAttr.fontIndex, charAttr.isBold, charAttr.isItalic)
         // 字号
         paint.textSize = charAttr.fontSize * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
         // 颜色

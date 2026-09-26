@@ -187,11 +187,11 @@ Mức: **P0** = làm sai rõ trên file mẫu · **P1** = sai lệch vị trí/k
 
 ## 5. Giai đoạn 1 — Font (ảnh hưởng cả 3 định dạng)
 
-- [ ] **C1. FontResolver + bundle font metric-compatible**
+- [x] **C1. FontResolver + bundle font metric-compatible** (26/09 — làm ngay trong `FontTypefaceManage` (bảng `BUNDLED`), assets `fonts/`: Arimo (variable wght), Tinos, Carlito đủ 4 kiểu, Cousine regular+bold, OFL.txt; **+6.5 MB assets** (APK nén ~3–4 MB) — bỏ bớt family nếu cần giảm dung lượng. Consolas/Cambria dùng Cousine/Tinos (không metric-compatible). Chưa có: Caladea, Segoe/Tahoma/Verdana.)
   - Sửa: tạo `simpletext/font/FontResolver.kt`; `FontTypefaceManage.getFontTypeface` gọi qua resolver; thêm `assets/fonts/*`.
   - Làm: map tên (không phân biệt hoa thường, bỏ hậu tố " Bold"/" Italic"/" Regular" khi so), cache `Typeface` theo (family, style).
   - Xong khi: DOCX mẫu (Arial) render bằng Arimo; đo chiều rộng dòng "Tính năng Play-along cho phép người dùng…" lệch < 2% so với ảnh tham chiếu.
-- [ ] **C2. Bỏ fake bold/italic khi có biến thể thật**
+- [x] **C2. Bỏ fake bold/italic khi có biến thể thật** (26/09 — `getFontTypeface(index, bold, italic)`; LeafView, BNView (số danh sách giờ theo font đoạn, không còn SERIF), FontKit)
   - Sửa: `wp/view/LeafView.kt:90-104`, `simpletext/font/FontKit.kt:47-77`, 4 chỗ còn lại có `isFakeBoldText = true` (grep).
   - Làm: `resolver.resolve(fontIndex, bold, italic)` trả về typeface + cờ `fakeBold/fakeItalic`; chỉ set paint khi cờ bật.
   - Trường hợp Canva: family tên kết thúc bằng "Bold" (hoặc font nhúng có `usWeightClass ≥ 600`) + `b=true` → **không** fake bold.
@@ -201,8 +201,8 @@ Mức: **P0** = làm sai rõ trên file mẫu · **P1** = sai lệch vị trí/k
   - Reader: DOCX `sz/2`, PPTX `sz/100`, XLSX `sz` float.
   - Lưu ý: nhiều chỗ đọc `getFontSize` Int (DOC, PPT cũ) — giữ API cũ trả Int để không vỡ.
   - Xong khi: PPTX `sz=15171` → 151.71pt; DOCX `sz=21` → 10.5pt.
-- [ ] **C4. Font Excel theo tên** — `FontKit.getCellPaint`: dùng `font.getName()` qua resolver thay `SANS_SERIF` (cache theo fontIndex đã có).
-- [ ] **C5. Font nhúng theo biến thể** — `EmbeddedFontReader`: đọc cả `regular/bold/italic/boldItalic`, đăng ký `(family, style)`; đọc `usWeightClass` từ bảng OS/2 để biết font đó thực chất là bold.
+- [x] **C4. Font Excel theo tên** (26/09) — `FontKit.getCellPaint`: dùng `font.getName()` qua resolver thay `SANS_SERIF` (cache theo fontIndex đã có).
+- [~] **C5. Font nhúng theo biến thể** (26/09 — đã đọc `usWeightClass` OS/2 → family ≥600 không bị đậm thêm; chưa đăng ký riêng regular/bold/italic của cùng family) — `EmbeddedFontReader`: đọc cả `regular/bold/italic/boldItalic`, đăng ký `(family, style)`; đọc `usWeightClass` từ bảng OS/2 để biết font đó thực chất là bold.
 - [ ] **C6. Emoji & surrogate**: kiểm tra `LayoutKit` không cắt giữa cặp surrogate/ZWJ sequence khi ngắt dòng (dùng `BreakIterator.getCharacterInstance`). Thêm test đoạn "🎼🎹" 36pt và "✅  Play-along…".
 
 ---
@@ -252,6 +252,7 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
   **cộng** `after` của đoạn trước + `before` của đoạn sau (trừ khi `contextualSpacing` cùng style). Sửa + so ảnh tham chiếu.
 - [x] **D14. Hiệu năng layout** (26/09 — xóa toàn bộ `Log.e` debug trong `LayoutKit`/`WPLayouter`): `LayoutKit.layoutPara` gọi `Log.e` cho **mỗi dòng** (l.~121, ~204) — xóa.
 - [ ] **D15. TOC rỗng + các đoạn trống tạo khoảng trắng lớn** sau bảng đầu (trang 1) — so với ảnh tham chiếu WPS rồi quyết định.
+- [ ] **D16. Bảng bị cắt ở cuối trang**: dòng cuối trang 2 (bảng "Vùng MIDI") vẽ thành 1 dòng trống cụt sát footer, nội dung sang trang sau — kiểm tra `TableLayoutKit` khi row không vừa trang (nên đẩy cả row sang trang mới nếu `cantSplit` hoặc row chỉ 1 dòng).
 - [ ] **D11. Kiểm tra hồi quy**: danh sách lặp, header/footer, field PAGE ("Trang 1 • Internal Dev Doc" 9pt màu 4DB6AC căn phải), emoji tiêu đề 36pt căn giữa.
 
 ---
@@ -388,4 +389,5 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 26/09/2026 | G0.2, G0.4 | Harness `SampleRenderTest` + 3 file mẫu; ảnh "trước" và "sau" đã chụp trên SM-A165F. |
 | 26/09/2026 | D1–D5 | Cỡ chữ, style Normal, nền/viền/lề ô, bỏ hack chữ trắng→đen, viền + nền đoạn. Kiểm tra bằng ảnh: header bảng nền 00695C chữ trắng, viền xám mảnh, callout có vạch trái, khối code nền F2F7F6, header/footer có đường kẻ. |
 | 26/09/2026 | D12, D13, D14, X1, X2, X0 | Số trang footer, spacing cộng, bỏ log layout, ngày builtin 58, ẩn lưới, sửa màu palette (chart xanh lá / chữ trắng thành xanh). Đã kiểm bằng ảnh. |
-| — | **Làm tiếp** | C1/C2 (font metric-compatible + bỏ fake bold) → P2/P3 → X11 → X10 → D6 (justify). |
+| 26/09/2026 | C1, C2, C4, C5~ | Font bundle metric-compatible + đậm/nghiêng thật + font Excel theo tên + weight font nhúng. Ảnh: Word dùng Arimo, khối code monospace, heading đậm thật; PPTX không hồi quy. |
+| — | **Làm tiếp** | P2/P3 (spcPts, cỡ chữ lẻ PPTX) → D16 → X11 → X10 → D6 (justify) → C3. |
