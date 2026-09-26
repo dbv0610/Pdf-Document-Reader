@@ -309,11 +309,11 @@ Save luôn ghi ra file tạm rồi thay thế nguyên tử (đã làm trong các
 
 ### 9.2 XLSX (dễ nhất — làm trước)
 
-- [ ] **E-X1. UI nhập ô**: thanh công thức + ô đang sửa overlay trên `ss/view`, bàn phím, Enter/Tab di chuyển, hủy bằng Back.
-- [ ] **E-X2. Định dạng ô live**: bold/italic/màu chữ/nền/căn/wrap/numFmt → tạo `CellStyle` mới trong model + `XlsxWriter` thêm `xf`/`font`/`fill` vào `styles.xml` (tái dùng nếu trùng).
-- [ ] **E-X3. Chèn/xóa dòng-cột**: dời ô + merge + công thức (`A1FormulaShifter`) + `dimension`, table `ref`, `autoFilter ref`, anchor drawing.
-- [ ] **E-X4. Undo/redo** thống nhất như PPTX (hiện `SheetEditSession` có `Change(before, after)` — gom thành stack).
-- [ ] **E-X5. Kiểm tra với file mẫu**: sửa `Dữ liệu chi tiết!G2` → `Tổng quan!D6` (SUM) cập nhật live; save → mở bằng WPS thấy giá trị & công thức đúng; table/filter không hỏng.
+- [x] **E-X1. UI nhập ô** (27/09 — thanh sửa trong app `ui/home/document/office/edit/ExcelEditPanel.kt`: theo ô đang chọn, ô nhập giá trị/=công thức, lưu đè file qua file tạm): thanh công thức + ô đang sửa overlay trên `ss/view`, bàn phím, Enter/Tab di chuyển, hủy bằng Back.
+- [x] **E-X2. Định dạng ô live** (27/09 — `CellFormat`, `SheetEditSession.setCellFormat/setRangeFormat`, `XlsxWriter.StyleBook` ghi font/fill/numFmt/xf mới vào styles.xml): bold/italic/màu chữ/nền/căn/wrap/numFmt → tạo `CellStyle` mới trong model + `XlsxWriter` thêm `xf`/`font`/`fill` vào `styles.xml` (tái dùng nếu trùng).
+- [ ] **E-X3. Chèn/xóa dòng-cột** (TIẾP THEO): dời ô + merge + công thức (`A1FormulaShifter`) + `dimension`, table `ref`, `autoFilter ref`, anchor drawing.
+- [x] **E-X4. Undo/redo** (27/09 — gộp giá trị + định dạng + nhóm vùng trong `Step`) thống nhất như PPTX (hiện `SheetEditSession` có `Change(before, after)` — gom thành stack).
+- [x] **E-X5. Kiểm tra với file mẫu** (27/09 — `SheetEditSessionTest` + `ReadDocumentEditTest` (app). **Lỗi tìm ra**: `ModelUtil.getFormatContents` ghi đè ô ngày bằng chuỗi sau khi vẽ → công thức đọc ô đó ra #VALUE!; đã sửa): sửa `Dữ liệu chi tiết!G2` → `Tổng quan!D6` (SUM) cập nhật live; save → mở bằng WPS thấy giá trị & công thức đúng; table/filter không hỏng.
 
 ### 9.3 PPTX
 
@@ -398,6 +398,8 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 27/09/2026 | **ppt2.pptx** (Canva, chữ đè nhau slide 3/4) | Nguyên nhân: **giãn chữ `a:rPr@spc` chưa được đọc** (tiêu đề 96pt có `spc=-1344`, phụ đề `spc=-504`) → chữ rộng hơn hộp, xuống dòng và đè lên phụ đề/thân bài. Không phải lỗi làm tròn. Sửa: `FONT_SPACING_ID` (1/100 pt), PPTX `spc`, DOCX `w:rPr/w:spacing` (twips), `LeafView` dùng `Paint.letterSpacing`. Dấu tiếng Việt lạ của font "Barber FIll" là **đúng glyph của font** (đã vẽ trực tiếp từ font nhúng để đối chiếu). Test `SampleRenderTest.ppt2`. |
 
 | 27/09/2026 | D7, X6, D10~, X4, X5, X10, shape trong bảng căn giữa/phải | Test render 7 mẫu pass (docx, doc_test, shape_in_table, xlsx, custom_table_style, pptx, ppt2). |
+| 27/09/2026 | Realtime edit: E-X1, E-X2, E-X4, E-X5 + tích hợp app | Nút ✎ trong `ReadDocumentActivity` mở thanh sửa theo loại file (Excel live, PowerPoint live, Word lưu rồi mở lại). App đã cài lên SM-A165F. |
+| 27/09/2026 | **Zoom Excel giật** | Pinch cũ nhảy bậc 10% và vẽ lại cả sheet mỗi bậc (20ms TB, 35ms max/frame). Giờ phóng ảnh frame cuối theo ngón tay, vẽ thật 1 lần khi nhả (7.5ms TB, 11ms max). `PinchZoomTest`. |
 
 ### Khi làm tiếp — phần đọc còn lại (theo thứ tự đề xuất)
 Các mục còn lại **cần ảnh tham chiếu (G0.3) để quyết định**, không nên sửa mù: X11 tiêu đề chart ("Series 1"), `rPr/shd` của WPS, D15 khoảng trắng TOC rỗng. Ít ảnh hưởng: P4 `spAutoFit` (chỉ khác khi hộp có nền/viền), D7 `tblW`/fixed layout, small caps đúng cỡ, shape trong bảng bị chia nhiều trang.
