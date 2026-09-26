@@ -69,6 +69,14 @@ class TableLayoutKit {
         flag = ViewKit.instance().setBitValue(flag, WPViewConstant.LAYOUT_PARA_IN_TABLE.toInt(), true)
         var keepOne = ViewKit.instance().getBitValue(flag, WPViewConstant.LAYOUT_FLAG_KEEPONE.toInt())
         val maxEnd = tableElem.getEndOffset()
+        // A left-aligned table's position does not depend on its width: place it before its rows,
+        // so floating shapes anchored in its cells are positioned against the final cell x.
+        val hor = AttrManage.instance().getParaHorizontalAlign(tableElem.getAttribute()).toByte()
+        val leftAligned = hor != WPAttrConstant.PARA_HOR_ALIGN_CENTER && hor != WPAttrConstant.PARA_HOR_ALIGN_RIGHT
+        if (docAttr!!.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt() && leftAligned) {
+            tableView.setX(tableView.getX() - tableAttr.leftMargin
+                    + (AttrManage.instance().getParaIndentLeft(tableElem.getAttribute()) * MainConstant.TWIPS_TO_PIXEL).toInt())
+        }
         var rowHeight: Int
         var tableHeight = 0
         var tableWidth = 0
@@ -146,21 +154,13 @@ class TableLayoutKit {
         //
         tableView.setSize(tableWidth, tableHeight)
         //
-        if (docAttr!!.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt()) {
-            // table horizontal alignment
-            val hor = AttrManage.instance().getParaHorizontalAlign(tableElem.getAttribute()).toByte()
+        if (docAttr.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt() && !leftAligned) {
+            // centered / right-aligned: needs the laid-out width
             var want = w - tableWidth
-            if (hor == WPAttrConstant.PARA_HOR_ALIGN_CENTER ||
-                hor == WPAttrConstant.PARA_HOR_ALIGN_RIGHT
-            ) {
-                if (hor == WPAttrConstant.PARA_HOR_ALIGN_CENTER) {
-                    want /= 2
-                }
-                tableView.setX(tableView.getX() + want)
-            } else {
-                tableView.setX(tableView.getX() - tableAttr.leftMargin
-                        + (AttrManage.instance().getParaIndentLeft(tableElem.getAttribute()) * MainConstant.TWIPS_TO_PIXEL).toInt())
+            if (hor == WPAttrConstant.PARA_HOR_ALIGN_CENTER) {
+                want /= 2
             }
+            tableView.setX(tableView.getX() + want)
         }
         breakRowView = rowView
         return breakType

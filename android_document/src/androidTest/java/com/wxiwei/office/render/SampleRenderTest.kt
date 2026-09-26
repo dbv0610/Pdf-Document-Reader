@@ -112,6 +112,12 @@ class SampleRenderTest {
         Log.i(TAG, "shapes=$i")
     }
 
+    /** A floating text box anchored in the bottom-right table cell must sit at that cell. */
+    @Test
+    fun shapeInTable() = withReader("shape_in_table.docx") { reader ->
+        renderPages(reader, "shapeintable", 1240) { it.layout != null }
+    }
+
     @Test
     fun pptx() = withReader("sample.pptx") { reader ->
         renderPages(reader, "pptx", 1920) { it.pageCount >= 10 }

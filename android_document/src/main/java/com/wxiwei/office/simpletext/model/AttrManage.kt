@@ -1363,13 +1363,6 @@ class AttrManage {
         pageAttr.pageBRColor = getPageBackgroundColor(attr)
         pageAttr.pageBorder = getPageBorder(attr)
         pageAttr.pageLinePitch = (getPageLinePitch(attr) * MainConstant.TWIPS_TO_PIXEL)
-        // Word fits a whole number of grid lines in the text area and stretches the pitch to fill
-        // it (linePitch 312 on A4 with 1" margins gives 44 lines of 317.2 twips)
-        val textHeight = pageAttr.pageHeight - pageAttr.topMargin - pageAttr.bottomMargin
-        if (pageAttr.pageLinePitch > 0 && textHeight > pageAttr.pageLinePitch) {
-            val lines = Math.floor((textHeight / pageAttr.pageLinePitch).toDouble()).toInt()
-            pageAttr.pageLinePitch = textHeight.toFloat() / lines
-        }
 
     }
 

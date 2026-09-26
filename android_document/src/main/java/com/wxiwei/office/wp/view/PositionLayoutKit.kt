@@ -1,6 +1,7 @@
 package com.wxiwei.office.wp.view
 
 import com.wxiwei.office.common.shape.WPAutoShape
+import com.wxiwei.office.simpletext.view.IView
 import com.wxiwei.office.simpletext.view.PageAttr
 
 class PositionLayoutKit private constructor() {
@@ -12,6 +13,45 @@ class PositionLayoutKit private constructor() {
         fun instance(): PositionLayoutKit {
             return kit
         }
+    }
+
+    /**
+     * Y of [view] on its page (or in its header/footer, which the layouter offsets later). A
+     * paragraph in a table cell is placed relative to the cell, so the cell, row and table
+     * positions are added; a body paragraph's own Y already is page based.
+     */
+    private fun pageY(view: IView): Int {
+        var y = 0
+        var v: IView? = view
+        while (v != null && v !is PageView && v !is TitleView) {
+            y += v.getY()
+            v = v.getParentView()
+        }
+        return y
+    }
+
+    /**
+     * Left edge of the "column" a shape is positioned against: the text area of the table cell
+     * holding its anchor paragraph (Word's layoutInCell), else the page's left margin.
+     */
+    private fun columnLeft(leafView: LeafView, pageAttr: PageAttr): Int {
+        var v: IView? = leafView.getParentView()
+        var cell: CellView? = null
+        while (v != null && v !is PageView && v !is TitleView) {
+            if (v is CellView) {
+                cell = v
+                break
+            }
+            v = v.getParentView()
+        }
+        if (cell == null) return pageAttr.leftMargin
+        var x = cell.getLeftIndent()
+        var p: IView? = cell
+        while (p != null && p !is PageView && p !is TitleView) {
+            x += p.getX()
+            p = p.getParentView()
+        }
+        return x
     }
 
     fun processShapePosition(leafView: LeafView, wpShape: WPAutoShape, pageAttr: PageAttr) {
@@ -90,7 +130,7 @@ class PositionLayoutKit private constructor() {
             || horRelative == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_COLUMN.toInt()
             || horRelative == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_CHARACTER.toInt()
         ) {
-            leafView.setX(pageAttr.leftMargin + r.x)
+            leafView.setX(columnLeft(leafView, pageAttr) + r.x)
         } else if (horRelative == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PAGE.toInt()
             || horRelative == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LEFT.toInt()
         ) {
@@ -405,7 +445,7 @@ class PositionLayoutKit private constructor() {
                 && leafView.getParentView()!!.getParentView() is ParagraphView
             ) {
                 val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                leafView.setY(paraView.getY() + r.y)
+                leafView.setY(pageY(paraView) + r.y)
             }
         } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_BOTTOM.toInt()) {
             leafView.setY(pageAttr.pageHeight - pageAttr.bottomMargin + r.y)
@@ -444,7 +484,7 @@ class PositionLayoutKit private constructor() {
                 && leafView.getParentView()!!.getParentView() is ParagraphView
             ) {
                 val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                leafView.setY(paraView.getY())
+                leafView.setY(pageY(paraView))
             }
         } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_BOTTOM.toInt()) {
             leafView.setY(pageAttr.pageHeight - pageAttr.bottomMargin)
@@ -486,7 +526,7 @@ class PositionLayoutKit private constructor() {
                 && leafView.getParentView()!!.getParentView() is ParagraphView
             ) {
                 val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                leafView.setY(paraView.getY() - halfShapeHeight)
+                leafView.setY(pageY(paraView) - halfShapeHeight)
             }
         }
     }
@@ -506,7 +546,7 @@ class PositionLayoutKit private constructor() {
                 && leafView.getParentView()!!.getParentView() is ParagraphView
             ) {
                 val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                leafView.setY(paraView.getY() + paraView.getHeight() - r.height)
+                leafView.setY(pageY(paraView) + paraView.getHeight() - r.height)
             }
         } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_TOP.toInt()) {
             leafView.setY(pageAttr.topMargin - r.height)
@@ -547,7 +587,7 @@ class PositionLayoutKit private constructor() {
                     || verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LINE.toInt()
                 ) {
                     val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                    leafView.setY(paraView.getY())
+                    leafView.setY(pageY(paraView))
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_TOP.toInt()) {
                     leafView.setY(0)
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_BOTTOM.toInt()) {
@@ -567,7 +607,7 @@ class PositionLayoutKit private constructor() {
                     || verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LINE.toInt()
                 ) {
                     val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                    leafView.setY(paraView.getY() + paraView.getHeight() - r.height)
+                    leafView.setY(pageY(paraView) + paraView.getHeight() - r.height)
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_TOP.toInt()) {
                     leafView.setY(pageAttr.topMargin - r.height)
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_BOTTOM.toInt()) {
@@ -599,7 +639,7 @@ class PositionLayoutKit private constructor() {
                     || verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LINE.toInt()
                 ) {
                     val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                    leafView.setY(paraView.getY() + paraView.getHeight() - r.height)
+                    leafView.setY(pageY(paraView) + paraView.getHeight() - r.height)
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_TOP.toInt()) {
                     leafView.setY(pageAttr.topMargin - r.height)
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_BOTTOM.toInt()) {
@@ -619,7 +659,7 @@ class PositionLayoutKit private constructor() {
                     || verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LINE.toInt()
                 ) {
                     val paraView = leafView.getParentView()!!.getParentView() as ParagraphView
-                    leafView.setY(paraView.getY())
+                    leafView.setY(pageY(paraView))
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_TOP.toInt()) {
                     leafView.setY(0)
                 } else if (verRelativeTo == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_BOTTOM.toInt()) {

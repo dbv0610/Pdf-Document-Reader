@@ -90,11 +90,25 @@ class WPLayouter(root: PageRoot) {
         section = doc!!.getSection(0)
         //
         AttrManage.instance().fillPageAttr(pageAttr, section!!.getAttribute())
+        stretchLinePitch(pageAttr!!)
         //
         val pv = ViewFactory.createView(root!!.getControl()!!, section, null, WPViewConstant.PAGE_VIEW.toInt()) as PageView
         root!!.appendChlidView(pv)
         layoutPage(pv)
         LayoutKit.instance().layoutAllPage(root!!, 1.0f)
+    }
+
+    /**
+     * Word fits a whole number of grid lines in the body and stretches the pitch to fill it
+     * (linePitch 312 on A4 with 1" margins: 44 lines of 317.2 twips). Only the body: text boxes
+     * keep the section's pitch as it is (a WPS text box sized for 10 lines of 312 twips).
+     */
+    private fun stretchLinePitch(pageAttr: PageAttr) {
+        val textHeight = pageAttr.pageHeight - pageAttr.topMargin - pageAttr.bottomMargin
+        if (pageAttr.pageLinePitch > 0 && textHeight > pageAttr.pageLinePitch) {
+            val lines = Math.floor((textHeight / pageAttr.pageLinePitch).toDouble()).toInt()
+            pageAttr.pageLinePitch = textHeight.toFloat() / lines
+        }
     }
 
     fun layoutPage(pageView: PageView): Int {
