@@ -300,6 +300,99 @@ class WPDocument : STDocument() {
         return true
     }
 
+    /**
+     * Splits the paragraph at [offset] (Enter): a paragraph mark is inserted there and the text
+     * after it becomes a new paragraph with the same paragraph properties. Returns false when
+     * [offset] is not in a plain run of a main-text paragraph.
+     */
+    fun splitMainParagraph(offset: Long): Boolean {
+        if ((offset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
+        val paragraphs = para?.get(0) ?: return false
+        val p = getParagraph(offset) as? ParagraphElement ?: return false
+        if (p is TableElement || offset < p.getStartOffset() || offset >= p.getEndOffset()) return false
+        val index = paragraphs.indexOf(p)
+        if (index < 0) return false
+        val leaf = p.getLeaf(offset) as? LeafElement ?: return false
+        if (leaf.javaClass != LeafElement::class.java) return false
+        val old = leaf.getText(null) ?: return false
+        val k = (offset - leaf.getStartOffset()).toInt()
+        leaf.setText(old.substring(0, k) + "\n" + old.substring(k))
+        shiftMain(offset, 1, leaf)
+        // everything after the new mark moves to a new paragraph
+        p.leavesFor(offset + 1, p.getEndOffset())
+        val next = ParagraphElement()
+        next.setAttribute(p.getAttribute().clone())
+        next.setStartOffset(offset + 1)
+        next.setEndOffset(p.getEndOffset())
+        var i = 0
+        while (i < p.leafCount()) {
+            val l = p.getElementForIndex(i)!!
+            if (l.getStartOffset() >= offset + 1) next.appendLeaf(p.detachLeafAt(i) as LeafElement) else i++
+        }
+        p.setEndOffset(offset + 1)
+        paragraphs.insertElementForIndex(next, index + 1)
+        return true
+    }
+
+    /**
+     * Joins the paragraph whose mark is at [markOffset] with the next one (undo of Enter, or
+     * Backspace at a paragraph start). Returns false when that is not two plain main paragraphs.
+     */
+    fun joinMainParagraph(markOffset: Long): Boolean {
+        if ((markOffset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
+        val paragraphs = para?.get(0) ?: return false
+        val p = getParagraph(markOffset) as? ParagraphElement ?: return false
+        if (p is TableElement || p.getEndOffset() != markOffset + 1) return false
+        val index = paragraphs.indexOf(p)
+        val next = paragraphs.getElementForIndex(index + 1) as? ParagraphElement ?: return false
+        if (next is TableElement || next.getStartOffset() != markOffset + 1) return false
+        // same table cell (or both outside tables)
+        if (AttrManage.instance().getParaLevel(p.getAttribute()) != AttrManage.instance().getParaLevel(next.getAttribute())) return false
+        val markLeaf = p.getLeaf(markOffset) as? LeafElement ?: return false
+        if (markLeaf.javaClass != LeafElement::class.java) return false
+        val text = markLeaf.getText(null) ?: return false
+        val k = (markOffset - markLeaf.getStartOffset()).toInt()
+        if (k !in text.indices || text[k] != '\n') return false
+        // move the next paragraph's runs in, then drop the mark character
+        p.setEndOffset(next.getEndOffset() - 1) // one character (the mark) goes away
+        while (next.leafCount() > 0) p.appendLeaf(next.detachLeafAt(0) as LeafElement)
+        paragraphs.detachElementForIndex(index + 1)
+        markLeaf.setText(text.substring(0, k) + text.substring(k + 1))
+        if (markLeaf.getText(null).isNullOrEmpty()) p.removeLeafAt(p.let { para -> (0 until para.leafCount()).first { para.getElementForIndex(it) === markLeaf } })
+        // everything after the mark moves back by one
+        shiftMainBack(markOffset, markLeaf, p)
+        return true
+    }
+
+    /** One character removed at [at]: elements after it move back; [skip] are already right. */
+    private fun shiftMainBack(at: Long, vararg skip: IElement) {
+        fun move(e: IElement?) {
+            if (e == null || skip.any { it === e }) return
+            val s = e.getStartOffset()
+            val en = e.getEndOffset()
+            if (s > at) { e.setStartOffset(s - 1); e.setEndOffset(en - 1) } else if (en > at) e.setEndOffset(en - 1)
+        }
+        root?.get(0)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
+        para?.get(0)?.let { c ->
+            for (i in 0 until c.size()) {
+                val p = c.getElementForIndex(i)
+                move(p)
+                if (p is ParagraphElement) for (j in 0 until p.leafCount()) move(p.getElementForIndex(j))
+            }
+        }
+        table?.get(0)?.let { c ->
+            for (i in 0 until c.size()) {
+                val t = c.getElementForIndex(i) as? TableElement ?: continue
+                move(t)
+                for (r in 0 until t.rowCount()) {
+                    val row = t.getElementForIndex(r) as? RowElement ?: continue
+                    move(row)
+                    for (k in 0 until row.getCellNumber()) move(row.getElementForIndex(k))
+                }
+            }
+        }
+    }
+
     fun setPageBackground(pageBG: BackgroundAndFill?) {
         this.pageBG = pageBG
     }

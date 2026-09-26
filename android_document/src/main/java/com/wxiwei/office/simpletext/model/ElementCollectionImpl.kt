@@ -64,6 +64,24 @@ open class ElementCollectionImpl(capacity: Int) : IElementCollection {
         removeElement(index.toLong())
     }
 
+    /** Removes the element at [index] without disposing it (it moves elsewhere). */
+    fun detachElementForIndex(index: Int): IElement? {
+        if (index < 0 || index >= size) return null
+        val e = elems!![index]
+        for (i in index + 1 until size) {
+            elems!![i - 1] = elems!![i]
+        }
+        elems!![size - 1] = null
+        size--
+        return e
+    }
+
+    /** Index of [element] (identity), or -1. */
+    fun indexOf(element: IElement?): Int {
+        for (i in 0 until size) if (elems!![i] === element) return i
+        return -1
+    }
+
     /**
      * 删除指定index的elemnet
      *

@@ -50,6 +50,9 @@ open class ParagraphElement : AbstractElement() {
     /** Number of leaves (text runs, shapes, fields). */
     fun leafCount(): Int = leaf?.size() ?: 0
 
+    /** Takes the leaf at [index] out without disposing it. */
+    fun detachLeafAt(index: Int): IElement? = leaf?.detachElementForIndex(index)
+
     /** Removes the leaf at [index] (it must not be used afterwards). */
     fun removeLeafAt(index: Int) {
         leaf?.removeElementForIndex(index)

@@ -31,6 +31,9 @@ class LiveDocxSession(control: IControl, private val source: File) {
         open fun runUndo(): Boolean = undo()
         open fun runRedo(): Boolean = redo()
     }
+
+    /** An Enter at [at]. */
+    private class SplitStep(val at: Long, undo: () -> Boolean, redo: () -> Boolean) : Step(undo, redo)
     private val undoStack = ArrayList<Step>()
     private val redoStack = ArrayList<Step>()
 
@@ -118,6 +121,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             return true
         }
         val original = toOriginal(offset)
+        if (text == "\n") return splitParagraph(doc, offset, original)
         if (!editor.insertText(original, text)) return false
         if (!doc.insertMainText(offset, text)) {
             // a paragraph break or a non text position: saved, shown after reopening
@@ -132,14 +136,55 @@ class LiveDocxSession(control: IControl, private val source: File) {
         return true
     }
 
+    /** Enter at [offset]: the paragraph splits at once; the file gets a new w:p. */
+    private fun splitParagraph(doc: WPDocument, offset: Long, original: Long): Boolean {
+        if (!editor.insertText(original, "\n")) return false
+        if (!doc.splitMainParagraph(offset)) {
+            needsReopen = true
+            undoStack.add(Step({ editor.undoLast() }, { editor.insertText(original, "\n") })); redoStack.clear()
+            return true
+        }
+        val edit = Edit.Insert(offset, 1)
+        edits.add(edit)
+        undoStack.add(SplitStep(offset,
+            undo = { editor.undoLast() && doc.joinMainParagraph(offset).also { edits.remove(edit); word.relayoutContent() } },
+            redo = { editor.insertText(original, "\n") && doc.splitMainParagraph(offset).also { edits.add(edit); word.relayoutContent() } },
+        ))
+        redoStack.clear()
+        word.relayoutContent()
+        return true
+    }
+
+    private fun joinParagraphs(doc: WPDocument, mark: Long, os: Long, oe: Long): Boolean {
+        if (!editor.deleteText(os, oe)) return false
+        if (!doc.joinMainParagraph(mark)) {
+            needsReopen = true
+            undoStack.add(Step({ editor.undoLast() }, { editor.deleteText(os, oe) })); redoStack.clear()
+            return true
+        }
+        val edit = Edit.Delete(mark, 1)
+        edits.add(edit)
+        undoStack.add(Step(
+            undo = { editor.undoLast() && doc.splitMainParagraph(mark).also { edits.remove(edit); word.relayoutContent() } },
+            redo = { editor.deleteText(os, oe) && doc.joinMainParagraph(mark).also { edits.add(edit); word.relayoutContent() } },
+        ))
+        redoStack.clear()
+        word.relayoutContent()
+        return true
+    }
+
     fun deleteText(start: Long, end: Long): Boolean {
         ownError = null
         if (end <= start) return refuse("Empty range")
+        // Backspace right after Enter at the same place: take the Enter back
+        (undoStack.lastOrNull() as? SplitStep)?.let { if (it.at == start && end == start + 1) return undo() }
         if (touchesTyped(start, end)) return refuse("Save first to delete text typed in this session")
         val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
         val os = toOriginal(start)
         val oe = toOriginal(end)
         val removed = doc.getText(start, end)
+        // a lone paragraph mark: join the two paragraphs (Backspace at a paragraph start)
+        if (removed == "\n") return joinParagraphs(doc, start, os, oe)
         if (!editor.deleteText(os, oe)) return false
         if (!doc.deleteMainText(start, end)) {
             needsReopen = true

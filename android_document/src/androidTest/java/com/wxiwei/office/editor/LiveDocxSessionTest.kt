@@ -139,4 +139,54 @@ class LiveDocxSessionTest {
             assertTrue("bold saved", bold(reader, m + "Ánh xạ ".length + 1))
         }
     }
+
+    private fun paragraphText(reader: com.wxiwei.office.reader.OfficeReader, offset: Long): String = onMain {
+        val doc = (reader.control!!.getView() as Word).getDocument()
+        val p = doc.getParagraph(offset)!!
+        doc.getText(p.getStartOffset(), p.getEndOffset())
+    }
+
+    @Test
+    fun enterSplitsParagraphLive() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_enter.docx")
+        val saved = OpenDocument.output("live_docx_enter_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val at = offsetOf(source.absolutePath, "người dùng nạp một file MIDI")
+            assertTrue(at >= 0)
+            val count = onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) }
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(at, "\n") })
+            assertEquals(count + 1, onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) })
+            assertTrue("second part starts a paragraph", paragraphText(reader, at + 1).startsWith("người dùng nạp"))
+            assertTrue("first part ends with the mark", paragraphText(reader, at - 1).endsWith("cho phép \n"))
+            assertTrue(onMain { session.undo() })
+            assertEquals(count, onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) })
+            assertTrue(paragraphText(reader, at).contains("cho phép người dùng nạp"))
+            assertTrue(onMain { session.redo() })
+            assertEquals(count + 1, onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) })
+            // Backspace right after the Enter takes it back; redo splits again
+            assertTrue(session.lastError?.toString(), onMain { session.deleteText(at, at + 1) })
+            assertEquals(count, onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) })
+            assertTrue(onMain { session.redo() })
+            assertEquals(count + 1, onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) })
+            // Backspace joining two paragraphs of the original document
+            val second = offsetOf(source.absolutePath, "Luồng từ file .mid")
+            val secondNow = second + 1
+            assertEquals("Luồng", onMain { (reader.control!!.getView() as Word).getDocument().getText(secondNow, secondNow + 5) })
+            val paraCount = onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) }
+            assertTrue(session.lastError?.toString(), onMain { session.deleteText(secondNow - 1, secondNow) })
+            assertEquals(paraCount - 1, onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) })
+            assertTrue(onMain { session.undo() })
+            assertEquals(paraCount, onMain { (reader.control!!.getView() as Word).getDocument().getParaCount(0) })
+            // typing in the new paragraph still maps to the file correctly
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(at + 1, "→ ") })
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val at = offsetOf(saved.absolutePath, "→ người dùng nạp")
+            assertTrue("split + typed text saved", at >= 0)
+            assertTrue(paragraphText(reader, at).startsWith("→ người dùng nạp"))
+        }
+    }
 }

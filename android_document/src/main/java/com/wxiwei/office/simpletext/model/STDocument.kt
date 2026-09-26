@@ -204,7 +204,8 @@ open class STDocument : IDocument {
             leaf = getLeaf(start)
             t = leaf!!.getText(null)
             eIndex = (if (end >= leaf.getEndOffset()) t!!.length.toLong() else end - leaf.getStartOffset()).toInt()
-            str = t!!.substring(0, eIndex)
+            // append (the conversion kept only the last run's text)
+            str += t!!.substring(0, eIndex)
             start = leaf.getEndOffset()
         }
         return str

@@ -33,6 +33,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("Cỡ 16") { op { e, r -> e.setFontSize(r.first, r.last + 1, 16f) } },
             button("Tô vàng") { op { e, r -> e.highlight(r.first, r.last + 1, "FFFF00") } },
             button("Xóa", color = 0xFFC00000.toInt()) { op { e, r -> e.deleteText(r.first, r.last + 1) } },
+            button("↵ Xuống dòng") { op { e, r -> e.insertText(r.first, "\n") } },
             button("↶") { session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },
             button("↷") { session?.let { if (!it.redo()) toast("Không còn gì để làm lại") } },
             button("Bỏ chọn") { clearSelection() },
