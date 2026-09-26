@@ -343,7 +343,7 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 - [x] **E-D4. Enter / Backspace đầu đoạn** (27/09 — `WPDocument.splitMainParagraph/joinMainParagraph`, realtime + lưu; *kèm sửa* `STDocument.getText` chỉ trả leaf cuối): tách/gộp `ParagraphElement` (+ XML: tách `w:p` giữ `pPr`), số thứ tự danh sách tự cập nhật.
 - [ ] **E-D5. Tay nắm chọn chữ, copy/cut/paste** (plain text trước, sau đó giữ định dạng từ chính tài liệu).
 - [ ] **E-D6. Sửa trong ô bảng, header/footer** (offset không thuộc MAIN — hiện `DocxEditor` từ chối: "Only MAIN offsets are editable"; mở rộng `DocxSourceMap` cho HEADER/FOOTER/textbox).
-- [ ] **E-D7. Định dạng đoạn**: căn lề, thụt lề, giãn dòng, bullet/numbering, và (sau D4/D5) nền/viền đoạn.
+- [x] **E-D7. Định dạng đoạn** (27/09 — căn lề/thụt lề trái/giãn dòng realtime + lưu (pPr đúng thứ tự schema); *chưa*: bullet/numbering, nền/viền đoạn): căn lề, thụt lề, giãn dòng, bullet/numbering, và (sau D4/D5) nền/viền đoạn.
 - [ ] **E-D8. Ổn định**: tự lưu nháp định kỳ vào cache, khôi phục khi crash; giới hạn undo; đo hiệu năng gõ (mục tiêu < 16 ms/ký tự với doc 20 trang).
 
 ---
