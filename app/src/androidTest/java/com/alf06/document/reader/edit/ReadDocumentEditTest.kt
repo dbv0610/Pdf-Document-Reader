@@ -125,8 +125,30 @@ class ReadDocumentEditTest {
             waitFor { viewer.state.value.status == ReaderState.Status.Ready }
             Thread.sleep(3000)
             scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
-            screenshot("word_toolbar")
             scenario.onActivity { a -> assertEquals(View.VISIBLE, a.findViewById<View>(R.id.editPanel).visibility) }
+            // select "CHƠI CÙNG FILE MIDI" and make it italic from the toolbar
+            var start = -1L
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+                for (i in 0 until map.size) {
+                    val l = map.leaf(i); val k = l.text.indexOf("CHƠI CÙNG")
+                    if (k >= 0) { start = l.start + k; break }
+                }
+                com.wxiwei.office.editor.word.WordSelection(word).setSelection(start, start + "CHƠI CÙNG".length)
+            }
+            scenario.onActivity { a ->
+                val panel = a.findViewById<ViewGroup>(R.id.editPanel)
+                find<TextView>(panel) { it is TextView && it.text.toString() == "I" }!!.performClick()
+            }
+            Thread.sleep(1500)
+            scenario.onActivity {
+                val doc = (viewer.control!!.getView() as com.wxiwei.office.wp.control.Word).getDocument()
+                val italic = com.wxiwei.office.simpletext.model.AttrManage.instance()
+                    .getFontItalic(doc.getParagraph(start + 1)!!.getAttribute(), doc.getLeaf(start + 1)!!.getAttribute())
+                assertTrue("italic shows at once", italic)
+            }
+            screenshot("word_toolbar")
         }
     }
 }

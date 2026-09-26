@@ -3,23 +3,20 @@ package com.alf06.document.reader.ui.home.document.office.edit
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.wxiwei.office.editor.EditResult
-import com.wxiwei.office.editor.docx.DocxEditor
-import com.wxiwei.office.editor.docx.DocxSourceMap
+import com.wxiwei.office.editor.docx.LiveDocxSession
 import com.wxiwei.office.editor.word.WordSelection
 import com.wxiwei.office.reader.OfficeDocumentView
 import com.wxiwei.office.system.IMainFrame
 import java.io.File
 
 /**
- * Word: long-press a word to select it, tap another word to extend the selection, then format,
- * replace, insert or delete. Changes are queued on the original text and written on Save, after
- * which the document reopens to show them (Word text does not re-layout live yet).
+ * Word: long-press a word to select it, tap another word to extend the selection. Formatting
+ * shows at once; replace/insert/delete are saved and shown after Save (the document reopens).
  */
 internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocumentView, file: File) :
     OfficeEditPanel(activity, reader, file) {
 
-    private var editor: DocxEditor? = null
-    private var pending = 0
+    private var session: LiveDocxSession? = null
     private var anchor: LongRange? = null
     private val selectionLabel = label("Nhấn giữ một từ để chọn")
     private val text = input("Chữ để chèn / thay thế")
@@ -32,9 +29,12 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("I") { op { e, r -> e.setItalic(r.first, r.last + 1, true) } },
             button("U") { op { e, r -> e.setUnderline(r.first, r.last + 1, true) } },
             button("Chữ đỏ") { op { e, r -> e.setTextColor(r.first, r.last + 1, "C00000") } },
-            button("Cỡ 16") { op { e, r -> e.setFontSize(r.first, r.last + 1, 16) } },
-            button("Tô vàng") { op { e, r -> e.highlight(r.first, r.last + 1, "yellow") } },
+            button("Chữ xanh") { op { e, r -> e.setTextColor(r.first, r.last + 1, "1F4E79") } },
+            button("Cỡ 16") { op { e, r -> e.setFontSize(r.first, r.last + 1, 16f) } },
+            button("Tô vàng") { op { e, r -> e.highlight(r.first, r.last + 1, "FFFF00") } },
             button("Xóa", color = 0xFFC00000.toInt()) { op { e, r -> e.deleteText(r.first, r.last + 1) } },
+            button("↶") { session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },
+            button("↷") { session?.let { if (!it.redo()) toast("Không còn gì để làm lại") } },
             button("Bỏ chọn") { clearSelection() },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
         ))
@@ -85,25 +85,26 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         selectionLabel.text = "Nhấn giữ một từ để chọn" + pendingText()
     }
 
-    private fun pendingText() = if (pending > 0) "  ·  $pending thay đổi chưa lưu" else ""
+    private fun pendingText() = if (session?.needsReopen == true) "  ·  sửa chữ sẽ hiện sau khi Lưu" else ""
 
-    private fun editor(): DocxEditor? {
-        editor?.let { return it }
-        val map = DocxSourceMap.get(file.absolutePath) ?: run {
+    private fun session(): LiveDocxSession? {
+        session?.let { return it }
+        val control = reader.control ?: return null
+        return runCatching { LiveDocxSession(control, file) }.getOrElse {
             toast("Tài liệu chưa sẵn sàng để sửa")
-            return null
-        }
-        return DocxEditor(file, map).also { editor = it }
+            null
+        }?.also { session = it }
     }
 
-    /** Runs [action] on the selection; the change shows after Save. */
-    private fun op(action: (DocxEditor, LongRange) -> Boolean) {
+    /** Runs [action] on the selection: formatting shows at once, text changes after Save. */
+    private fun op(action: (LiveDocxSession, LongRange) -> Boolean) {
         val range = selection()?.selection() ?: return toast("Chọn chữ trước")
-        val e = editor() ?: return
-        if (!action(e, range)) return toast(e.lastError?.message ?: "Không thực hiện được")
-        pending++
-        selectionLabel.text = selectionLabel.text.toString().substringBefore("  ·  ") + pendingText()
-        toast("Đã ghi nhận, bấm Lưu để áp dụng")
+        val s = session() ?: return
+        if (!action(s, range)) return toast(s.lastError?.message ?: "Không thực hiện được")
+        // the pages were laid out again: show the selection on the new layout, refresh thumbnails
+        selection()?.let { select(it, range) }
+        reader.thumbnails?.invalidateAll()
+        if (s.needsReopen) toast("Đã ghi nhận, bấm Lưu để thấy thay đổi chữ")
     }
 
     private fun replace() {
@@ -118,13 +119,12 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     }
 
     private fun save() {
-        val e = editor ?: return toast("Chưa có thay đổi")
-        if (pending == 0) return toast("Chưa có thay đổi")
-        val result = saveOver(file) { target -> e.save(target) }
+        val s = session ?: return toast("Chưa có thay đổi")
+        if (!s.hasChanges()) return toast("Chưa có thay đổi")
+        val result = saveOver(file) { target -> s.save(target) }
         report(result, "Đã lưu " + file.name)
         if (result is EditResult.Ok) {
-            editor = null
-            pending = 0
+            session = null
             anchor = null
             selectionLabel.text = "Nhấn giữ một từ để chọn"
             // show the saved text: reopen the document
