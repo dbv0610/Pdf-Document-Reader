@@ -43,6 +43,9 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
     var keepAspect = false
     /** A tap inside the frame (no drag), in screen coordinates. */
     var onTap: ((rawX: Float, rawY: Float) -> Unit)? = null
+    /** The frame on screen (this view's coordinates) whenever it moves, null when hidden. */
+    var onFrame: ((RectF?) -> Unit)? = null
+
     /** Final rectangle of a move or resize, in slide EMU. */
     var onChange: ((Rect) -> Unit)? = null
 
@@ -93,7 +96,7 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
         val p = presentation()
         val view = if (rect != null && p != null && p.getCurrentIndex() == slideIndex) SlideGeometry.emuToView(p, rect) else null
         if (view == null) {
-            if (visible) { visible = false; invalidate() }
+            if (visible) { visible = false; invalidate(); onFrame?.invoke(null) }
             return
         }
         val a = IntArray(2); val b = IntArray(2)
@@ -103,8 +106,12 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
             frame.set(view)
             visible = true
             invalidate()
+            onFrame?.invoke(RectF(frame))
         }
     }
+
+    /** The current frame (this view's coordinates), or null when hidden. */
+    fun frameOnScreen(): RectF? = if (visible) RectF(frame) else null
 
     /** Handles in drawing order: 0 1 2 top row, 3 4 middle, 5 6 7 bottom row. */
     private fun handles(r: RectF): List<Pair<Float, Float>> {

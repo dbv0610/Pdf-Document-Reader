@@ -457,5 +457,54 @@ class ReadDocumentEditTest {
             scenario.onActivity { a -> assertEquals(View.GONE, a.findViewById<View>(R.id.editPanel).visibility) }
         }
     }
+
+    @Test
+    fun slideInlineTextEdit() {
+        val file = sample("ppt2.pptx")
+        val shapes = com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0)
+        val target = shapes.last { it.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT && it.rectEmu.width > 0 }
+        val r = target.rectEmu
+        val center = com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)
+        val expected = com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, center)!!
+        launch(file, DocumentType.Ppt).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            var screen = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val p = viewer.control!!.getView() as com.wxiwei.office.pg.control.Presentation
+                val v = com.wxiwei.office.editor.slide.SlideGeometry.emuToView(p, com.wxiwei.office.editor.pptx.Rect(center.x, center.y, 1, 1))!!
+                val o = IntArray(2); p.getLocationOnScreen(o)
+                screen = floatArrayOf(v.left + o[0], v.top + o[1])
+            }
+            fun tap(x: Float, y: Float) {
+                val t = android.os.SystemClock.uptimeMillis()
+                inject(android.view.MotionEvent.ACTION_DOWN, x, y, t)
+                inject(android.view.MotionEvent.ACTION_UP, x, y, t)
+                Thread.sleep(1000)
+            }
+            tap(screen[0], screen[1]) // select
+            tap(screen[0], screen[1]) // edit in place
+            scenario.onActivity {
+                val edit = find<EditText>(viewer) { it is EditText }
+                assertTrue("in-place editor open", edit != null && edit.hasFocus())
+                assertEquals(expected.text, edit!!.text.toString())
+                edit.setText("SỬA TẠI CHỖ")
+            }
+            screenshot("slide_inline")
+            // a tap elsewhere on the slide commits
+            scenario.onActivity { }
+            val p = IntArray(2); var size = intArrayOf(0, 0)
+            scenario.onActivity { viewer.getLocationOnScreen(p); size = intArrayOf(viewer.width, viewer.height) }
+            tap(p[0] + size[0] * 0.15f, p[1] + size[1] * 0.5f)
+            scenario.onActivity { assertTrue("editor closed", find<EditText>(viewer) { it is EditText } == null) }
+            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            Thread.sleep(1500)
+        }
+        assertEquals("SỬA TẠI CHỖ", com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0).first { it.id == expected.id }.text)
+    }
 }
 

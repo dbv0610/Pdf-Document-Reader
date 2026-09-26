@@ -1,6 +1,7 @@
 package com.alf06.document.reader.ui.home.document.office.edit
 
 import android.view.View
+import android.widget.EditText
 import android.widget.FrameLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -75,6 +76,72 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         overlay.onTap = { x, y -> tapAt(x, y) }
         overlay.onChange = { r -> setRect(r) }
         overlay.onRotate = { deg -> rotate(deg) }
+        overlay.onFrame = { frame -> placeInline(frame) }
+    }
+
+    // In-place text editing: a second tap on the selected text shape opens an editor over it.
+    private var inline: EditText? = null
+
+    private fun startInline(s: PptxShapeInfo) {
+        stopInline(commit = true)
+        val edit = EditText(context).apply {
+            setText(s.text)
+            setSelection(text.length)
+            textSize = 16f
+            setTextColor(0xFF111111.toInt())
+            setBackgroundColor(0xF0FFFFFF.toInt())
+            setPadding(dp(6), dp(4), dp(6), dp(4))
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        inline = edit
+        // the keyboard takes half the screen: give the slide the rest while typing on it
+        view.visibility = View.GONE
+        reader.addView(edit, FrameLayout.LayoutParams(1, 1))
+        placeInline(overlay.frameOnScreen())
+        edit.requestFocus()
+        (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+            .showSoftInput(edit, 0)
+    }
+
+    /** Keeps the editor on the shape frame, at least a few lines tall. */
+    private fun placeInline(frame: android.graphics.RectF?) {
+        val edit = inline ?: return
+        if (frame == null) { edit.visibility = View.INVISIBLE; return }
+        edit.visibility = View.VISIBLE
+        val lp = edit.layoutParams as FrameLayout.LayoutParams
+        val w = maxOf(frame.width().toInt(), dp(160)).coerceAtMost(reader.width)
+        val h = maxOf(frame.height().toInt(), dp(96))
+        val left = frame.left.toInt().coerceIn(0, maxOf(0, reader.width - w))
+        // above the keyboard when the shape is under it
+        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(reader)
+        val ime = insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom ?: 0
+        val at = IntArray(2)
+        reader.getLocationInWindow(at)
+        val keyboardTop = if (ime > 0) reader.rootView.height - ime - at[1] else reader.height
+        val top = minOf(frame.top.toInt(), keyboardTop - h - dp(8)).coerceAtLeast(0)
+        if (lp.width != w || lp.height != h || lp.leftMargin != left || lp.topMargin != top) {
+            lp.width = w; lp.height = h; lp.leftMargin = left; lp.topMargin = top
+            edit.layoutParams = lp
+        }
+    }
+
+    /** Closes the in-place editor, writing its text to the shape when it changed. */
+    private fun stopInline(commit: Boolean) {
+        val edit = inline ?: return
+        inline = null
+        val value = edit.text.toString()
+        (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+            .hideSoftInputFromWindow(edit.windowToken, 0)
+        reader.removeView(edit)
+        view.visibility = View.VISIBLE
+        if (commit && shapeId >= 0 && value != text.text.toString()) {
+            if (!session.setShapeText(slide(), shapeId, value)) toast(session.lastError?.message ?: "Không đổi được chữ")
+            else {
+                text.setText(value)
+                reopenHint()
+            }
+        }
     }
 
     /** Selects the top shape under a screen point, or clears the selection. */
@@ -84,11 +151,23 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         p.getLocationOnScreen(origin)
         val point = SlideGeometry.viewToEmu(p, rawX - origin[0], rawY - origin[1])
         val hit = point?.let { SlideGeometry.hitTest(session.listShapes(slide()), it) }
+        val editing = inline != null
+        stopInline(commit = true)
+        // a second tap on the selected text shape edits its text in place
+        if (!editing && hit != null && hit.id == shapeId && hit.kind == ShapeKind.TEXT) {
+            startInline(hit)
+            return true
+        }
         select(hit)
         return hit != null
     }
 
+    override fun onKeyboardMoved() {
+        placeInline(overlay.frameOnScreen())
+    }
+
     override fun close() {
+        stopInline(commit = true)
         super.close()
         reader.onDocumentGesture = null
         reader.removeView(overlay)
@@ -176,6 +255,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     }
 
     private fun delete() {
+        stopInline(commit = false)
         if (shapeId < 0) return toast("Chọn shape trước")
         if (!session.deleteShape(slide(), shapeId)) toast(session.lastError?.message ?: "Không xóa được")
         else {
@@ -213,7 +293,11 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     private var reopenAfterSave = false
 
-    override fun hasChanges() = session.hasChanges()
+
+    override fun hasChanges(): Boolean {
+        stopInline(commit = true)
+        return session.hasChanges()
+    }
 
     override fun writeTo(target: File): EditResult {
         reopenAfterSave = session.needsReopen
