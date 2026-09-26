@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="64dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_scanner_filter_item"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <!-- Rounded corners come from the background outline; clipToOutline is set in code. -->
+    <ImageView
+        android:id="@+id/ivThumb"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_scanner_filter_thumb"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <TextView
+        android:id="@+id/tvName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="@font/rb_400"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        tools:text="Default" />
+</LinearLayout>

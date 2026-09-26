@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <com.ui.baselib.widget.layout.UiLinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/_16sdp"
+        app:bgColor="@color/white"
+        app:cornerRadius="@dimen/_18sdp">
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_4sdp"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:text="@string/file_action_rename"
+            android:textAlignment="center"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_14sdp" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_16sdp">
+
+        <com.ui.baselib.widget.view.UiEditText
+            android:id="@+id/edtName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@null"
+            android:fontFamily="@font/rb_400"
+            android:hint="@string/file_rename_hint"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingVertical="@dimen/_12sdp"
+            android:paddingStart="@dimen/_12sdp"
+            android:paddingEnd="@dimen/_36sdp"
+            android:textSize="@dimen/_12sdp"
+            app:bgColor="@color/white"
+            app:cornerRadius="@dimen/_8sdp"
+            app:edtColor="@color/text_primary"
+            app:edtColorHint="#A0A7B0"
+            app:stColor="#D1D5DB"
+            app:strokeWidth="@dimen/_1sdp" />
+
+            <ImageView
+                android:id="@+id/icClear"
+                android:layout_width="@dimen/_32sdp"
+                android:layout_height="@dimen/_32sdp"
+                android:layout_gravity="center_vertical|end"
+                android:layout_marginEnd="@dimen/_4sdp"
+                android:contentDescription="@null"
+                android:padding="@dimen/_8sdp"
+                android:src="@drawable/ic_app_close"
+                android:visibility="gone"
+                app:tint="#4E5969" />
+        </FrameLayout>
+
+        <com.ui.baselib.widget.view.UiTextView
+            android:id="@+id/btnConfirm"
+            style="@style/ButtonAppStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_14sdp"
+            android:fontFamily="@font/rb_500"
+            android:paddingVertical="@dimen/_12sdp"
+            android:text="@string/file_action_save"
+            android:textSize="@dimen/_13sdp"
+            app:bgGdOrientation="top_bottom" />
+
+        <com.ui.baselib.widget.view.UiTextView
+            android:id="@+id/btnCancel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_10sdp"
+            android:fontFamily="@font/rb_400"
+            android:paddingVertical="@dimen/_12sdp"
+            android:text="@string/file_action_cancel"
+            android:textAlignment="center"
+            android:textColor="@color/primary"
+            android:textSize="@dimen/_13sdp"
+            app:cornerRadius="@dimen/_100sdp"
+            app:stColor="@color/primary"
+            app:strokeWidth="@dimen/_1sdp" />
+    </com.ui.baselib.widget.layout.UiLinearLayout>
+</FrameLayout>

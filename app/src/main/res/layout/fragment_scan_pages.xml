@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:orientation="vertical">
+
+    <ImageView
+        android:id="@+id/btnBack"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="4dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/scanner_back"
+        android:padding="12dp"
+        android:src="@drawable/ic_app_back"
+        app:tint="#FFFFFF" />
+
+    <!-- The page frame wraps the shown image so the actions sit on its corner. -->
+    <FrameLayout
+        android:id="@+id/pageArea"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginHorizontal="44dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="32dp"
+        android:layout_weight="1">
+
+        <FrameLayout
+            android:id="@+id/pageFrame"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center">
+
+            <ImageView
+                android:id="@+id/ivPage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:adjustViewBounds="true"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="12dp"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/btnRetakePage"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_scanner_page_action"
+                    android:contentDescription="@string/scanner_retake_page"
+                    android:padding="7dp"
+                    android:src="@drawable/ic_page_rotate"
+                    app:tint="#FFFFFF" />
+
+                <ImageView
+                    android:id="@+id/btnDeletePage"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/bg_scanner_page_action"
+                    android:contentDescription="@string/scanner_delete_page"
+                    android:padding="7dp"
+                    android:src="@drawable/ic_app_trashcan"
+                    app:tint="#FFFFFF" />
+            </LinearLayout>
+        </FrameLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="78dp"
+        android:orientation="horizontal">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvPages"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="4dp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:listitem="@layout/item_scan_page" />
+
+        <FrameLayout
+            android:id="@+id/btnAddPage"
+            android:layout_width="56dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/bg_scanner_add_page"
+            android:contentDescription="@string/scanner_add_page">
+
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_app_add_image"
+                app:tint="#FFFFFF" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="28dp"
+        android:layout_marginBottom="96dp"
+        android:gravity="center_horizontal"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/btnFilter"
+            style="@style/ScannerChip"
+            android:text="@string/scanner_filter"
+            app:drawableStartCompat="@drawable/ic_app_magic_wand" />
+
+        <TextView
+            android:id="@+id/btnRotatePage"
+            style="@style/ScannerChip"
+            android:layout_marginHorizontal="16dp"
+            android:text="@string/scanner_rotate"
+            app:drawableStartCompat="@drawable/ic_app_rotate" />
+
+        <TextView
+            android:id="@+id/btnEraser"
+            style="@style/ScannerChip"
+            android:text="@string/scanner_eraser"
+            app:drawableStartCompat="@drawable/ic_app_eraser" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="16dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/btnCancel"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="16dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_scanner_outline_button"
+            android:fontFamily="@font/rb_500"
+            android:gravity="center"
+            android:text="@string/scanner_cancel"
+            android:textColor="@color/primary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/btnContinue"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_scanner_primary_button"
+            android:fontFamily="@font/rb_500"
+            android:gravity="center"
+            android:text="@string/scanner_continue"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp" />
+    </LinearLayout>
+</LinearLayout>

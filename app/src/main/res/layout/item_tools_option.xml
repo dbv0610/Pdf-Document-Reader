@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.ui.baselib.widget.layout.UiConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingBottom="@dimen/_6sdp"
+    app:strokeWidth="@dimen/_1sdp"
+    app:shadowRadius="@dimen/_4sdp"
+    app:shadowElevation="@dimen/_4sdp"
+    app:bgColor="@color/white"
+    app:uiDimenRatio="1:1"
+    app:cornerRadius="@dimen/_16sdp"
+    app:shadowColor="#80000000">
+
+    <com.ui.baselib.widget.view.UiImageView
+        android:id="@+id/imgContent"
+        android:layout_width="0dp"
+        app:layout_constraintVertical_bias="0.35"
+        android:layout_height="wrap_content"
+        android:adjustViewBounds="true"
+        android:src="@drawable/img_home_option_1"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintWidth_percent="0.4"
+        app:uiDimenRatio="1" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tvTitle"
+        style="@style/Text_600"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAlignment="center"
+        android:layout_marginHorizontal="@dimen/_8sdp"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/_12sdp"
+        app:layout_constraintVertical_bias="0.4"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/imgContent"
+        tools:text="@tools:sample/lorem" />
+</com.ui.baselib.widget.layout.UiConstraintLayout>

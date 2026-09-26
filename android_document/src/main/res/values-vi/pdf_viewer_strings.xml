@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pdfview_selection_copy_action">Sao chép</string>
+    <string name="pdfview_selection_underline_action">Gạch chân</string>
+    <string name="pdfview_selection_strikethrough_action">Gạch ngang</string>
+</resources>

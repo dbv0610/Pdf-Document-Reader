@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main_nav_graph.xml"
+    app:startDestination="@id/homeFragment">
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.alf06.document.reader.ui.home.main.HomeFragment"
+        android:label="fragment_home"
+        tools:layout="@layout/fragment_home" />
+    <fragment
+        android:id="@+id/storageFragment"
+        android:name="com.alf06.document.reader.ui.home.main.StorageFragment"
+        android:label="fragment_storage"
+        tools:layout="@layout/fragment_storage" />
+    <fragment
+        android:id="@+id/toolsFragment"
+        android:name="com.alf06.document.reader.ui.home.main.ToolsFragment"
+        android:label="fragment_tools"
+        tools:layout="@layout/fragment_tools" />
+</navigation>

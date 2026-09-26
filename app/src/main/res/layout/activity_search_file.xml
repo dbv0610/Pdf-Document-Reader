@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_color_app"
+    tools:context=".ui.home.other.SearchFileActivity">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/_12sdp"
+        android:gravity="center_vertical"
+        android:paddingVertical="@dimen/_6sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/icBackApp"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:src="@drawable/ic_app_back" />
+
+        <com.ui.baselib.widget.layout.UiLinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_8sdp"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/_10sdp"
+            android:paddingVertical="@dimen/_10sdp"
+            app:cornerRadius="@dimen/_8sdp"
+            app:stColor="@color/color_d0d0d0"
+            app:strokeWidth="@dimen/_1sdp">
+
+            <ImageView
+                android:layout_width="@dimen/_20sdp"
+                android:layout_height="@dimen/_20sdp"
+                android:src="@drawable/ic_app_search"
+                app:tint="@color/color_495263" />
+
+            <EditText
+                android:id="@+id/edtSearch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="@dimen/_8sdp"
+                android:layout_weight="1"
+                android:background="@color/transparent"
+                android:fontFamily="@font/rb_400"
+                android:hint="@string/enter_search_keyword"
+                android:imeOptions="actionSearch"
+                android:importantForAutofill="no"
+                android:includeFontPadding="false"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="@dimen/_12sdp" />
+
+            <com.ui.baselib.widget.view.UiImageView
+                android:id="@+id/icClear"
+                android:layout_width="@dimen/_18sdp"
+                android:layout_height="@dimen/_18sdp"
+                android:layout_marginStart="@dimen/_6sdp"
+                android:padding="@dimen/_2sdp"
+                android:src="@drawable/ic_app_clear"
+                android:visibility="gone"
+                app:tint="@color/color_495263"
+                tools:visibility="visible" />
+        </com.ui.baselib.widget.layout.UiLinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/textEmptyState"
+        android:layout_width="match_parent"
+        android:layout_marginHorizontal="@dimen/_12sdp"
+        android:layout_height="wrap_content"
+        android:visibility="visible"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/_11sdp"
+        android:text="@string/search_for_any_document"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvItemContent"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginHorizontal="@dimen/_12sdp"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/_8sdp"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/textEmptyState"
+        tools:layout_editor_absoluteX="16dp"
+        tools:listitem="@layout/item_document_view" />
+
+    <LinearLayout
+        android:id="@+id/layoutEmpty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintVertical_bias="0.4"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="@dimen/_56sdp"
+            android:layout_height="@dimen/_56sdp"
+            android:adjustViewBounds="true"
+            android:src="@drawable/ic_app_empty_file" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:fontFamily="@font/rb_400"
+            android:text="@string/no_files_yet"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/_12sdp" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

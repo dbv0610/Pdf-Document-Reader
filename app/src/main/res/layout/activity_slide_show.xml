@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/black"
+    tools:context=".ui.home.document.office.SlideShowActivity">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager2"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/lnUiState"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <com.ui.baselib.widget.view.UiImageView
+            android:id="@+id/icBack"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:layout_margin="@dimen/_12sdp"
+            android:padding="@dimen/_3sdp"
+            android:src="@drawable/ic_arrow_back"
+            app:bgColor="#80000000"
+            app:cornerRadius="@dimen/_200sdp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#80000000"
+            android:gravity="center"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tvPageCurrent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/_16sdp"
+                android:fontFamily="@font/rb_500"
+                android:includeFontPadding="false"
+                android:text="0/0"
+                android:textColor="@color/white"
+                android:textSize="@dimen/_12sdp"
+                tools:ignore="HardcodedText" />
+
+            <com.ui.baselib.widget.view.UiImageView
+                android:id="@+id/icPrevPage"
+                android:layout_width="@dimen/_24sdp"
+                android:layout_height="@dimen/_24sdp"
+                android:layout_marginVertical="@dimen/_12sdp"
+                android:padding="@dimen/_3sdp"
+                android:rotation="180"
+                android:src="@drawable/ic_arrow_right"
+                app:bgColor="#80000000"
+                app:cornerRadius="@dimen/_200sdp"
+                app:tint="@color/white" />
+
+            <com.ui.baselib.widget.view.UiImageView
+                android:id="@+id/icNexPage"
+                android:layout_width="@dimen/_24sdp"
+                android:layout_height="@dimen/_24sdp"
+                android:layout_margin="@dimen/_12sdp"
+                android:padding="@dimen/_3sdp"
+                android:src="@drawable/ic_arrow_right"
+                app:bgColor="#80000000"
+                app:cornerRadius="@dimen/_200sdp"
+                app:tint="@color/white" />
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

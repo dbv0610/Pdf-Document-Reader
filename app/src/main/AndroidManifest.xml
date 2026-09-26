@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="AllFilesAccessPolicy,ScopedStorage" />
+
+    <application
+        android:name=".MyApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:requestLegacyExternalStorage="true"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SampleAdsFirstFlow"
+        tools:replace="android:fullBackupContent,android:allowBackup,android:dataExtractionRules"
+        tools:targetApi="31">
+
+        <activity
+            android:name=".ui.splash.SplashActivity"
+            android:clearTaskOnLaunch="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.home.MainActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+        <activity
+            android:name=".ui.home.scanner.DocumentScannerActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+        <activity
+            android:name="com.google.android.libraries.ads.mobile.sdk.common.AdActivity"
+            android:theme="@style/AdFullScreen"
+            tools:replace="android:theme" />
+
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${ad_app_id}" />
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/fb_app_id" />
+        <meta-data
+            android:name="com.facebook.sdk.ClientToken"
+            android:value="@string/fb_client_token" />
+
+        <service
+            android:name=".firebase.MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <provider
+            android:name=".utils.DocumentFileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <activity
+            android:name=".ui.home.other.SearchFileActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+        <activity
+            android:name=".ui.home.setting.LanguageSettingActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+        <activity
+            android:name=".ui.home.document.pdf.ReadPdfActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+        <activity
+            android:name=".ui.home.document.office.ReadDocumentActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+        <activity
+            android:name=".ui.home.document.office.SlideShowActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+        <activity
+            android:name=".ui.home.tools.image_to_pdf.ImageToPdfActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.home.tools.split.SplitPdfActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.home.tools.translate.TranslatePdfActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.home.tools.merge.MergePdfActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.home.tools.zip.CreateZipActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.home.setting.SettingActivity"
+            android:exported="false" />
+    </application>
+
+</manifest>

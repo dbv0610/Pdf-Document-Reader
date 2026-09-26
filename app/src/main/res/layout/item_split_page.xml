@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="@dimen/_4sdp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <ImageView
+            android:id="@+id/imgPage"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@drawable/bg_gallery_placeholder"
+            android:contentDescription="@null"
+            android:padding="@dimen/_4sdp"
+            android:scaleType="fitCenter"
+            app:layout_constraintDimensionRatio="104:130"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:indeterminateTint="@color/primary"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/imgPage"
+            app:layout_constraintEnd_toEndOf="@id/imgPage"
+            app:layout_constraintStart_toStartOf="@id/imgPage"
+            app:layout_constraintTop_toTopOf="@id/imgPage" />
+
+        <View
+            android:id="@+id/viewSelected"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@drawable/bg_gallery_image_selected"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/imgPage"
+            app:layout_constraintEnd_toEndOf="@id/imgPage"
+            app:layout_constraintStart_toStartOf="@id/imgPage"
+            app:layout_constraintTop_toTopOf="@id/imgPage" />
+
+        <ImageView
+            android:id="@+id/imgCheck"
+            android:layout_width="@dimen/_20sdp"
+            android:layout_height="@dimen/_20sdp"
+            android:layout_margin="@dimen/_6sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_circle_uncheck"
+            app:layout_constraintEnd_toEndOf="@id/imgPage"
+            app:layout_constraintTop_toTopOf="@id/imgPage" />
+
+        <TextView
+            android:id="@+id/tvPage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/_6sdp"
+            android:background="@drawable/bg_split_page_number"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:paddingHorizontal="@dimen/_6sdp"
+            android:paddingVertical="@dimen/_2sdp"
+            android:textColor="@color/white"
+            android:textSize="@dimen/_9sdp"
+            app:layout_constraintBottom_toBottomOf="@id/imgPage"
+            app:layout_constraintEnd_toEndOf="@id/imgPage"
+            app:layout_constraintStart_toStartOf="@id/imgPage"
+            tools:text="1" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

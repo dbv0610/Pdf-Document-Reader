@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.ui.baselib.widget.layout.UiLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/_16sdp"
+    android:paddingBottom="@dimen/_16sdp"
+    app:bgColor="@color/white"
+    app:cornerTopLeft="@dimen/_18sdp"
+    app:cornerTopRight="@dimen/_18sdp">
+
+    <com.ui.baselib.widget.layout.UiView
+        android:layout_width="@dimen/_32sdp"
+        android:layout_height="@dimen/_4sdp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/_8sdp"
+        app:bgColor="#D1D5DB"
+        app:cornerRadius="@dimen/_4sdp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/_14sdp"
+        android:layout_marginBottom="@dimen/_4sdp"
+        android:fontFamily="@font/rb_600"
+        android:includeFontPadding="false"
+        android:text="@string/sort_by"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/_14sdp" />
+
+    <include
+        android:id="@+id/optLastEdit"
+        layout="@layout/item_sort_option" />
+
+    <include
+        android:id="@+id/optName"
+        layout="@layout/item_sort_option" />
+
+    <include
+        android:id="@+id/optFileSize"
+        layout="@layout/item_sort_option" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="@dimen/_4sdp"
+        android:background="#D1D5DB" />
+
+    <include
+        android:id="@+id/optIncrease"
+        layout="@layout/item_sort_option" />
+
+    <include
+        android:id="@+id/optDecrease"
+        layout="@layout/item_sort_option" />
+
+    <com.ui.baselib.widget.view.UiTextView
+        android:id="@+id/btnSave"
+        style="@style/ButtonAppStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/_16sdp"
+        android:fontFamily="@font/rb_500"
+        android:paddingVertical="@dimen/_12sdp"
+        android:text="@string/file_action_save"
+        android:textSize="@dimen/_13sdp"
+        app:bgGdOrientation="top_bottom" />
+</com.ui.baselib.widget.layout.UiLinearLayout>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/_64sdp"
+    android:layout_height="@dimen/_60sdp">
+
+    <ImageView
+        android:id="@+id/imgThumb"
+        android:layout_width="@dimen/_48sdp"
+        android:layout_height="@dimen/_48sdp"
+        android:layout_gravity="start|bottom"
+        android:background="@color/background_secondary"
+        android:scaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/imgRemove"
+        android:layout_width="@dimen/_24sdp"
+        android:layout_height="@dimen/_24sdp"
+        android:layout_gravity="top"
+        android:layout_marginStart="@dimen/_36sdp"
+        android:src="@drawable/ic_app_remove_selected" />
+</FrameLayout>

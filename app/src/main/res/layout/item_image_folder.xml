@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?android:attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="@dimen/_8sdp"
+    android:paddingVertical="@dimen/_8sdp">
+
+    <ImageView
+        android:id="@+id/imgCover"
+        android:layout_width="@dimen/_48sdp"
+        android:layout_height="@dimen/_48sdp"
+        android:background="@drawable/bg_gallery_placeholder"
+        android:scaleType="centerCrop" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/_12sdp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="@font/rb_400"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="@color/black"
+            android:textSize="@dimen/_14sdp"
+            tools:text="Pictures" />
+
+        <TextView
+            android:id="@+id/tvCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_6sdp"
+            android:fontFamily="@font/rb_400"
+            android:includeFontPadding="false"
+            android:textColor="#B1B8BD"
+            android:textSize="@dimen/_12sdp"
+            tools:text="626" />
+    </LinearLayout>
+</LinearLayout>

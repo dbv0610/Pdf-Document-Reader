@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.ui.baselib.widget.layout.UiLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/_16sdp"
+    android:paddingBottom="@dimen/_16sdp"
+    app:bgColor="@color/white"
+    app:cornerTopLeft="@dimen/_18sdp"
+    app:cornerTopRight="@dimen/_18sdp">
+
+    <com.ui.baselib.widget.layout.UiView
+        android:layout_width="@dimen/_32sdp"
+        android:layout_height="@dimen/_4sdp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/_8sdp"
+        app:bgColor="#D1D5DB"
+        app:cornerRadius="@dimen/_4sdp" />
+
+    <TextView
+        android:id="@+id/tvFileName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/_16sdp"
+        android:layout_marginBottom="@dimen/_8sdp"
+        android:ellipsize="middle"
+        android:fontFamily="@font/rb_500"
+        android:includeFontPadding="false"
+        android:singleLine="true"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/_13sdp"
+        tools:text="file_name" />
+
+    <include
+        android:id="@+id/btnThumbnail"
+        layout="@layout/item_file_option"
+        android:visibility="gone" />
+
+    <include
+        android:id="@+id/btnPageByPage"
+        layout="@layout/item_file_option"
+        android:visibility="gone" />
+
+    <include
+        android:id="@+id/btnSlideShow"
+        layout="@layout/item_file_option"
+        android:visibility="gone" />
+
+    <include
+        android:id="@+id/btnRename"
+        layout="@layout/item_file_option" />
+
+    <include
+        android:id="@+id/btnFavorite"
+        layout="@layout/item_file_option" />
+
+    <include
+        android:id="@+id/btnShare"
+        layout="@layout/item_file_option" />
+
+    <include
+        android:id="@+id/btnDelete"
+        layout="@layout/item_file_option" />
+</com.ui.baselib.widget.layout.UiLinearLayout>

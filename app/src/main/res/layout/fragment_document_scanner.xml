@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <FrameLayout
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp">
+
+            <ImageView
+                android:id="@+id/btnClose"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/scanner_close"
+                android:padding="10dp"
+                android:src="@drawable/ic_app_close"
+                app:tint="#FFFFFF" />
+
+            <ImageView
+                android:id="@+id/btnFlash"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/scanner_flash"
+                android:padding="10dp"
+                android:src="@drawable/ic_app_no_flash"
+                app:tint="#FFFFFF" />
+        </FrameLayout>
+    </FrameLayout>
+
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:implementationMode="compatible"
+        app:layout_constraintBottom_toTopOf="@id/bottomPanel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:scaleType="fitCenter" />
+
+    <com.alf06.document.reader.ui.home.scanner.view.DocumentOverlayView
+        android:id="@+id/documentOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:importantForAccessibility="no"
+        app:layout_constraintBottom_toBottomOf="@id/previewView"
+        app:layout_constraintEnd_toEndOf="@id/previewView"
+        app:layout_constraintStart_toStartOf="@id/previewView"
+        app:layout_constraintTop_toTopOf="@id/previewView" />
+
+    <TextView
+        android:id="@+id/scanHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_scanner_hint"
+        android:fontFamily="@font/rb_400"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
+        android:text="@string/scanner_hint_searching"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/previewView" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bottomPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <LinearLayout
+            android:id="@+id/modeToggle"
+            android:layout_width="244dp"
+            android:layout_height="50dp"
+            android:layout_marginTop="30dp"
+            android:background="@drawable/bg_scanner_mode"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:id="@+id/btnManual"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_scanner_mode_item"
+                android:fontFamily="@font/rb_400"
+                android:gravity="center"
+                android:maxLines="1"
+                android:text="@string/scanner_manual_shooting"
+                android:textColor="@color/scanner_mode_text"
+                android:textSize="15sp"
+                tools:selected="true" />
+
+            <TextView
+                android:id="@+id/btnAuto"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_scanner_mode_item"
+                android:fontFamily="@font/rb_400"
+                android:gravity="center"
+                android:maxLines="1"
+                android:text="@string/scanner_auto_shooting"
+                android:textColor="@color/scanner_mode_text"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/captureButton"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/bg_scanner_capture"
+            android:contentDescription="@string/capture"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/modeToggle" />
+
+        <FrameLayout
+            android:id="@+id/thumbnailContainer"
+            android:layout_width="58dp"
+            android:layout_height="58dp"
+            android:layout_marginStart="24dp"
+            android:contentDescription="@string/scanner_scanned_pages"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/captureButton"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/captureButton"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/ivThumbnail"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="bottom|start"
+                android:importantForAccessibility="no"
+                android:scaleType="centerCrop" />
+
+            <TextView
+                android:id="@+id/tvPageCount"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="top|end"
+                android:background="@drawable/bg_scanner_badge"
+                android:fontFamily="@font/rb_500"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                tools:text="1" />
+        </FrameLayout>
+
+        <ImageView
+            android:id="@+id/btnGallery"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/bg_scanner_gallery"
+            android:contentDescription="@string/scanner_gallery"
+            android:padding="12dp"
+            android:src="@drawable/ic_app_image"
+            app:layout_constraintBottom_toBottomOf="@id/captureButton"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/captureButton"
+            app:tint="#FFFFFF" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

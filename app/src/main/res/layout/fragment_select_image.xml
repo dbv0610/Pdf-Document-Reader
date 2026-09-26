@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    tools:context=".ui.home.tools.image_to_pdf.fragment.SelectImageFragment">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/white"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:paddingVertical="@dimen/_8sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/icBack"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:src="@drawable/ic_app_back" />
+
+        <LinearLayout
+            android:id="@+id/btnFolder"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_12sdp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvFolder"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/rb_400"
+                android:includeFontPadding="false"
+                android:maxWidth="@dimen/_180sdp"
+                android:maxLines="1"
+                android:text="@string/all_images"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/_16sdp" />
+
+            <ImageView
+                android:id="@+id/icFolderArrow"
+                android:layout_width="@dimen/_20sdp"
+                android:layout_height="@dimen/_20sdp"
+                android:layout_marginStart="@dimen/_12sdp"
+                android:src="@drawable/ic_app_chevron_down" />
+        </LinearLayout>
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:id="@+id/icSelectAll"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:src="@drawable/ic_app_checkbox" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvImages"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:paddingVertical="@dimen/_12sdp"
+        app:layout_constraintBottom_toTopOf="@+id/layoutSelected"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader"
+        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+        app:spanCount="3"
+        tools:listitem="@layout/item_gallery_image" />
+
+    <LinearLayout
+        android:id="@+id/layoutEmpty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="@dimen/_56sdp"
+            android:layout_height="@dimen/_56sdp"
+            android:adjustViewBounds="true"
+            android:src="@drawable/ic_app_empty_file" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:fontFamily="@font/rb_400"
+            android:text="@string/no_files_yet"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_12sdp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layoutSelected"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@+id/btnImport"
+        tools:visibility="visible">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rcvSelected"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/_8sdp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:listitem="@layout/item_gallery_selected" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:background="@color/color_E5E6EB" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/btnImport"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_44sdp"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginTop="@dimen/_16sdp"
+        android:layout_marginBottom="@dimen/_16sdp"
+        android:background="@drawable/bg_import_button"
+        android:enabled="false"
+        android:fontFamily="@font/rb_500"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textColor="@color/white"
+        android:textSize="@dimen/_14sdp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:text="Import (0)" />
+
+    <!-- Folder dropdown, drawn above everything below the header. -->
+    <View
+        android:id="@+id/viewFolderDim"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="#99000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvFolders"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/white"
+        android:visibility="gone"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintHeight_default="wrap"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader"
+        app:layout_constraintVertical_bias="0"
+        tools:listitem="@layout/item_image_folder" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

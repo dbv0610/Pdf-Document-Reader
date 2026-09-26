@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_color_app"
+    tools:context=".ui.home.selected.SelectedFileActivity">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/_12sdp"
+        android:gravity="center_vertical"
+        android:paddingVertical="@dimen/_6sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/icBackApp"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:src="@drawable/ic_app_back" />
+
+        <TextView
+            android:id="@+id/tvSelected"
+            style="@style/HeaderScreenTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_12sdp"
+            android:layout_weight="1"
+            android:textColor="@color/text_primary"
+            tools:text="Selected (0)" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvItemSelect"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/_8sdp"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/_8sdp"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        app:layout_constraintBottom_toTopOf="@+id/btnDelete"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader"
+        tools:listitem="@layout/item_select_file" />
+
+    <LinearLayout
+        android:id="@+id/layoutEmpty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="@dimen/_56sdp"
+            android:layout_height="@dimen/_56sdp"
+            android:adjustViewBounds="true"
+            android:src="@drawable/ic_app_empty_file" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:fontFamily="@font/rb_400"
+            android:text="@string/no_files_yet"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_12sdp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/btnDelete"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/_24sdp"
+        android:paddingVertical="@dimen/_8sdp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="@dimen/_20sdp"
+            android:layout_height="@dimen/_20sdp"
+            android:src="@drawable/ic_app_trashcan"
+            app:tint="@color/delete_red" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_4sdp"
+            android:fontFamily="@font/rb_400"
+            android:includeFontPadding="false"
+            android:text="@string/file_action_delete"
+            android:textColor="@color/delete_red"
+            android:textSize="@dimen/_11sdp" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

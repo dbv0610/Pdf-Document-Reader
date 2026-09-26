@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ViewPager2 pages must be match_parent; the photo sits at the top at full width. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/imgPhoto"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:adjustViewBounds="true"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
+</FrameLayout>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="OfficeDocumentView">
+        <attr name="odv_pageBackground" format="color" />
+        <attr name="odv_wordViewMode">
+            <enum name="page" value="0" />
+            <enum name="normal" value="1" />
+            <enum name="print" value="2" />
+        </attr>
+        <!-- Gap between Word/TXT pages and around them in page view, at zoom 1; scales with the zoom. -->
+        <attr name="odv_wordPageSpacing" format="dimension" />
+        <attr name="odv_thumbnailScale" format="float" />
+        <!-- Positive MiB; byte budgets above Int.MAX_VALUE are capped at Int.MAX_VALUE. -->
+        <attr name="odv_thumbnailCacheMb" format="integer" />
+        <attr name="odv_showTxtEncodeDialog" format="boolean" />
+        <attr name="odv_txtDefaultEncoding" format="string" />
+        <attr name="odv_touchZoom" format="boolean" />
+    </declare-styleable>
+</resources>

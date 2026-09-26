@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "915785295495",
+    "project_id": "d010-pdf18",
+    "storage_bucket": "d010-pdf18.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:915785295495:android:41170612a588bd8054fa22",
+        "android_client_info": {
+          "package_name": "com.alf06.document.reader"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlVksDbFZPOj5BCXiDyeHm9NRLxB4XbPM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

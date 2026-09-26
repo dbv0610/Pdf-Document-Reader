@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pdfview_selection_copy_action">Copier</string>
+    <string name="pdfview_selection_underline_action">Souligner</string>
+    <string name="pdfview_selection_strikethrough_action">Barrer</string>
+</resources>

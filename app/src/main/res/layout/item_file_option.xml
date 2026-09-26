@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingVertical="@dimen/_8sdp">
+
+    <ImageView
+        android:id="@+id/imgIcon"
+        android:layout_width="@dimen/_20sdp"
+        android:layout_height="@dimen/_20sdp"
+        android:importantForAccessibility="no"
+        app:tint="@color/text_primary"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        tools:src="@drawable/ic_app_edit" />
+
+    <TextView
+        android:id="@+id/tvLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/_12sdp"
+        android:layout_weight="1"
+        android:fontFamily="@font/rb_400"
+        android:includeFontPadding="false"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/_12sdp"
+        tools:text="Rename" />
+</LinearLayout>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="IndicatorView">
+        <attr name="max_count" format="integer" />
+        <attr name="spacing" format="dimension" />
+        <attr name="radius" format="dimension" />
+        <attr name="active_color" format="color" />
+        <attr name="default_color" format="color" />
+        <attr name="active_count" format="integer" />
+        <attr name="scale_value" format="integer" />
+    </declare-styleable>
+    <declare-styleable name="NativeAppAdView">
+        <attr name="nativeShimmer" format="enum">
+            <enum name="small" value="0" />
+            <enum name="media_left" value="1" />
+            <enum name="medium" value="2" />
+            <enum name="media_cta_right" value="3" />
+            <enum name="small_cta_right" value="4" />
+        </attr>
+    </declare-styleable>
+    <declare-styleable name="StrokeTextView">
+        <!-- Text stroke (outline) -->
+        <attr name="textStrokeWidth" format="dimension" />
+        <attr name="textStrokeColor" format="color|reference" />
+        <attr name="textStrokeGradient" format="string" />
+        <attr name="textStrokeGdOrientation">
+            <enum name="top_bottom" value="0" />
+            <enum name="tr_bl" value="1" />
+            <enum name="right_left" value="2" />
+            <enum name="br_tl" value="3" />
+            <enum name="bottom_top" value="4" />
+            <enum name="bl_tr" value="5" />
+            <enum name="left_right" value="6" />
+            <enum name="tl_br" value="7" />
+        </attr>
+        <!-- Text fill -->
+        <attr name="textFillColor" format="color|reference" />
+        <attr name="textFillGradient" format="string" />
+        <attr name="textFillGdOrientation">
+            <enum name="top_bottom" value="0" />
+            <enum name="tr_bl" value="1" />
+            <enum name="right_left" value="2" />
+            <enum name="br_tl" value="3" />
+            <enum name="bottom_top" value="4" />
+            <enum name="bl_tr" value="5" />
+            <enum name="left_right" value="6" />
+            <enum name="tl_br" value="7" />
+        </attr>
+        <!-- Text shadow -->
+        <attr name="textShadowRadius" format="dimension" />
+        <attr name="textShadowDx" format="dimension" />
+        <attr name="textShadowDy" format="dimension" />
+        <attr name="textShadowColor" format="color|reference" />
+    </declare-styleable>
+</resources>

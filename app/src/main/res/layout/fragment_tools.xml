@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_color_app"
+    tools:context=".ui.home.main.StorageFragment">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:paddingVertical="@dimen/_8sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/rb_700"
+            android:text="@string/tools"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_15sdp" />
+
+        <ImageView
+            android:id="@+id/icSetting"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:padding="@dimen/_2sdp"
+            android:src="@drawable/ic_app_setting" />
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/layoutHeader">
+
+        <LinearLayout
+            android:paddingHorizontal="@dimen/_4sdp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <include
+                    android:id="@+id/itemTranslatePdf"
+                    layout="@layout/item_tools_option"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="@dimen/_8sdp"
+                    android:layout_marginStart="@dimen/_12sdp"
+                    android:layout_marginEnd="@dimen/_8sdp"
+                    android:layout_weight="1" />
+
+                <include
+                    android:id="@+id/itemScanToPdf"
+                    layout="@layout/item_tools_option"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="@dimen/_8sdp"
+                    android:layout_marginStart="@dimen/_8sdp"
+                    android:layout_marginEnd="@dimen/_12sdp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <include
+                    android:id="@+id/itemImagePdf"
+                    layout="@layout/item_tools_option"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="@dimen/_8sdp"
+                    android:layout_marginStart="@dimen/_12sdp"
+                    android:layout_marginEnd="@dimen/_8sdp"
+                    android:layout_weight="1" />
+
+                <include
+                    android:id="@+id/itemSplitPdf"
+                    layout="@layout/item_tools_option"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="@dimen/_8sdp"
+                    android:layout_marginStart="@dimen/_8sdp"
+                    android:layout_marginEnd="@dimen/_12sdp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <include
+                    android:id="@+id/itemMergePdf"
+                    layout="@layout/item_tools_option"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="@dimen/_8sdp"
+                    android:layout_marginStart="@dimen/_12sdp"
+                    android:layout_marginEnd="@dimen/_8sdp"
+                    android:layout_weight="1" />
+
+                <include
+                    android:id="@+id/itemCreateZip"
+                    layout="@layout/item_tools_option"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginVertical="@dimen/_8sdp"
+                    android:layout_marginStart="@dimen/_8sdp"
+                    android:layout_marginEnd="@dimen/_12sdp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+        </LinearLayout>
+
+    </androidx.core.widget.NestedScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

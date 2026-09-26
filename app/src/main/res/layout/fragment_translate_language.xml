@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    tools:context=".ui.home.tools.translate.fragment.TranslateLanguageFragment">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_48sdp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/_12sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/icBack"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_back" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_12sdp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/translate_pdf"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_16sdp" />
+    </LinearLayout>
+
+    <com.ui.baselib.widget.layout.UiLinearLayout
+        android:id="@+id/layoutFile"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginTop="@dimen/_12sdp"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/_24sdp"
+        android:paddingVertical="@dimen/_12sdp"
+        app:cornerRadius="@dimen/_16sdp"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeader"
+        app:stColor="@color/color_E5E6EB"
+        app:strokeWidth="@dimen/_1sdp">
+
+        <TextView
+            android:id="@+id/tvPageCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/rb_500"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:textColor="@color/grdEnd"
+            android:textSize="@dimen/_13sdp"
+            tools:text="3 pages" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_12sdp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="@dimen/_32sdp"
+                android:layout_height="@dimen/_32sdp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_app_pdf" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/_10sdp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvFileName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/rb_500"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/_13sdp"
+                    tools:text="Tieu Luan Khoa.pdf" />
+
+                <TextView
+                    android:id="@+id/tvFileInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/_4sdp"
+                    android:fontFamily="@font/rb_400"
+                    android:includeFontPadding="false"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="@dimen/_11sdp"
+                    tools:text="30/06/2026 10:30 - 36MB" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.ui.baselib.widget.layout.UiLinearLayout>
+
+    <ImageView
+        android:id="@+id/imgArrow"
+        android:layout_width="@dimen/_20sdp"
+        android:layout_height="@dimen/_28sdp"
+        android:layout_marginTop="@dimen/_16sdp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_app_double_down"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutFile" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardLanguage"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_48sdp"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginTop="@dimen/_16sdp"
+        app:cardBackgroundColor="@color/white"
+        app:cardCornerRadius="@dimen/_24sdp"
+        app:cardElevation="@dimen/_6sdp"
+        app:layout_constraintTop_toBottomOf="@id/imgArrow"
+        app:strokeWidth="0dp">
+
+        <LinearLayout
+            android:id="@+id/layoutLanguage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/_16sdp">
+
+            <TextView
+                android:id="@+id/tvLanguage"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="@font/rb_400"
+                android:hint="@string/choose_language"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/color_86909C"
+                android:textSize="@dimen/_14sdp" />
+
+            <ImageView
+                android:layout_width="@dimen/_20sdp"
+                android:layout_height="@dimen/_20sdp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_app_chevron_down"
+                app:tint="@color/color_86909C" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <TextView
+        android:id="@+id/btnStart"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_44sdp"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginBottom="@dimen/_16sdp"
+        android:background="@drawable/bg_import_button"
+        android:enabled="false"
+        android:fontFamily="@font/rb_500"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="@string/start_translation"
+        android:textColor="@color/white"
+        android:textSize="@dimen/_14sdp"
+        app:layout_constraintBottom_toBottomOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

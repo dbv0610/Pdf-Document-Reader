@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.ui.baselib.widget.layout.UiLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/_52sdp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="@dimen/_14sdp"
+    app:cornerRadius="@dimen/_12sdp"
+    app:stColor="@color/primary"
+    app:strokeWidth="@dimen/_1sdp">
+
+    <ImageView
+        android:id="@+id/imgIcon"
+        android:layout_width="@dimen/_22sdp"
+        android:layout_height="@dimen/_22sdp"
+        android:contentDescription="@null"
+        tools:src="@drawable/ic_setting_language" />
+
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/_12sdp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="@font/rb_400"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/_14sdp"
+        tools:text="Language" />
+
+    <ImageView
+        android:layout_width="@dimen/_18sdp"
+        android:layout_height="@dimen/_18sdp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_arrow_right"
+        app:tint="@color/text_primary" />
+</com.ui.baselib.widget.layout.UiLinearLayout>

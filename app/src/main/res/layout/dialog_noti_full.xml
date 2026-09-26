@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.ui.baselib.widget.layout.UiConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="@dimen/_12sdp"
+    app:bgColor="@color/white"
+    app:cornerRadius="@dimen/_12sdp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="@dimen/_12sdp"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <ImageView
+            android:layout_width="@dimen/_48sdp"
+            android:layout_height="@dimen/_48sdp"
+            android:layout_marginTop="@dimen/_12sdp"
+            android:src="@drawable/img_app_noti" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/allowContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_18sdp"
+            android:fontFamily="@font/rb_600"
+            android:includeFontPadding="false"
+            android:text="@string/allow_app_name_to_send_you_notifications"
+            android:textAlignment="center"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_14sdp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+
+        <com.ui.baselib.widget.view.UiTextView
+            android:id="@+id/btnAllow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_12sdp"
+            android:fontFamily="@font/rb_500"
+            android:paddingVertical="@dimen/_12sdp"
+            android:text="@string/allow"
+            android:textAlignment="center"
+            android:textColor="@color/white"
+            android:textSize="@dimen/_12sdp"
+            app:bgGradientEnd="@color/grdEnd"
+            app:bgGradientStart="@color/grdStart"
+            app:bgIsGradient="true"
+            app:cornerRadius="@dimen/_20sdp"
+            app:tvColor="@color/white" />
+    </LinearLayout>
+
+</com.ui.baselib.widget.layout.UiConstraintLayout>

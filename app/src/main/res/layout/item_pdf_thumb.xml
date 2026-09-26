@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.ui.baselib.widget.layout.UiConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_marginHorizontal="4dp"
+    android:layout_marginBottom="4dp"
+    app:bgColor="@color/white"
+    app:stColor="@color/color_7c8a97"
+    app:cornerRadius="@dimen/_8sdp"
+    app:strokeWidth="@dimen/_1sdp"
+    app:uiDimenRatio="56:78"
+    tools:layout_height="@dimen/_120sdp">
+
+    <com.ui.baselib.widget.view.UiImageView
+        android:id="@+id/imagePreview"
+        app:cornerRadius="@dimen/_8sdp"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="true"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:indeterminateTint="@color/primary"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/imagePreview"
+        app:layout_constraintEnd_toEndOf="@id/imagePreview"
+        app:layout_constraintStart_toStartOf="@id/imagePreview"
+        app:layout_constraintTop_toTopOf="@id/imagePreview" />
+
+    <TextView
+        android:id="@+id/errorText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textColor="@color/delete_red"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/imagePreview"
+        app:layout_constraintEnd_toEndOf="@id/imagePreview"
+        app:layout_constraintStart_toStartOf="@id/imagePreview"
+        app:layout_constraintTop_toTopOf="@id/imagePreview" />
+
+    <com.ui.baselib.widget.view.UiTextView
+        android:layout_width="wrap_content"
+        app:cornerBottomRight="@dimen/_4sdp"
+        tools:text="1243"
+        app:tvColor="@color/white"
+        android:fontFamily="@font/rb_400"
+        android:id="@+id/pageIndex"
+        android:paddingVertical="@dimen/_3sdp"
+        android:paddingHorizontal="@dimen/_5sdp"
+        app:bgColor="@color/color_7c8a97"
+        android:textSize="@dimen/_9sdp"
+        android:layout_height="wrap_content"/>
+</com.ui.baselib.widget.layout.UiConstraintLayout>

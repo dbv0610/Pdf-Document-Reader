@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    tools:context=".ui.home.tools.merge.fragment.SelectPdfsFragment">
+    <!-- Shared by the multi-file pickers (Merge, Create ZIP). -->
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_48sdp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/_12sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/icBack"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_back" />
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_12sdp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/select"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_16sdp" />
+    </LinearLayout>
+
+    <com.ui.baselib.widget.layout.UiLinearLayout
+        android:id="@+id/layoutSearch"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_44sdp"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginTop="@dimen/_12sdp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:visibility="gone"
+        app:cornerRadius="@dimen/_8sdp"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeader"
+        app:stColor="@color/color_d0d0d0"
+        app:strokeWidth="@dimen/_1sdp"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="@dimen/_20sdp"
+            android:layout_height="@dimen/_20sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_search"
+            app:tint="@color/color_495263" />
+
+        <EditText
+            android:id="@+id/edtSearch"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="@dimen/_8sdp"
+            android:layout_weight="1"
+            android:background="@color/transparent"
+            android:fontFamily="@font/rb_400"
+            android:hint="@string/search_file"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:includeFontPadding="false"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:textSize="@dimen/_12sdp" />
+
+        <ImageView
+            android:id="@+id/icClear"
+            android:layout_width="@dimen/_18sdp"
+            android:layout_height="@dimen/_18sdp"
+            android:layout_marginStart="@dimen/_6sdp"
+            android:contentDescription="@null"
+            android:padding="@dimen/_2sdp"
+            android:src="@drawable/ic_app_clear"
+            android:visibility="gone"
+            app:tint="@color/color_495263"
+            tools:visibility="visible" />
+    </com.ui.baselib.widget.layout.UiLinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvFiles"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/_8sdp"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/_12sdp"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        app:layout_constraintBottom_toTopOf="@id/btnContinue"
+        app:layout_constraintTop_toBottomOf="@id/layoutSearch"
+        tools:listitem="@layout/item_multi_pick_file" />
+
+    <LinearLayout
+        android:id="@+id/layoutEmpty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeader"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="@dimen/_56sdp"
+            android:layout_height="@dimen/_56sdp"
+            android:adjustViewBounds="true"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_empty_file" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:fontFamily="@font/rb_400"
+            android:text="@string/no_files_yet"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_12sdp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/btnContinue"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_44sdp"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginBottom="@dimen/_16sdp"
+        android:background="@drawable/bg_import_button"
+        android:fontFamily="@font/rb_500"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textColor="@color/white"
+        android:textSize="@dimen/_14sdp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:text="Continue (10)"
+        tools:visibility="visible" />
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+
+<com.ui.baselib.widget.layout.UiConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_centerInParent="true"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="@dimen/_16sdp"
+    app:bgColor="@color/white"
+    app:cornerRadius="@dimen/_18sdp"
+    app:layout_constraintBottom_toBottomOf="parent"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toTopOf="parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginVertical="@dimen/_12sdp"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tvTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:fontFamily="@font/rb_700"
+            android:includeFontPadding="false"
+            android:text="@string/permission_necessary"
+            android:textAlignment="center"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_15sdp"
+        />
+        <androidx.appcompat.widget.AppCompatTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_12sdp"
+            android:fontFamily="@font/rb_400"
+            android:layout_marginHorizontal="@dimen/_24sdp"
+            android:includeFontPadding="false"
+            android:text="@string/write_storage_permission_is_necessary_to_android"
+            android:textAlignment="center"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/_12sdp"
+          />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_18sdp"
+            android:orientation="vertical"
+            android:weightSum="2">
+
+            <com.ui.baselib.widget.view.UiTextView
+                android:id="@+id/btnAllow"
+                style="@style/ButtonAppStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/rb_400"
+                android:paddingVertical="@dimen/_12sdp"
+                android:text="@string/allow"
+                android:textAlignment="center"
+                android:textColor="@color/white"
+                android:textSize="@dimen/_12sdp"
+                app:bgGdOrientation="left_right"
+                app:bgIsGradient="true"
+                app:cornerRadius="@dimen/_20sdp"
+                app:tvColor="@color/white" />
+
+            <com.ui.baselib.widget.view.UiTextView
+                android:id="@+id/btnCancel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/_10sdp"
+                android:layout_weight="1"
+                android:fontFamily="@font/rb_400"
+                android:paddingVertical="@dimen/_12sdp"
+                android:text="@string/cancel"
+                android:textAlignment="center"
+                android:textColor="@color/primary"
+                android:textSize="@dimen/_12sdp"
+                app:cornerRadius="@dimen/_24sdp"
+                app:stColor="@color/primary"
+                app:strokeWidth="@dimen/_1sdp" />
+        </LinearLayout>
+    </LinearLayout>
+</com.ui.baselib.widget.layout.UiConstraintLayout>

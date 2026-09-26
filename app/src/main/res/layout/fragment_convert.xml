@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    tools:context=".ui.home.tools.image_to_pdf.fragment.ConvertFragment">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_48sdp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/_12sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/icBack"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_back" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_12sdp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/convert_to_pdf"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_16sdp" />
+
+        <TextView
+            android:id="@+id/btnAdd"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/_26sdp"
+            android:background="@drawable/bg_import_button"
+            android:fontFamily="@font/rb_400"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:minWidth="@dimen/_56sdp"
+            android:paddingHorizontal="@dimen/_14sdp"
+            android:text="@string/convert_add"
+            android:textColor="@color/white"
+            android:textSize="@dimen/_12sdp" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvImages"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:paddingTop="@dimen/_12sdp"
+        android:paddingBottom="@dimen/_8sdp"
+        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+        app:layout_constraintBottom_toTopOf="@id/btnConvert"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeader"
+        app:spanCount="3"
+        tools:listitem="@layout/item_convert_image" />
+
+    <TextView
+        android:id="@+id/btnConvert"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_44sdp"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginBottom="@dimen/_16sdp"
+        android:background="@drawable/bg_import_button"
+        android:fontFamily="@font/rb_500"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textColor="@color/white"
+        android:textSize="@dimen/_14sdp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:text="Convert (9)" />
+</androidx.constraintlayout.widget.ConstraintLayout>

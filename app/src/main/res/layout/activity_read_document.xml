@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/color_bg_app"
+    tools:context=".ui.home.document.office.ReadDocumentActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/lnHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:paddingVertical="@dimen/_6sdp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:id="@+id/lnHeaderDef"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="@id/lnSearchData"
+            app:layout_constraintStart_toStartOf="@id/lnSearchData"
+            app:layout_constraintTop_toTopOf="@id/lnSearchData">
+
+            <ImageView
+                android:id="@+id/icBackApp"
+                android:layout_width="@dimen/_28sdp"
+                android:layout_height="@dimen/_28sdp"
+                android:padding="@dimen/_4sdp"
+                android:src="@drawable/ic_app_back"
+                app:tint="@color/text_primary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/_8sdp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/fileName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/rb_400"
+                    android:includeFontPadding="false"
+                    android:paddingEnd="@dimen/_6sdp"
+                    android:singleLine="true"
+                    android:text="@string/doc"
+                    android:textColor="@color/text_primary"
+                    android:textSize="@dimen/_14sdp"
+                    tools:ignore="RtlSymmetry" />
+
+                <ImageView
+                    android:id="@+id/icSearchApp"
+                    android:layout_width="@dimen/_22sdp"
+                    android:layout_height="@dimen/_22sdp"
+                    android:padding="@dimen/_2sdp"
+                    android:src="@drawable/ic_app_search" />
+
+                <ImageView
+                    android:id="@+id/icAppRotate"
+                    android:layout_width="@dimen/_22sdp"
+                    android:layout_height="@dimen/_22sdp"
+                    android:padding="@dimen/_2sdp"
+                    android:src="@drawable/ic_app_rotate" />
+
+                <ImageView
+                    android:id="@+id/icOpenTools"
+                    android:layout_width="@dimen/_22sdp"
+                    android:layout_height="@dimen/_22sdp"
+                    android:padding="@dimen/_2sdp"
+                    android:src="@drawable/ic_app_more" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/lnSearchData"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/color_bg_app"
+            android:clickable="false"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="invisible"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/icBackSearch"
+                android:layout_width="@dimen/_28sdp"
+                android:layout_height="@dimen/_28sdp"
+                android:padding="@dimen/_4sdp"
+                android:src="@drawable/ic_app_back" />
+
+            <com.ui.baselib.widget.layout.UiLinearLayout
+                android:id="@+id/lnSearch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/_12sdp"
+                android:paddingVertical="@dimen/_8sdp"
+                app:cornerRadius="@dimen/_8sdp"
+                app:stColor="@color/color_d0d0d0"
+                app:strokeWidth="@dimen/_1sdp">
+
+                <ImageView
+                    android:id="@+id/icSearchData"
+                    android:layout_width="@dimen/_22sdp"
+                    android:layout_height="@dimen/_22sdp"
+                    android:src="@drawable/ic_app_search"
+                    app:tint="@color/color_495263" />
+
+                <EditText
+                    android:id="@+id/edtSearchData"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/_8sdp"
+                    android:layout_weight="1"
+                    android:background="@color/transparent"
+                    android:fontFamily="@font/rb_400"
+                    android:hint="@string/enter_keyword_to_search"
+                    android:imeOptions="actionSearch"
+                    android:importantForAutofill="no"
+                    android:includeFontPadding="false"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_secondary"
+                    android:textSize="@dimen/_12sdp" />
+            </com.ui.baselib.widget.layout.UiLinearLayout>
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/lnDocRead"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/background_secondary"
+        android:paddingBottom="@dimen/_6sdp"
+        app:layout_constraintBottom_toTopOf="@+id/rcvFrameData"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/lnHeader">
+
+        <com.wxiwei.office.reader.OfficeDocumentView
+            android:id="@+id/officeViewer"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="@dimen/_6sdp"
+            android:background="@color/background_secondary"
+            app:odv_pageBackground="@color/reader_viewer_bg"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.ui.baselib.widget.view.UiTextView
+            android:id="@+id/txtNumberPage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:paddingHorizontal="@dimen/_10sdp"
+            android:paddingVertical="@dimen/_4sdp"
+            android:text="0/0"
+            android:textColor="@color/white"
+            android:textSize="@dimen/_10sdp"
+            app:bgColor="#80000000"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:ignore="HardcodedText" />
+
+        <LinearLayout
+            android:id="@+id/lnResultSearch"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@color/white"
+            android:elevation="@dimen/_8sdp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/_10sdp"
+            android:paddingVertical="@dimen/_6sdp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/tvCountSearch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/rb_400"
+                android:includeFontPadding="false"
+                android:singleLine="true"
+                android:text="@string/no_result_found"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/_12sdp" />
+
+            <ImageView
+                android:id="@+id/icViewPrev"
+                android:layout_width="@dimen/_32sdp"
+                android:layout_height="@dimen/_32sdp"
+                android:padding="@dimen/_6sdp"
+                android:src="@drawable/ic_app_up"
+                app:tint="@color/color_495263" />
+
+            <ImageView
+                android:id="@+id/icViewNext"
+                android:layout_width="@dimen/_32sdp"
+                android:layout_height="@dimen/_32sdp"
+                android:layout_marginStart="@dimen/_8sdp"
+                android:padding="@dimen/_6sdp"
+                android:src="@drawable/ic_app_down"
+                app:tint="@color/color_495263" />
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvFrameData"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="#EDEDED"
+        android:orientation="horizontal"
+        android:paddingVertical="@dimen/_3sdp"
+        android:visibility="gone"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHeight_percent="0.135"
+        tools:listitem="@layout/item_pdf_thumb"
+        tools:visibility="visible" />
+
+    <ProgressBar
+        android:id="@+id/progressLoad"
+        android:layout_width="@dimen/_24sdp"
+        android:layout_height="@dimen/_24sdp"
+        android:indeterminateTint="@color/primary"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/rcvFrameData"
+        app:layout_constraintEnd_toEndOf="@+id/rcvFrameData"
+        app:layout_constraintStart_toStartOf="@+id/rcvFrameData"
+        app:layout_constraintTop_toTopOf="@+id/rcvFrameData" />
+</androidx.constraintlayout.widget.ConstraintLayout>

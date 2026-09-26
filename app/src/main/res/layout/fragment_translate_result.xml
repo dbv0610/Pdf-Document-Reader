@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    tools:context=".ui.home.tools.translate.fragment.TranslateResultFragment">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_48sdp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/_12sdp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/icBack"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_back" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_12sdp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/result"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_16sdp" />
+
+        <ImageView
+            android:id="@+id/icHome"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_nav_home"
+            app:tint="@color/text_primary" />
+    </LinearLayout>
+
+    <com.reader.pdfviewer.PDFView
+        android:id="@+id/pdfResult"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/_6sdp"
+        android:background="@color/white"
+        app:layout_constraintBottom_toTopOf="@id/btnDownload"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeader" />
+
+    <com.ui.baselib.widget.view.UiTextView
+        android:id="@+id/txtNumberPage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:includeFontPadding="false"
+        android:paddingHorizontal="@dimen/_10sdp"
+        android:paddingVertical="@dimen/_4sdp"
+        android:text="0/0"
+        android:textColor="@color/white"
+        android:textSize="@dimen/_10sdp"
+        app:bgColor="#80000000"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/pdfResult"
+        tools:ignore="HardcodedText" />
+
+    <LinearLayout
+        android:id="@+id/btnDownload"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_44sdp"
+        android:layout_marginHorizontal="@dimen/_16sdp"
+        android:layout_marginTop="@dimen/_8sdp"
+        android:layout_marginBottom="@dimen/_16sdp"
+        android:background="@drawable/bg_import_button"
+        android:gravity="center"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <ImageView
+            android:layout_width="@dimen/_18sdp"
+            android:layout_height="@dimen/_18sdp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_download"
+            app:tint="@color/white" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_8sdp"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:text="@string/download_pdf"
+            android:textColor="@color/white"
+            android:textSize="@dimen/_14sdp" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

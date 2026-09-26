@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    tools:context=".ui.home.MainActivity">
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/nav_host_fragment_container"
+        android:name="androidx.navigation.fragment.NavHostFragment"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:defaultNavHost="true"
+        app:layout_constraintBottom_toTopOf="@+id/nav_bar"
+        app:layout_constraintTop_toTopOf="parent"
+        app:navGraph="@navigation/main_nav_graph" />
+
+    <com.ui.baselib.widget.navigation.UiNavigationBar
+        android:id="@+id/nav_bar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_62sdp"
+        app:bgColor="@color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:navGraph="@navigation/main_nav_graph"
+        app:nav_animationType="fade"
+        app:nav_rippleEnabled="true"
+        app:nav_iconSize="@dimen/_21sdp"
+        app:nav_iconTintSelected="@color/primary"
+        app:nav_indicatorStyle="none"
+        app:nav_rippleColor="#1AFFC107"
+        app:nav_textColorSelected="@color/primary"
+        app:nav_textColorUnselected="@color/text_secondary"
+        app:nav_textSingleLine="true"
+        app:nav_textSize="@dimen/_11sdp"
+        app:shadowColor="@color/black"
+        app:shadowElevation="@dimen/_12sdp">
+
+        <com.ui.baselib.widget.navigation.NavItem
+            android:layout_width="wrap_content"
+            app:destinationFragment="@id/homeFragment"
+            android:layout_height="wrap_content"
+            app:nav_icon="@drawable/ic_nav_home"
+            app:nav_title="@string/home" />
+
+        <com.ui.baselib.widget.navigation.NavItem
+            android:layout_width="wrap_content"
+            app:destinationFragment="@id/storageFragment"
+            android:layout_height="wrap_content"
+            app:nav_icon="@drawable/ic_nav_storage"
+            app:nav_title="@string/storage" />
+
+        <com.ui.baselib.widget.navigation.NavItem
+            android:layout_width="wrap_content"
+            app:destinationFragment="@id/toolsFragment"
+            android:layout_height="wrap_content"
+            app:nav_icon="@drawable/ic_nav_tools"
+            app:nav_title="@string/tools" />
+    </com.ui.baselib.widget.navigation.UiNavigationBar>
+</androidx.constraintlayout.widget.ConstraintLayout>

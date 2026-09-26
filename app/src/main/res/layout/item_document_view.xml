@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.ui.baselib.widget.layout.UiLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:paddingVertical="@dimen/_6sdp"
+    android:paddingHorizontal="@dimen/_12sdp">
+
+    <com.ui.baselib.widget.view.UiImageView
+        android:id="@+id/imgSource"
+        app:cornerRadius="@dimen/_8sdp"
+        android:layout_width="@dimen/_40sdp"
+        android:layout_height="@dimen/_40sdp"
+        android:padding="@dimen/_3sdp"
+        android:src="@drawable/ic_app_pdf"
+        app:bgColor="#F5F5F5" />
+
+    <com.ui.baselib.widget.layout.UiLinearLayout
+        android:layout_width="0dp"
+        android:layout_marginHorizontal="@dimen/_12sdp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            tools:text="@tools:sample/lorem"
+            android:id="@+id/tvFileName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/rb_500"
+            android:includeFontPadding="false"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_11sdp" />
+
+        <TextView
+            tools:text="@tools:sample/lorem"
+            android:id="@+id/tvFileInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_4sdp"
+            android:fontFamily="@font/rb_400"
+            android:includeFontPadding="false"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/_9sdp" />
+    </com.ui.baselib.widget.layout.UiLinearLayout>
+
+    <com.ui.baselib.widget.view.UiImageView
+        android:id="@+id/imgFavorite"
+        android:layout_width="@dimen/_24sdp"
+        android:padding="@dimen/_2sdp"
+        android:layout_height="@dimen/_24sdp"
+        android:src="@drawable/ic_app_fa_no" />
+
+    <com.ui.baselib.widget.view.UiImageView
+        android:id="@+id/imgTools"
+        android:layout_width="@dimen/_24sdp"
+        android:padding="@dimen/_3sdp"
+        android:layout_height="@dimen/_24sdp"
+        android:src="@drawable/ic_app_more" />
+</com.ui.baselib.widget.layout.UiLinearLayout>

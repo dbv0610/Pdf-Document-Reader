@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="black_overlay">#66000000</color>
+    <color name="color_background_sheet_tablayout">#f9f9f9</color>
+    <color name="color_background_button_sheet">#f9f9f9</color>
+    <color name="color_unselected_text_button_sheet">#86899B</color>
+    <color name="clr_excel">#36A760</color>
+</resources>

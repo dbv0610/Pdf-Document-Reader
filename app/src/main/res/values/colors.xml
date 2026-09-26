@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
+    <color name="primary">#F59E42</color>
+    <color name="background_secondary">#F2F2F7</color>
+    <color name="color_E5E6EB">#E5E6EB</color>
+    <color name="color_86909C">#86909C</color>
+    <color name="color_bg_app">#FFFFFFFF</color>
+    <color name="text_primary">#071126</color>
+    <color name="text_secondary">#5C6572</color>
+    <color name="color_indicator_default">#BDA2EE</color>
+
+    <color name="grdStart">#FFC078</color>
+    <color name="grdEnd">#FF8606</color>
+    <color name="color_303136">#303136</color>
+    <color name="color_d0d0d0">#D0D0D0</color>
+    <color name="color_495263">#495263</color>
+
+
+    <color name="delete_red">#E30000</color>
+
+    <!-- Document reader -->
+    <color name="reader_viewer_bg">#F8F8F8</color>
+    <color name="reader_thumb_bg">#BFBFBF</color>
+    <color name="color_7c8a97">#7C8A97</color>
+</resources>
