@@ -130,27 +130,30 @@ class SampleRenderTest {
     }
 
     @Test
-    fun xlsx() = withReader("sample.xlsx") { reader ->
+    fun xlsx() = renderSheets("sample.xlsx", "xlsx")
+
+    /** sample.xlsx whose "Ghi chú dữ liệu" table uses the table style defined in styles.xml. */
+    @Test
+    fun customTableStyle() = renderSheets("custom_table_style.xlsx", "customtable")
+
+    private fun renderSheets(sample: String, prefix: String) = withReader(sample) { reader ->
         val excel = findExcelView(reader.documentView!!)!!
         var sheets = 0
         instrumentation.runOnMainSync { sheets = excel.getSpreadsheet()!!.getSheetCount() }
         for (i in 0 until sheets) {
             instrumentation.runOnMainSync { excel.showSheet(i) }
+            // wait until the sheet finished loading, then draw it from A1 at 100%
             delay(2500)
-            // the view restores the last scroll/zoom; capture every sheet from A1 at 100%
-            instrumentation.runOnMainSync {
-                excel.getSheetView()?.apply { setZoom(1f); scrollTo(0f, 0f); invalidateTiles() }
-                excel.getSpreadsheet()?.invalidate()
-                excel.invalidate()
-            }
-            delay(500)
             lateinit var bitmap: Bitmap
             instrumentation.runOnMainSync {
-                bitmap = Bitmap.createBitmap(excel.width, excel.height, Bitmap.Config.ARGB_8888)
+                val sheet = excel.getSpreadsheet()!!.getWorkbook()!!.getSheet(i)!!
+                bitmap = Bitmap.createBitmap(1080, 1400, Bitmap.Config.ARGB_8888)
                 bitmap.eraseColor(Color.WHITE)
-                excel.draw(Canvas(bitmap))
+                val canvas = Canvas(bitmap)
+                canvas.clipRect(0, 0, 1080, 1400)
+                excel.getSheetView()!!.drawRegion(sheet, 0, 0, 1f, canvas)
             }
-            save(bitmap, "xlsx_sheet%d.png".format(i + 1))
+            save(bitmap, "%s_sheet%d.png".format(prefix, i + 1))
         }
     }
 

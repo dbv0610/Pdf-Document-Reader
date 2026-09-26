@@ -14,7 +14,7 @@ package com.wxiwei.office.ss.model.table
  * 日期:            2013-4-18
  * 负责人:           jqin
  */
-class SSTableCellStyle(fillColor: Int) {
+class SSTableCellStyle(fillColor: Int?) {
     private var fontColor: Int = -0x1000000
     //left, right, top, bottom
     private var borderColor: Int? = null

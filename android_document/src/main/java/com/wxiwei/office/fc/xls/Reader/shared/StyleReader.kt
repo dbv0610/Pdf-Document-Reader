@@ -16,6 +16,8 @@ import com.wxiwei.office.ss.model.style.BorderStyle
 import com.wxiwei.office.ss.model.style.BuiltinFormats
 import com.wxiwei.office.ss.model.style.CellBorder
 import com.wxiwei.office.ss.model.style.CellStyle
+import com.wxiwei.office.ss.model.table.SSTableCellStyle
+import com.wxiwei.office.ss.model.table.SSTableStyle
 import com.wxiwei.office.ss.model.style.NumberFormat
 import com.wxiwei.office.ss.model.table.TableFormatManager
 import com.wxiwei.office.ss.util.ColorUtil
@@ -57,6 +59,7 @@ class StyleReader private constructor() {
             saxReader.addHandler("/styleSheet/cellXfs/xf", handler)
             saxReader.addHandler("/styleSheet/colors/indexedColors/rgbColor", handler)
             saxReader.addHandler("/styleSheet/dxfs/dxf", handler)
+            saxReader.addHandler("/styleSheet/tableStyles/tableStyle", handler)
             val input = styleParts.getInputStream()
             saxReader.read(input)
             input.close()
@@ -109,13 +112,13 @@ class StyleReader private constructor() {
         font.setFontSize(element.element("sz")?.attributeValue("val")?.toDouble() ?: 12.0)
         font.setColorIndex(colorIndex(element.element("color")).toInt())
         element.element("name")?.let { font.setName(it.attributeValue("val")) }
-        element.element("b")?.let { font.setBold(it.attributeValue("val") == null || it.attributeValue("val").toBoolean()) }
-        element.element("i")?.let { font.setItalic(it.attributeValue("val") == null || it.attributeValue("val").toBoolean()) }
+        element.element("b")?.let { font.setBold(isOn(it.attributeValue("val"))) }
+        element.element("i")?.let { font.setItalic(isOn(it.attributeValue("val"))) }
         element.element("u")?.let {
             val value = it.attributeValue("val")
             if (value == null) font.setUnderline(Font.U_SINGLE.toInt()) else font.setUnderline(value)
         }
-        element.element("strike")?.let { font.setStrikeline(it.attributeValue("val") == null || it.attributeValue("val").toBoolean()) }
+        element.element("strike")?.let { font.setStrikeline(isOn(it.attributeValue("val"))) }
         return font
     }
 
@@ -194,6 +197,51 @@ class StyleReader private constructor() {
         return style
     }
 
+    /** OOXML booleans: absent value, "1" and "true" are on ("1".toBoolean() is false). */
+    private fun isOn(value: String?): Boolean = value == null || value == "1" || value.equals("true", true)
+
+    /**
+     * A table style defined in styles.xml (tableStyles/tableStyle) from dxf formats, e.g.
+     * "TableStylePreset3_Accent1" written by WPS/Excel; the built-in names are drawn by TableStyleKit.
+     */
+    private fun processCustomTableStyle(element: Element) {
+        val name = element.attributeValue("name") ?: return
+        val formats = tableFormatManager ?: return
+        val book = book!!
+        fun cellStyle(dxfId: Int): SSTableCellStyle? {
+            val dxf = formats.getFormat(dxfId) ?: return null
+            val fill = dxf.getFillPattern()?.let {
+                // in a dxf the solid fill color is bgColor; fgColor is used when that is missing
+                if (it.backgoundColor != 0) it.backgoundColor else it.foregroundColor
+            }
+            val style = SSTableCellStyle(fill)
+            if (dxf.getFontIndex() >= 0) {
+                book.getFont(dxf.getFontIndex().toInt())?.let { style.setFontColor(book.getColor(it.getColorIndex())) }
+            }
+            if (dxf.getBorderTop().toInt() != 0) style.setBorderColor(book.getColor(dxf.getBorderTopColorIdx().toInt()))
+            else if (dxf.getBorderLeft().toInt() != 0) style.setBorderColor(book.getColor(dxf.getBorderLeftColorIdx().toInt()))
+            return style
+        }
+        val parts = HashMap<String, SSTableCellStyle>()
+        for (e in element.elements()!!.filterIsInstance<Element>()) {
+            val type = e.attributeValue("type") ?: continue
+            val dxfId = e.attributeValue("dxfId")?.toIntOrNull() ?: continue
+            cellStyle(dxfId)?.let { parts[type] = it }
+        }
+        if (parts.isEmpty()) return
+        val whole = parts["wholeTable"]
+        val table = SSTableStyle()
+        table.setFirstRow(parts["headerRow"] ?: whole)
+        table.setLastRow(parts["totalRow"] ?: whole)
+        table.setFirstCol(parts["firstColumn"])
+        table.setLastCol(parts["lastColumn"])
+        table.setBand1H(parts["firstRowStripe"] ?: whole)
+        table.setBand2H(parts["secondRowStripe"] ?: whole)
+        table.setBand1V(parts["firstColumnStripe"] ?: whole)
+        table.setBand2V(parts["secondColumnStripe"] ?: whole)
+        book.addCustomTableStyle(name, table)
+    }
+
     private fun processTableFormat(element: Element) {
         if (tableFormatManager == null) {
             tableFormatManager = TableFormatManager(5)
@@ -233,6 +281,7 @@ class StyleReader private constructor() {
                 "xf" -> book!!.addCellStyle(styleIndex++, processCellStyle(element))
                 "rgbColor" -> book!!.addColor(indexedColor++, (0xff shl 24) or element!!.attributeValue("rgb")!!.takeLast(6).toInt(16))
                 "dxf" -> processTableFormat(element)
+                "tableStyle" -> processCustomTableStyle(element)
             }
             element!!.detach()
         }

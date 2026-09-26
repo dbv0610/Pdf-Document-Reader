@@ -473,6 +473,16 @@ open class Workbook(before07: Boolean) {
         return if (before07) MAXCOLUMN_03 else MAXCOLUMN_07
     }
 
+    // table styles defined in styles.xml, by name
+    private val customTableStyles = HashMap<String, com.wxiwei.office.ss.model.table.SSTableStyle>()
+
+    fun addCustomTableStyle(name: String, style: com.wxiwei.office.ss.model.table.SSTableStyle) {
+        customTableStyles[name] = style
+    }
+
+    fun getCustomTableStyle(name: String?): com.wxiwei.office.ss.model.table.SSTableStyle? =
+        if (name == null) null else customTableStyles[name]
+
     fun setTableFormatManager(tableFormatManager: TableFormatManager?) {
         this.tableFormatManager = tableFormatManager
     }

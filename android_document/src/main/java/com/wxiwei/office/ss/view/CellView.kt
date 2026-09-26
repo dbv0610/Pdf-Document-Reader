@@ -386,9 +386,9 @@ class CellView(sheetView: SheetView?) {
 
     fun getTableCellStyle(table: SSTable, book: Workbook, row: Int, col: Int): SSTableCellStyle? {
         val rangeAddr = table.getTableReference()!!
-        val tableStyle =
-            tableStyleKit!!.getTableStyle(table.getName(), SchemeColorUtil.getSchemeColor(book))
-                ?: return null
+        val tableStyle = book.getCustomTableStyle(table.getName())
+            ?: tableStyleKit!!.getTableStyle(table.getName(), SchemeColorUtil.getSchemeColor(book))
+            ?: return null
 
         if (table.isHeaderRowShown()) {
             if (row == rangeAddr.getFirstRow()) {
