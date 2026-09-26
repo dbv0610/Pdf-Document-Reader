@@ -97,6 +97,8 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
     fun deleteSlide(slideIndex: Int): Boolean = slideChange { editor.deleteSlide(slideIndex) }
     fun duplicateSlide(slideIndex: Int): Boolean = slideChange { editor.duplicateSlide(slideIndex) >= 0 }
     fun moveSlide(from: Int, to: Int): Boolean = slideChange { editor.moveSlide(from, to) }
+    /** An empty slide after [afterIndex]; shown after saving and reopening like other slide changes. */
+    fun addBlankSlide(afterIndex: Int): Boolean = slideChange { editor.addBlankSlide(afterIndex) >= 0 }
 
     private fun slideChange(op: () -> Boolean): Boolean {
         if (!op()) return false

@@ -9,6 +9,16 @@ import java.io.File
 import java.io.IOException
 import kotlin.math.roundToLong
 
+/** An empty slide: its layout (a relationship) gives the placeholders and background. */
+private const val BLANK_SLIDE = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+    "<p:sld xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" " +
+    "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" " +
+    "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">" +
+    "<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>" +
+    "<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/>" +
+    "<a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld>" +
+    "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"
+
 /** EMU coordinates, with width/height (not right/bottom). */
 data class Rect(val x: Long, val y: Long, val width: Long, val height: Long)
 data class Size(val width: Long, val height: Long)
@@ -114,6 +124,7 @@ class PptxEditor(private val source: File) {
             return Transform(sx * gx, sy * gy, tx + sx * (r.x - gx * (off?.attributeValue("x")?.toDoubleOrNull() ?: 0.0)), ty + sy * (r.y - gy * (off?.attributeValue("y")?.toDoubleOrNull() ?: 0.0)))
         }
         companion object {
+
             private fun rectOf(x: Element?): Rect? {
                 val o = x?.firstChild(A, "off") ?: return null; val e = x.firstChild(A, "ext") ?: return null
                 return Rect(o.attributeValue("x")!!.toLong(), o.attributeValue("y")!!.toLong(), e.attributeValue("cx")!!.toLong(), e.attributeValue("cy")!!.toLong())
@@ -262,8 +273,7 @@ class PptxEditor(private val source: File) {
         var result = -1
         val ok = queue { pkg ->
             val part = part(pkg, slideIndex)
-            val number = pkg.partNames().mapNotNull { Regex("ppt/slides/slide(\\d+)\\.xml").matchEntire(it)?.groupValues?.get(1)?.toInt() }.maxOrNull() ?: 0
-            val copy = "ppt/slides/slide${number + 1}.xml"
+            val copy = newSlidePart(pkg)
             pkg.putBytes(copy, pkg.bytes(part) ?: error("Missing slide part"))
             val rels = pkg.relsPartOf(part)
             if (pkg.has(rels)) {
@@ -271,17 +281,55 @@ class PptxEditor(private val source: File) {
                 // the copy has no notes of its own
                 pkg.relationships(copy).filter { it.type.endsWith("/notesSlide") }.forEach { pkg.removeRelationship(copy, it.id) }
             }
-            pkg.ensureOverride(copy, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml")
-            val rid = pkg.addRelationship(presentationPart, REL_SLIDE, "slides/slide${number + 1}.xml")
-            val list = slideIds(pkg)
-            val ids = list.childrenNamed(P, "sldId")
-            val nextId = maxOf(255L, ids.maxOfOrNull { it.num("id") } ?: 255L) + 1
-            val entry = newElement(P, "sldId").apply { addAttribute("id", nextId.toString()); addAttribute(QName("id", R), rid) }
-            val content = list.content() as MutableList<Any?>
-            content.add(content.indexOf(ids[slideIndex]) + 1, entry)
-            result = slideIndex + 1
+            result = listSlide(pkg, copy, slideIndex + 1)
         }
         return if (ok) result else -1
+    }
+
+    /**
+     * Adds an empty slide after [afterIndex] (-1: first), on the master's "blank" layout when it
+     * has one, else on the layout of the slide before it. Returns the new slide's index.
+     */
+    fun addBlankSlide(afterIndex: Int): Int {
+        var result = -1
+        val ok = queue { pkg ->
+            val count = slideIds(pkg).childrenNamed(P, "sldId").size
+            require(afterIndex in -1 until count) { "Slide index out of range" }
+            val near = part(pkg, afterIndex.coerceAtLeast(0).coerceAtMost(count - 1))
+            val layoutType = "${R.uRI}/slideLayout"
+            val nearLayout = pkg.relationships(near).firstOrNull { it.type == layoutType && it.targetMode != "External" }
+                ?.let { pkg.resolveTarget(near, it.target) } ?: error("The slide has no layout")
+            // the blank layout of the same master
+            val master = pkg.relationships(nearLayout).firstOrNull { it.type == "${R.uRI}/slideMaster" }?.let { pkg.resolveTarget(nearLayout, it.target) }
+            val blank = master?.let { m ->
+                pkg.relationships(m).filter { it.type == layoutType }.map { pkg.resolveTarget(m, it.target) }
+                    .firstOrNull { pkg.xml(it).rootElement?.attributeValue("type") == "blank" }
+            }
+            val layout = blank ?: nearLayout
+            val slide = newSlidePart(pkg)
+            pkg.putBytes(slide, BLANK_SLIDE.toByteArray(Charsets.UTF_8))
+            pkg.addRelationship(slide, layoutType, "../slideLayouts/" + layout.substringAfterLast('/'))
+            result = listSlide(pkg, slide, afterIndex + 1)
+        }
+        return if (ok) result else -1
+    }
+
+    private fun newSlidePart(pkg: OoxmlPackage): String {
+        val number = pkg.partNames().mapNotNull { Regex("ppt/slides/slide(\\d+)\\.xml").matchEntire(it)?.groupValues?.get(1)?.toInt() }.maxOrNull() ?: 0
+        return "ppt/slides/slide${number + 1}.xml"
+    }
+
+    /** Registers the slide part [slide] and puts it at [index] in the slide list. */
+    private fun listSlide(pkg: OoxmlPackage, slide: String, index: Int): Int {
+        pkg.ensureOverride(slide, "application/vnd.openxmlformats-officedocument.presentationml.slide+xml")
+        val rid = pkg.addRelationship(presentationPart, REL_SLIDE, "slides/" + slide.substringAfterLast('/'))
+        val list = slideIds(pkg)
+        val ids = list.childrenNamed(P, "sldId")
+        val nextId = maxOf(255L, ids.maxOfOrNull { it.num("id") } ?: 255L) + 1
+        val entry = newElement(P, "sldId").apply { addAttribute("id", nextId.toString()); addAttribute(QName("id", R), rid) }
+        val content = list.content() as MutableList<Any?>
+        if (index <= 0) content.add(content.indexOf(ids.first()), entry) else content.add(content.indexOf(ids[index - 1]) + 1, entry)
+        return index
     }
 
     /** Moves a slide to [to] (index in the list after removing it from [from]). */

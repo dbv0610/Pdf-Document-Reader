@@ -54,6 +54,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("↓") { move(0, 1) },
             button("⟳ 90°") { if (shapeId < 0) toast("Chọn shape trước") else rotate((this@SlideEditPanel.overlay.shapeRotation + 90f) % 360f) },
             button("Xóa", color = 0xFFC00000.toInt()) { delete() },
+            button("+ Slide trống") { slideOp("thêm") { session.addBlankSlide(slide()) } },
             button("⧉ Nhân bản slide") { slideOp("nhân bản") { session.duplicateSlide(slide()) } },
             button("Slide ↑") { slideOp("di chuyển") { slide() > 0 && session.moveSlide(slide(), slide() - 1) } },
             button("Slide ↓") { slideOp("di chuyển") { slide() < session.slideCount() - 1 && session.moveSlide(slide(), slide() + 1) } },

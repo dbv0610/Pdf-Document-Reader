@@ -39,4 +39,29 @@ class PptxSlidesTest {
             assertEquals(10, reader.state.value.pageCount)
         }
     }
+
+    @Test
+    fun addBlankSlide() {
+        val source = OpenDocument.copySample("ppt2.pptx", "slides_blank_source.pptx")
+        val saved = OpenDocument.output("slides_blank_saved.pptx")
+        val editor = PptxEditor(source)
+        val count = editor.slideCount()
+        val first = title(editor, 0)
+        assertEquals(1, editor.addBlankSlide(0))
+        assertEquals(0, editor.addBlankSlide(-1))
+        assertEquals(count + 2, editor.slideCount())
+        assertTrue("new slides are empty", editor.listShapes(0).isEmpty() && editor.listShapes(2).isEmpty())
+        assertEquals(first, title(editor, 1))
+        // a box on the new slide
+        assertTrue(editor.addTextBox(2, com.wxiwei.office.editor.pptx.Rect(914400, 914400, 4572000, 914400), "Slide mới", 28f) > 0)
+        val result = editor.save(saved)
+        assertTrue(result.toString(), result is EditResult.Ok)
+        val reread = PptxEditor(saved)
+        assertEquals(count + 2, reread.slideCount())
+        assertEquals("Slide mới", title(reread, 2))
+        OpenDocument.open(saved, { it.pageCount >= count + 2 }) { reader ->
+            assertEquals(count + 2, reader.state.value.pageCount)
+        }
+    }
 }
+
