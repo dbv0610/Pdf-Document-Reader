@@ -81,6 +81,13 @@ class OfficeDocumentView @JvmOverloads constructor(
             reader?.onOpenFailure = value
         }
 
+    /** Touch gestures on the document, see [OfficeReader.onDocumentGesture]. */
+    var onDocumentGesture: ((type: Byte, event: MotionEvent) -> Boolean)? = null
+        set(value) {
+            field = value
+            reader?.onDocumentGesture = value
+        }
+
     /** Action hook; return true to consume the action. May be called off the main thread. */
     var onAction: ((actionID: Int, obj: Any?) -> Boolean)? = null
         set(value) {

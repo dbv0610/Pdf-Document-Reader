@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="edit_document">Sửa tài liệu</string>
+    <string name="edit_not_supported">Chỉ sửa được tệp .docx, .xlsx và .pptx</string>
+    <string name="edit_not_ready">Đợi tài liệu mở xong rồi thử lại</string>
+</resources>

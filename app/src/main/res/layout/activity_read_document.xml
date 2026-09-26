@@ -60,6 +60,15 @@
                     tools:ignore="RtlSymmetry" />
 
                 <ImageView
+                    android:id="@+id/icEditApp"
+                    android:layout_width="@dimen/_22sdp"
+                    android:layout_height="@dimen/_22sdp"
+                    android:contentDescription="@string/edit_document"
+                    android:padding="@dimen/_2sdp"
+                    android:src="@drawable/ic_app_edit"
+                    android:visibility="gone" />
+
+                <ImageView
                     android:id="@+id/icSearchApp"
                     android:layout_width="@dimen/_22sdp"
                     android:layout_height="@dimen/_22sdp"
@@ -161,6 +170,7 @@
             android:id="@+id/officeViewer"
             android:layout_width="0dp"
             android:layout_height="0dp"
+            app:odv_wordPageSpacing="16dp"
             android:layout_marginTop="@dimen/_6sdp"
             android:background="@color/background_secondary"
             app:odv_pageBackground="@color/reader_viewer_bg"
@@ -168,6 +178,15 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <FrameLayout
+            android:id="@+id/editPanel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
 
         <com.ui.baselib.widget.view.UiTextView
             android:id="@+id/txtNumberPage"

@@ -68,6 +68,12 @@ class OfficeReader(
      */
     var onAction: ((actionID: Int, obj: Any?) -> Boolean)? = null
 
+    /**
+     * Touch gestures on the document ([IMainFrame.ON_SINGLE_TAP_CONFIRMED], [IMainFrame.ON_LONG_PRESS]...),
+     * e.g. for an editor's selection; return true to consume. Main thread.
+     */
+    var onDocumentGesture: ((type: Byte, event: android.view.MotionEvent) -> Boolean)? = null
+
     /** The underlying control, for APIs this class does not wrap; null before [open] or after release. */
     var control: MainControl? = null
         private set
@@ -327,6 +333,12 @@ class OfficeReader(
     override fun completeLayout(info: LayoutInfo) {
         _state.update { it.copy(layout = info, pageNumber = info.pageNumber) }
         syncPageCount(reloaded = true)
+    }
+
+    override fun onEventMethod(v: View?, e1: android.view.MotionEvent?, e2: android.view.MotionEvent?,
+                               xValue: Float, yValue: Float, eventMethodType: Byte): Boolean {
+        val event = e1 ?: return false
+        return onDocumentGesture?.invoke(eventMethodType, event) ?: false
     }
 
     override fun isShowTXTEncodeDlg(): Boolean = config.showTxtEncodeDialog

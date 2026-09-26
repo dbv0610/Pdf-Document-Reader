@@ -29,6 +29,10 @@ import com.alf06.document.reader.ui.dialog.FileOptionsBottomSheet
 import com.alf06.document.reader.ui.dialog.OpenFileErrorDialog
 import com.alf06.document.reader.ui.dialog.RenameFileDialog
 import com.alf06.document.reader.ui.home.document.layoutThumbnailStrip
+import com.alf06.document.reader.ui.home.document.office.edit.ExcelEditPanel
+import com.alf06.document.reader.ui.home.document.office.edit.OfficeEditPanel
+import com.alf06.document.reader.ui.home.document.office.edit.SlideEditPanel
+import com.alf06.document.reader.ui.home.document.office.edit.WordEditPanel
 import com.alf06.document.reader.viewmodel.DocumentViewModel
 import com.ui.baselib.api.parcelable
 import com.ui.baselib.base.BaseActivity
@@ -84,6 +88,7 @@ class ReadDocumentActivity :
     private var passwordDialog: DocumentPasswordDialog? = null
 
     private var reader: OfficeDocumentView? = null
+    private var editPanel: OfficeEditPanel? = null
 
     private var search: DocumentSearch? = null
     private var searchJob: Job? = null
@@ -195,9 +200,15 @@ class ReadDocumentActivity :
             progressLoad.isVisible = state == PageViewType.Thumbnail && opening
         }
         renderSearchState()
+        // editing: .docx / .xlsx / .pptx once the document is open
+        collectFlow(reader.state.map { it.status == ReaderState.Status.Ready }.distinctUntilChanged()) { ready ->
+            icEditApp.isVisible = ready && File(document.path).extension.lowercase() in EDITABLE_EXTENSIONS
+            if (!ready) closeEditPanel()
+        }
     }
 
     override fun ActivityReadDocumentBinding.onClick() {
+        icEditApp.click { toggleEditPanel() }
         icBackApp.click { backPressed() }
         icSearchApp.click {
             lnHeaderDef.gone()
@@ -215,11 +226,57 @@ class ReadDocumentActivity :
     }
 
     override fun backPressed() {
+        if (editPanel != null) {
+            closeEditPanel()
+            return
+        }
         if (binding.lnSearchData.isVisible) {
             closeSearch()
             return
         }
         finish()
+    }
+
+    private fun toggleEditPanel() {
+        if (editPanel != null) {
+            closeEditPanel()
+            return
+        }
+        val reader = reader ?: return
+        val file = File(document?.path ?: return)
+        if (reader.state.value.status != ReaderState.Status.Ready || reader.control == null) {
+            toast(R.string.edit_not_ready)
+            return
+        }
+        val panel = try {
+            when (file.extension.lowercase()) {
+                "xlsx", "xlsm" -> ExcelEditPanel(this, reader, file)
+                "pptx" -> SlideEditPanel(this, reader, file)
+                "docx" -> WordEditPanel(this, reader, file)
+                else -> null
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Edit error: ${e.message}")
+            null
+        } ?: run {
+            toast(R.string.edit_not_supported)
+            return
+        }
+        editPanel = panel
+        binding.editPanel.removeAllViews()
+        binding.editPanel.addView(panel.view)
+        binding.editPanel.visible()
+        binding.icEditApp.alpha = 0.5f
+    }
+
+    private fun closeEditPanel() {
+        val panel = editPanel ?: return
+        panel.close()
+        editPanel = null
+        hideKeyboard()
+        binding.editPanel.removeAllViews()
+        binding.editPanel.gone()
+        binding.icEditApp.alpha = 1f
     }
 
     private fun showFileOptions() {
@@ -457,6 +514,8 @@ class ReadDocumentActivity :
     }
 
     override fun onDestroy() {
+        editPanel?.close()
+        editPanel = null
         if (loadingDialogLazy.isInitialized()) loadingDialog.dismiss()
         passwordDialog?.setOnDismissListener(null)
         passwordDialog?.dismiss()
@@ -480,6 +539,7 @@ class ReadDocumentActivity :
         private const val STATE_DOCUMENT = "state_document"
         private const val DISABLED_ALPHA = 0.3f
         private const val MAX_SLIDE_WIDTH = 1920
+        private val EDITABLE_EXTENSIONS = setOf("docx", "xlsx", "xlsm", "pptx")
         private val PASSWORD_EXTENSIONS = setOf(
             "docx", "dotx", "dotm", "xlsx", "xltx", "xltm", "xlsm", "xls", "xlt",
             "pptx", "pptm", "potx", "potm"
