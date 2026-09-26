@@ -198,12 +198,19 @@ class ReadDocumentEditTest {
             inject(android.view.MotionEvent.ACTION_UP, screen[0] + 120, screen[1], start)
             Thread.sleep(1000)
             screenshot("slide_dragged")
+            // rotate a quarter turn with the toolbar
+            scenario.onActivity { a ->
+                val panel = a.findViewById<ViewGroup>(R.id.editPanel)
+                find<TextView>(panel) { it is TextView && it.text.toString() == "⟳ 90°" }!!.performClick()
+            }
+            screenshot("slide_rotated")
             scenario.onActivity { a ->
                 val panel = a.findViewById<ViewGroup>(R.id.editPanel)
                 find<TextView>(panel) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
             }
             Thread.sleep(1500)
         }
+        assertEquals(90f, com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0).first { it.id == expected.id }.rotationDeg, 0.01f)
         val after = com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0).first { it.id == expected.id }.rectEmu
         assertTrue("moved right: ${expected.rectEmu} -> $after", after.x > expected.rectEmu.x)
         assertEquals(expected.rectEmu.y, after.y)

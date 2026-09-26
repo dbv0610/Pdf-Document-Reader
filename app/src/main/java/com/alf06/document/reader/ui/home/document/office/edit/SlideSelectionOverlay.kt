@@ -30,6 +30,15 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
             refresh()
         }
 
+    /** Clockwise rotation of the selected shape in degrees; rotated frames only move and rotate. */
+    var shapeRotation = 0f
+        set(value) {
+            field = value
+            invalidate()
+        }
+    /** Final rotation after dragging the rotate handle, in degrees. */
+    var onRotate: ((Float) -> Unit)? = null
+
     /** Corner handles keep the width/height ratio (pictures). */
     var keepAspect = false
     /** A tap inside the frame (no drag), in screen coordinates. */
@@ -45,6 +54,7 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
     private var downX = 0f
     private var downY = 0f
     private val start = RectF()
+    private var angle = 0f // rotation shown while dragging the rotate handle
     private val touchSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop
     private var visible = false
     private val density = context.resources.displayMetrics.density
@@ -102,17 +112,31 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
         return ys.indices.flatMap { j -> xs.indices.filter { i -> !(i == 1 && j == 1) }.map { i -> xs[i] to ys[j] } }
     }
 
+    private val rotateGap get() = 28 * density
+
+    /** [x], [y] in the frame's unrotated coordinates. */
+    private fun local(x: Float, y: Float): Pair<Float, Float> {
+        if (shapeRotation == 0f) return x to y
+        val a = Math.toRadians(-shapeRotation.toDouble())
+        val dx = x - frame.centerX(); val dy = y - frame.centerY()
+        return (frame.centerX() + dx * Math.cos(a) - dy * Math.sin(a)).toFloat() to (frame.centerY() + dx * Math.sin(a) + dy * Math.cos(a)).toFloat()
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
         when (event.actionMasked) {
             android.view.MotionEvent.ACTION_DOWN -> {
                 if (!visible || event.pointerCount > 1) return false
+                val (lx, ly) = local(event.x, event.y)
                 // handle reach shrinks on small frames so their middle still moves the shape
                 val grab = (minOf(frame.width(), frame.height()) / 3).coerceIn(6 * density, 16 * density)
-                handle = handles(frame).withIndex()
-                    .map { (i, h) -> i to Math.hypot((event.x - h.first).toDouble(), (event.y - h.second).toDouble()) }
-                    .filter { it.second <= grab }.minByOrNull { it.second }?.first ?: -1
-                if (handle < 0 && !RectF(frame).apply { inset(-grab / 2, -grab / 2) }.contains(event.x, event.y)) return false
+                val reach = { hx: Float, hy: Float -> Math.hypot((lx - hx).toDouble(), (ly - hy).toDouble()) }
+                handle = if (reach(frame.centerX(), frame.top - rotateGap) <= 16 * density) ROTATE
+                    else if (shapeRotation != 0f) -1
+                    else handles(frame).withIndex().map { (i, h) -> i to reach(h.first, h.second) }
+                        .filter { it.second <= grab }.minByOrNull { it.second }?.first ?: -1
+                if (handle < 0 && !RectF(frame).apply { inset(-grab / 2, -grab / 2) }.contains(lx, ly)) return false
+                angle = shapeRotation
                 dragging = true; moved = false
                 downX = event.x; downY = event.y
                 start.set(frame)
@@ -124,7 +148,13 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
                 val dx = event.x - downX; val dy = event.y - downY
                 if (!moved && Math.hypot(dx.toDouble(), dy.toDouble()) < touchSlop) return true
                 moved = true
-                frame.set(dragged(dx, dy))
+                if (handle == ROTATE) {
+                    // the handle points from the centre to the finger; snap to 15° steps within 4°
+                    var a = Math.toDegrees(Math.atan2((event.x - frame.centerX()).toDouble(), (frame.centerY() - event.y).toDouble())).toFloat()
+                    a = (a + 360f) % 360f
+                    val snap = Math.round(a / 15f) * 15f
+                    angle = if (Math.abs(a - snap) < 4f) snap % 360f else a
+                } else frame.set(dragged(dx, dy))
                 invalidate()
                 return true
             }
@@ -133,6 +163,7 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
                 dragging = false
                 val rect = selection
                 if (!moved) onTap?.invoke(event.rawX, event.rawY)
+                else if (handle == ROTATE) onRotate?.invoke(angle)
                 else if (rect != null && start.width() > 0 && start.height() > 0) {
                     // back to EMU with the frame's own scale
                     val sx = rect.width / start.width().toDouble(); val sy = rect.height / start.height().toDouble()
@@ -182,11 +213,24 @@ internal class SlideSelectionOverlay(context: Context, private val presentation:
 
     override fun onDraw(canvas: Canvas) {
         if (!visible) return
+        val shown = if (dragging && handle == ROTATE) angle else shapeRotation
+        canvas.save()
+        canvas.rotate(shown, frame.centerX(), frame.centerY())
         canvas.drawRect(frame, line)
         val r = 4.5f * density
-        for ((x, y) in handles(frame)) {
+        if (shown == 0f && !(dragging && handle == ROTATE)) for ((x, y) in handles(frame)) {
             canvas.drawCircle(x, y, r, handleFill)
             canvas.drawCircle(x, y, r, handleStroke)
         }
+        val ry = frame.top - rotateGap
+        canvas.drawLine(frame.centerX(), frame.top, frame.centerX(), ry, handleStroke)
+        canvas.drawCircle(frame.centerX(), ry, r * 1.4f, handleFill)
+        canvas.drawCircle(frame.centerX(), ry, r * 1.4f, handleStroke)
+        canvas.drawArc(frame.centerX() - r * 0.8f, ry - r * 0.8f, frame.centerX() + r * 0.8f, ry + r * 0.8f, -60f, 270f, false, handleStroke)
+        canvas.restore()
+    }
+
+    private companion object {
+        const val ROTATE = 8
     }
 }

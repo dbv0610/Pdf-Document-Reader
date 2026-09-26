@@ -51,6 +51,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("→") { move(1, 0) },
             button("↑") { move(0, -1) },
             button("↓") { move(0, 1) },
+            button("⟳ 90°") { if (shapeId < 0) toast("Chọn shape trước") else rotate((this@SlideEditPanel.overlay.shapeRotation + 90f) % 360f) },
             button("Xóa", color = 0xFFC00000.toInt()) { delete() },
             button("⧉ Nhân bản slide") { slideOp("nhân bản") { session.duplicateSlide(slide()) } },
             button("Slide ↑") { slideOp("di chuyển") { slide() > 0 && session.moveSlide(slide(), slide() - 1) } },
@@ -72,6 +73,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         }
         overlay.onTap = { x, y -> tapAt(x, y) }
         overlay.onChange = { r -> setRect(r) }
+        overlay.onRotate = { deg -> rotate(deg) }
     }
 
     /** Selects the top shape under a screen point, or clears the selection. */
@@ -96,6 +98,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         if (shapeId < 0) return
         val s = session.listShapes(slide()).firstOrNull { it.id == shapeId }
         rect = s?.rectEmu
+        overlay.shapeRotation = s?.rotationDeg ?: 0f
         overlay.selection = rect
         if (s == null) select(null)
     }
@@ -109,6 +112,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         shapeId = s?.id ?: -1
         rect = s?.rectEmu
         overlay.keepAspect = s?.kind == ShapeKind.PICTURE
+        overlay.shapeRotation = s?.rotationDeg ?: 0f
         overlay.slideIndex = slide()
         overlay.selection = rect
         selected.text = s?.let { describe(it) } ?: "Chưa chọn shape"
@@ -147,6 +151,15 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         val size = session.slideSizeEmu()
         val step = maxOf(size.width, size.height) / 100 // 1% of the slide per tap
         setRect(Rect(r.x + dx * step, r.y + dy * step, r.width, r.height))
+    }
+
+    private fun rotate(degrees: Float) {
+        if (shapeId < 0) return
+        if (!session.rotateShape(slide(), shapeId, degrees)) toast(session.lastError?.message ?: "Không xoay được")
+        else {
+            overlay.shapeRotation = degrees
+            reopenHint()
+        }
     }
 
     /** Moves or resizes the selected shape. */

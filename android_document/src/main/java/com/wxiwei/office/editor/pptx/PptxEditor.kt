@@ -20,8 +20,9 @@ data class TextFormat(
     val sizePt: Float? = null, val rgbHex: String? = null, val align: String? = null,
 )
 
+/** [rotationDeg]: clockwise rotation of the shape's own xfrm (group rotation not included). */
 data class PptxShapeInfo(val id: Int, val name: String, val kind: ShapeKind, val rectEmu: Rect,
-                         val text: String, val isPlaceholder: Boolean)
+                         val text: String, val isPlaceholder: Boolean, val rotationDeg: Float = 0f)
 
 /**
  * Zero-based presentation order, including show="0" slides: PPTXReader.processSlide does not
@@ -134,7 +135,8 @@ class PptxEditor(private val source: File) {
                 "graphicFrame" -> if (descendants(e).any { it.namespaceURI == A.uRI && it.name == "tbl" }) ShapeKind.TABLE else ShapeKind.OTHER
                 else -> ShapeKind.OTHER
             }, t.map(rect(xfrm(e)) ?: inherited(pkg, part, e) ?: Rect(0, 0, 0, 0)),
-                descendants(e).filter { it.namespaceURI == A.uRI && it.name == "p" }.joinToString("\n") { p -> descendants(p).filter { it.namespaceURI == A.uRI && it.name in listOf("t", "br") }.joinToString("") { if (it.name == "br") "\n" else it.text ?: "" } }, placeholder(e) != null)
+                descendants(e).filter { it.namespaceURI == A.uRI && it.name == "p" }.joinToString("\n") { p -> descendants(p).filter { it.namespaceURI == A.uRI && it.name in listOf("t", "br") }.joinToString("") { if (it.name == "br") "\n" else it.text ?: "" } }, placeholder(e) != null,
+                (xfrm(e)?.num("rot") ?: 0L) / 60000f)
         }
     }
     private fun nextId(index: Int): Int = read(-1) { pkg ->
@@ -295,7 +297,26 @@ class PptxEditor(private val source: File) {
         if (to >= rest.size) content.add(content.indexOf(rest.last()) + 1, entry) else content.add(content.indexOf(rest[to]), entry)
     }
 
-    fun moveShape(slideIndex: Int, shapeId: Int, rectEmu: Rect): Boolean = queue { pkg ->
+    fun moveShape(slideIndex: Int, shapeId: Int, rectEmu: Rect): Boolean = queue { pkg -> placeXfrm(pkg, slideIndex, shapeId, rectEmu) }
+
+    /**
+     * Sets the clockwise rotation in degrees (any value, stored in [0, 360)). A placeholder that
+     * inherits its position gets its own xfrm first.
+     */
+    fun rotateShape(slideIndex: Int, shapeId: Int, degrees: Float): Boolean = queue { pkg ->
+        require(degrees.isFinite()) { "Invalid rotation" }
+        val e = find(pkg, slideIndex, shapeId).first
+        if (xfrm(e)?.firstChild(A, "off") == null) {
+            val r = inherited(pkg, part(pkg, slideIndex), e) ?: throw IllegalArgumentException("Shape has no position")
+            placeXfrm(pkg, slideIndex, shapeId, r) // inherited rects are slide coordinates
+        }
+        val x = xfrm(e)!!
+        val rot = Math.round(((degrees % 360f + 360f) % 360f) * 60000.0) % 21_600_000L
+        x.attribute("rot")?.let { x.remove(it) }
+        if (rot != 0L) x.addAttribute("rot", rot.toString())
+    }
+
+    private fun placeXfrm(pkg: OoxmlPackage, slideIndex: Int, shapeId: Int, rectEmu: Rect) {
         val (e, t) = find(pkg, slideIndex, shapeId)
         val r = t.inverse(rectEmu)
         val parent = when (e.name) { "grpSp" -> e.firstChild(P, "grpSpPr") ?: e.child(P, "grpSpPr"); "graphicFrame" -> e; else -> e.firstChild(P, "spPr") ?: e.child(P, "spPr") }

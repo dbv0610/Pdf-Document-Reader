@@ -304,7 +304,7 @@ open class SlideDrawKit {
                 shape.element = elem
             }
         }
-//        processRotation(canvas, shape, zoom);
+        processRotation(canvas, shape, zoom)
         if (root == null) {
             doc = pgModel.getRenderersDoc()
             doc!!.appendSection(elem)

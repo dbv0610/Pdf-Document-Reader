@@ -31,6 +31,7 @@ class PptxEditSessionTest {
         var titleId = -1
         var pictureId = -1
         var pictureRect: Rect? = null
+        var addedId = -1
         OpenDocument.open(source, { it.pageCount >= 10 }) { reader ->
             val session = onMain { LivePptxSession(reader.control!!, source) }
             val shapes = onMain { session.listShapes(1) }
@@ -44,6 +45,13 @@ class PptxEditSessionTest {
             assertTrue(session.lastError?.toString(), onMain { session.moveShape(1, picture.id, pictureRect!!) })
             val added = onMain { session.addTextBox(1, Rect(914400, 914400, 4572000, 914400), "Hộp mới", 32f, "C00000", true) }
             assertTrue(session.lastError?.toString(), added > 0)
+            // rotate the new box, undo, redo: live model and file follow
+            assertTrue(session.lastError?.toString(), onMain { session.rotateShape(1, added, 30f) })
+            val live = { onMain { (reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation).getSlide(1)!!.getShapes().filter { it.shapeID == added }.map { it.rotation } } }
+            assertEquals(listOf(30f), live().distinct())
+            assertTrue(onMain { session.undo() }); assertEquals(listOf(0f), live().distinct())
+            assertTrue(onMain { session.redo() }); assertEquals(listOf(30f), live().distinct())
+            addedId = added
             val temp = onMain { session.addTextBox(1, Rect(0, 0, 914400, 914400), "tạm", 20f) }
             assertTrue(onMain { session.undo() }) // removes "tạm"
             // format the title: bold, red, 60pt, right aligned; undo and redo
@@ -61,6 +69,7 @@ class PptxEditSessionTest {
         assertEquals("LỘ TRÌNH ĐÃ SỬA", after.first { it.id == titleId }.text)
         assertEquals(pictureRect, after.first { it.id == pictureId }.rectEmu)
         assertTrue(after.any { it.text == "Hộp mới" })
+        assertEquals(30f, after.first { it.id == addedId }.rotationDeg, 0.001f)
         assertTrue("undone box not saved", after.none { it.text == "tạm" })
         // the saved title runs carry the format
         val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide2.xml")).readBytes().toString(Charsets.UTF_8) }

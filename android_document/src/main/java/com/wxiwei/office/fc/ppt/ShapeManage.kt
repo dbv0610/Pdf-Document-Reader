@@ -373,6 +373,8 @@ class ShapeManage {
                 tb.bounds = rect
                 tb.placeHolderID = placeHolderID
                 tb.shapeID = id
+                // the text turns with its shape (xfrm rot)
+                ReaderKit.instance().processRotation(sp.element("spPr"), tb)
                 // 建立章节
                 val secElem = SectionElement()
                 // 开始Offset

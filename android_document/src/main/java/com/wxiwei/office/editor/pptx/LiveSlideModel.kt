@@ -39,6 +39,9 @@ interface LiveSlideDisplay {
     fun removeShape(slideIndex: Int, id: Int): Any?
     fun restoreShape(slideIndex: Int, token: Any): Boolean
     /** Formats the shape's text; returns a token for [restoreFormat], or null when not shown live. */
+    /** Rotation in degrees of the shape, or null when it cannot be shown live. */
+    fun shapeRotation(slideIndex: Int, id: Int): Float? = null
+    fun rotateShape(slideIndex: Int, id: Int, degrees: Float): Boolean = false
     fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? = null
     fun restoreFormat(slideIndex: Int, token: Any): Boolean = false
 }
@@ -247,6 +250,21 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
                 shape.rootView = null
             }
         }
+        repaint()
+        return true
+    }
+
+    override fun shapeRotation(slideIndex: Int, id: Int): Float? {
+        val shape = slide(slideIndex)?.let { find(it, id) }?.firstOrNull() ?: return null
+        return if (shape is GroupShape) null else shape.rotation
+    }
+
+    // groups are not rotated live: their children carry their own drawing rotation
+    override fun rotateShape(slideIndex: Int, id: Int, degrees: Float): Boolean {
+        val shapes = slide(slideIndex)?.let { find(it, id) } ?: return false
+        if (shapes.isEmpty() || shapes.any { it is GroupShape }) return false
+        val normalized = (degrees % 360f + 360f) % 360f
+        shapes.forEach { it.rotation = normalized }
         repaint()
         return true
     }

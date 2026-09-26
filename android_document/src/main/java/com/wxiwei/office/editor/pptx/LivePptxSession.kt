@@ -114,6 +114,16 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         return true
     }
 
+    /** Sets the clockwise rotation of a shape in degrees. */
+    fun rotateShape(slideIndex: Int, shapeId: Int, degrees: Float): Boolean {
+        val old = display.shapeRotation(slideIndex, shapeId) ?: listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rotationDeg ?: 0f
+        if (!editor.rotateShape(slideIndex, shapeId, degrees)) return false
+        val show = { display.rotateShape(slideIndex, shapeId, degrees) }
+        live(show())
+        record({ editor.rotateShape(slideIndex, shapeId, degrees) }, show) { display.rotateShape(slideIndex, shapeId, old) }
+        return true
+    }
+
     fun deleteShape(slideIndex: Int, shapeId: Int): Boolean {
         if (!editor.deleteShape(slideIndex, shapeId)) return false
         var token = display.removeShape(slideIndex, shapeId)
