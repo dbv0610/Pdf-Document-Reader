@@ -149,7 +149,7 @@ open class MainControl(frameValue: IMainFrame?) : AbstractControl() {
                 OpenTrace.e("view has zero size class=${view.javaClass.name} size=${view.width}x${view.height}")
             }
         }
-        PictureKit.instance().setDrawPictrue(true)
+        PictureKit.instance().isDrawPictrue = true
         // TODO(coroutine): preserve delayed hardware-layer and initialization work on the main dispatcher.
         handler.post {
             OpenTrace.mark("createApplication.initEvent.begin", start)

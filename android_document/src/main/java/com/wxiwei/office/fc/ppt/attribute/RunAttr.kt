@@ -72,7 +72,7 @@ class RunAttr {
         var leaf: LeafElement? = null
         var pPr = p.element("pPr")
         // 如果没有 r 元素，说明只有一个回车符的段落
-        if (p.elements("r").size == 0 && p.elements("fld").size == 0 && p.elements("br").size == 0) {
+        if (p.elements("r")!!.size == 0 && p.elements("fld")!!.size == 0 && p.elements("br")!!.size == 0) {
             leaf = LeafElement("\n")
             // 属性
             if (pPr != null) {
@@ -101,14 +101,13 @@ class RunAttr {
             return offset
         }
         val it = p.elementIterator()
-        while (it.hasNext()) {
-            val r = it.next() as Element
-            val name = r.getName()
+        while (it!!.hasNext()) {
+            val r = it!!.next() as Element
+            val name = r.name
             if (name == "r" || name == "fld" || name == "br") {
                 var text: String? = null
                 if (name == "fld"
-                    && r.attributeValue("type") != null && r.attributeValue("type")
-                        .contains("datetime")
+                    && r.attributeValue("type") != null && r.attributeValue("type")!!.contains("datetime")
                 ) {
                     //field code : current time
                     text = NumericFormatter.instance()
@@ -321,7 +320,7 @@ class RunAttr {
                     if (temp == null) {
                         temp = rPr.element("ea")
                     }
-                    `val` = temp.attributeValue("typeface")
+                    `val` = temp!!.attributeValue("typeface")
                     if (`val` != null) {
                         val index = FontTypefaceManage.instance().addFontName(`val`)
                         if (index >= 0) {
@@ -490,20 +489,20 @@ class RunAttr {
         var color = -1
         val `val`: String
         if (clr.attributeValue("indexed") != null) {
-            `val` = clr.attributeValue("indexed")
+            `val` = clr.attributeValue("indexed")!!
             color = book.getColor(`val`.toInt())
         } else if (clr.attributeValue("theme") != null) {
-            `val` = clr.attributeValue("theme")
+            `val` = clr.attributeValue("theme")!!
             //get scheme color
             color = SchemeColorUtil.getThemeColor(book, `val`.toInt())
         } else if (clr.attributeValue("rgb") != null) {
-            `val` = clr.attributeValue("rgb")
+            `val` = clr.attributeValue("rgb")!!
             //get system color
             color = `val`.toLong(16).toInt()
         }
 
         if (clr.attributeValue("tint") != null) {
-            val tint = clr.attributeValue("tint").toDouble()
+            val tint = clr.attributeValue("tint")!!.toDouble()
             color = ColorUtil.instance().getColorWithTint(color, tint)
         }
 
@@ -521,11 +520,11 @@ class RunAttr {
         val clr: Element
         var color = -1
         if (solidFillElement.element("srgbClr") != null) {
-            clr = solidFillElement.element("srgbClr")
-            color = clr.attributeValue("val").toLong(16).toInt()
+            clr = solidFillElement.element("srgbClr")!!
+            color = clr.attributeValue("val")!!.toLong(16).toInt()
             color = (0xFF shl 24) or color
         } else if (solidFillElement.element("schemeClr") != null) {
-            clr = solidFillElement.element("schemeClr")
+            clr = solidFillElement.element("schemeClr")!!
             //get scheme color
             val schemeColor = SchemeColorUtil.getSchemeColor(book!!)
             color = schemeColor.get(clr.attributeValue("val"))!!
@@ -533,36 +532,36 @@ class RunAttr {
             if (clr.element("tint") != null) {
                 color = ColorUtil.instance().getColorWithTint(
                     color,
-                    clr.element("tint").attributeValue("val").toInt() / 100000.0
+                    clr.element("tint")!!.attributeValue("val")!!.toInt() / 100000.0
                 )
             } else if (clr.element("lumOff") != null) {
                 color = ColorUtil.instance().getColorWithTint(
                     color,
-                    clr.element("lumOff").attributeValue("val").toInt() / 100000.0
+                    clr.element("lumOff")!!.attributeValue("val")!!.toInt() / 100000.0
                 )
             } else if (clr.element("lumMod") != null) {
                 color = ColorUtil.instance().getColorWithTint(
                     color,
-                    clr.element("lumMod").attributeValue("val").toInt() / 100000.0 - 1
+                    clr.element("lumMod")!!.attributeValue("val")!!.toInt() / 100000.0 - 1
                 )
             } else if (clr.element("shade") != null) {
                 color = ColorUtil.instance().getColorWithTint(
                     color,
-                    -clr.element("shade").attributeValue("val").toInt() / 200000.0
+                    -clr.element("shade")!!.attributeValue("val")!!.toInt() / 200000.0
                 )
             }
 
             if (clr.element("alpha") != null) {
-                `val` = clr.element("alpha").attributeValue("val")
+                `val` = clr.element("alpha")!!.attributeValue("val")
                 if (`val` != null) {
                     val alpha = (`val`.toInt() / 100000f * 255).toInt()
                     color = (0xFFFFFF and color) or (alpha shl 24)
                 }
             }
         } else if (solidFillElement.element("sysClr") != null) {
-            clr = solidFillElement.element("sysClr")
+            clr = solidFillElement.element("sysClr")!!
             //get system color
-            color = clr.attributeValue("lastClr").toInt(16)
+            color = clr.attributeValue("lastClr")!!.toInt(16)
             color = (0xFF shl 24) or color
         }
         return color

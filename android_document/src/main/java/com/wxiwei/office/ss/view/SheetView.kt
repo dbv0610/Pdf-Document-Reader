@@ -286,7 +286,7 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
      */
     fun drawRegion(sheet: Sheet, left: Int, top: Int, zoomValue: Float, canvas: Canvas) {
         synchronized(this) {
-            val b = PictureKit.instance().isDrawPictrue()
+            val b = PictureKit.instance().isDrawPictrue
             val oldScrollX = sheet.getScrollX()
             val oldScrollY = sheet.getScrollY()
             val oldZoom = sheet.getZoom()
@@ -294,7 +294,7 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             val oldClipRect = clipRect
             val canvasSave = canvas.save()
             try {
-                PictureKit.instance().setDrawPictrue(true)
+                PictureKit.instance().isDrawPictrue = true
                 this.sheet = sheet
                 scrollX = left.toFloat()
                 scrollY = top.toFloat()
@@ -315,7 +315,7 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
                     setZoom(oldSheet.getZoom(), true)
                     updateScroller(oldSheet, Math.round(scrollX), Math.round(scrollY), true)
                 } finally {
-                    PictureKit.instance().setDrawPictrue(b)
+                    PictureKit.instance().isDrawPictrue = b
                     canvas.restoreToCount(canvasSave)
                 }
             }
@@ -446,7 +446,7 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             }
         }
         for (shape in sheet.getShapes()) {
-            val b = shape.getBounds() ?: continue
+            val b = shape.bounds ?: continue
             width = maxOf(width, (b.x + b.width).toFloat())
             height = maxOf(height, (b.y + b.height).toFloat())
         }

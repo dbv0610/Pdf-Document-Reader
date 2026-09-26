@@ -73,7 +73,7 @@ class AutoShapeKit
      * @return
      */
     private fun getShapeAnimation(shape: AutoShape): IAnimation? {
-        val animation = shape.getAnimation()
+        val animation = shape.animation
         if (animation != null) {
             val shapeAnim = animation.getShapeAnimation()
             val paraBegin = shapeAnim!!.getParagraphBegin()
@@ -121,7 +121,7 @@ class AutoShapeKit
         shape: AutoShape,
         zoom: Float
     ) {
-        val shapeRect = shape.getBounds()
+        val shapeRect = requireNotNull(shape.bounds)
         val left = Math.round(shapeRect.x * zoom)
         val top = Math.round(shapeRect.y * zoom)
         val width = Math.round(shapeRect.width * zoom)
@@ -150,7 +150,7 @@ class AutoShapeKit
 
         //zoom by animation
         processShapeRect(rect, animation)
-        val type = shape.getShapeType()
+        val type = shape.shapeType
         when (type) {
             ShapeTypes.Line, ShapeTypes.StraightConnector1, ShapeTypes.BentConnector2, ShapeTypes.BentConnector3, ShapeTypes.CurvedConnector2, ShapeTypes.CurvedConnector3, ShapeTypes.CurvedConnector4, ShapeTypes.CurvedConnector5 -> {
                 if (shape is LineShape) {
@@ -176,7 +176,7 @@ class AutoShapeKit
             ShapeTypes.ArbitraryPolygon -> {
                 m.reset()
                 m.postScale(zoom, zoom)
-                val pathList = (shape as ArbitraryPolygonShape).getPaths()
+                val pathList = (shape as ArbitraryPolygonShape).paths
                 var i = 0
                 while (i < pathList.size) {
                     val extendPath = ExtendPath(pathList.get(i)!!)
@@ -191,7 +191,7 @@ class AutoShapeKit
             ShapeTypes.WP_Line, ShapeTypes.Curve, ShapeTypes.DirectPolygon -> {
                 m.reset()
                 m.postScale(zoom, zoom)
-                val pathList = (shape as WPAutoShape).getPaths()
+                val pathList = (shape as WPAutoShape).paths
 
                 val r = Rect(rect)
                 if (rect.width() == 0 || rect.height() == 0) {
@@ -430,9 +430,9 @@ class AutoShapeKit
         processCanvas(
             canvas,
             rect,
-            shape.getRotation(),
-            shape.getFlipHorizontal(),
-            shape.getFlipVertical(),
+            shape.rotation,
+            shape.flipHorizontal,
+            shape.flipVertical,
             animation
         )
 
@@ -459,8 +459,8 @@ class AutoShapeKit
         // draw border
         if (pathExtend.hasLine()) {
             paint.setStyle(Paint.Style.STROKE)
-            paint.setStrokeWidth(pathExtend.line!!.getLineWidth() * zoom)
-            if (pathExtend.line!!.isDash() && !pathExtend.isArrowPath) {
+            paint.setStrokeWidth(pathExtend.line!!.lineWidth * zoom)
+            if (pathExtend.line!!.isDash && !pathExtend.isArrowPath) {
                 val dashPathEffect = DashPathEffect(floatArrayOf(5 * zoom, 5 * zoom), 10f)
                 paint.setPathEffect(dashPathEffect)
             }
@@ -469,7 +469,7 @@ class AutoShapeKit
                 canvas,
                 control,
                 viewIndex,
-                pathExtend.line!!.getBackgroundAndFill(),
+                pathExtend.line!!.backgroundAndFill,
                 rect,
                 animation,
                 zoom,
@@ -544,15 +544,15 @@ class AutoShapeKit
         processCanvas(
             canvas,
             rect,
-            shape.getRotation(),
-            shape.getFlipHorizontal(),
-            shape.getFlipVertical(),
+            shape.rotation,
+            shape.flipHorizontal,
+            shape.flipVertical,
             animation
         )
 
 
         // draw fill
-        val fill = shape.getBackgroundAndFill()
+        val fill = shape.backgroundAndFill
         if (fill != null) {
             paint.setStyle(Paint.Style.FILL)
             BackgroundDrawer.drawPathBackground(
@@ -572,8 +572,8 @@ class AutoShapeKit
         if (shape.hasLine()) {
             paint.setStyle(Paint.Style.STROKE)
 
-            paint.setStrokeWidth(shape.getLine().getLineWidth() * zoom)
-            if (shape.getLine().isDash()) {
+            paint.setStrokeWidth(shape.line!!.lineWidth * zoom)
+            if (shape.line!!.isDash) {
                 val dashPathEffect = DashPathEffect(floatArrayOf(5 * zoom, 5 * zoom), 10f)
                 paint.setPathEffect(dashPathEffect)
             }
@@ -581,7 +581,7 @@ class AutoShapeKit
                 canvas,
                 control,
                 viewIndex,
-                shape.getLine().getBackgroundAndFill(),
+                shape.line!!.backgroundAndFill,
                 rect,
                 animation,
                 zoom,

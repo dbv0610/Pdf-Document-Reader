@@ -173,24 +173,24 @@ class VMLPathParser private constructor() {
     private fun processPath(autoshape: WPAutoShape?, lineWidth: Int, path: Path, command: Byte, parameters: Array<Int>) {
         var start: ArrowPathAndTail? = null
         var end: ArrowPathAndTail? = null
-        if (preNodeType == nodeTypeStart && autoshape != null && autoshape.getStartArrowhead()) {
+        if (preNodeType == nodeTypeStart && autoshape != null && autoshape.startArrowhead) {
             start = arrow(autoshape, lineWidth, command, parameters, true)
         }
-        if (currentNodeType == nodeTypeEnd && autoshape != null && autoshape.getEndArrowhead()) {
+        if (currentNodeType == nodeTypeEnd && autoshape != null && autoshape.endArrowhead) {
             end = arrow(autoshape, lineWidth, command, parameters, false)
         }
         val startTail = start?.arrowTailCenter
         if (start != null && startTail != null) {
             startArrowPath = start.arrowPath
             path.reset()
-            val position = LineArrowPathBuilder.getReferencedPosition(nextNode.x, nextNode.y, startTail.x, startTail.y, autoshape!!.getStartArrowType())
+            val position = LineArrowPathBuilder.getReferencedPosition(nextNode.x, nextNode.y, startTail.x, startTail.y, autoshape!!.startArrowType)
             path.moveTo(position.x, position.y)
         }
         val endTail = end?.arrowTailCenter
         if (end != null && endTail != null) {
             endArrowPath = end.arrowPath
             val count = parameters.size
-            val position = LineArrowPathBuilder.getReferencedPosition(parameters[count - 2].toFloat(), parameters[count - 1].toFloat(), endTail.x, endTail.y, autoshape!!.getEndArrowType())
+            val position = LineArrowPathBuilder.getReferencedPosition(parameters[count - 2].toFloat(), parameters[count - 1].toFloat(), endTail.x, endTail.y, autoshape!!.endArrowType)
             parameters[count - 2] = position.x.toInt()
             parameters[count - 1] = position.y.toInt()
         }
@@ -206,7 +206,7 @@ class VMLPathParser private constructor() {
     }
 
     private fun arrow(shape: WPAutoShape, width: Int, command: Byte, p: Array<Int>, start: Boolean): ArrowPathAndTail? {
-        val arrow = if (start) shape.getStartArrow() else shape.getEndArrow()
+        val arrow = (if (start) shape.startArrow else shape.endArrow) ?: return null
         val count = p.size
         return when (command) {
             Command_LineTo -> if (start) direct(p[0].toFloat(), p[1].toFloat(), nextNode.x, nextNode.y, arrow, width) else direct(if (count > 2) p[count - 4].toFloat() else nextNode.x, if (count > 2) p[count - 3].toFloat() else nextNode.y, p[count - 2].toFloat(), p[count - 1].toFloat(), arrow, width)

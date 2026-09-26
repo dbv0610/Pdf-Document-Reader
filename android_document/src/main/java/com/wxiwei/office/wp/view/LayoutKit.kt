@@ -172,7 +172,7 @@ class LayoutKit private constructor() {
             bnView = null
         }
         para.setSize(maxWidth, paraHeight)
-        Log.e("LayoutKit.214", "para.setEndOffset = " + lineStart)
+        para.setDecoration(AttrManage.instance().getParaDecoration(elem.getAttribute()), paraAttr.leftIndent, spanW)
         para.setEndOffset(lineStart)
         return breakType
     }

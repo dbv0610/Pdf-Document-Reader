@@ -65,49 +65,49 @@ class BNView : AbstractView() {
             if (listData == null) {
                 return breakType
             }
-            if (listData.getLinkStyleID() >= 0) {
-                val style = StyleManage.instance().getStyle(listData.getLinkStyleID().toInt())
+            if (listData.linkStyleID >= 0) {
+                val style = StyleManage.instance().getStyle(listData.linkStyleID.toInt())
                 if (style != null) {
                     val listID = AttrManage.instance().getParaListID(style.getAttrbuteSet())
                     listData = para.getControl()!!.getSysKit().getListManage().getListData(listID)
-                    if (listData == null || listData.getLevels().isEmpty()) {
+                    if (listData == null || listData.levels.isNullOrEmpty()) {
                         return breakType
                     }
                 }
             }
             leafElem = doc.getLeaf(paraElem!!.getEndOffset() - 1)
-            val listLevel = listData.getLevel(paraAttr.listLevel.toInt())
+            val listLevel = listData.getLevel(paraAttr.listLevel.toInt()) ?: return breakType
             text = com.wxiwei.office.common.bulletnumber.ListKit.instance().getBulletText(listData, listLevel, docAttr, paraAttr.listLevel.toInt())
             val preParaLevel = if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt())
-                listData.getNormalPreParaLevel() else listData.getPreParaLevel()
+                listData.normalPreParaLevel else listData.preParaLevel
             //
             if (paraAttr.listLevel < preParaLevel) {
                 // 大于当前级别的listLevel的paraCount 置 0
                 for (i in paraAttr.listLevel + 1 until 9) {
                     if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()) {
-                        listData.getLevel(i).setNormalParaCount(0)
+                        listData.getLevel(i)?.normalParaCount = 0
                     } else {
-                        listData.getLevel(i).setParaCount(0)
+                        listData.getLevel(i)?.paraCount = 0
                     }
                 }
             } else if (paraAttr.listLevel > preParaLevel) {
                 // 在当前级别与前一个级别之间的 paraCount 也需要加 1
                 for (i in preParaLevel + 1 until paraAttr.listLevel) {
-                    val temp = listData.getLevel(i)
+                    val temp = listData.getLevel(i) ?: continue
                     if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()) {
-                        temp.setNormalParaCount(temp.getNormalParaCount() + 1)
+                        temp.normalParaCount = temp.normalParaCount + 1
                     } else {
-                        temp.setParaCount(temp.getParaCount() + 1)
+                        temp.paraCount = temp.paraCount + 1
                     }
                 }
             }
             // set previous paragraph count
             if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()) {
-                listLevel.setNormalParaCount(listLevel.getNormalParaCount() + 1)
-                listData.setNormalPreParaLevel(paraAttr.listLevel)
+                listLevel.normalParaCount = listLevel.normalParaCount + 1
+                listData.normalPreParaLevel = paraAttr.listLevel
             } else {
-                listLevel.setParaCount(listLevel.getParaCount() + 1)
-                listData.setPreParaLevel(paraAttr.listLevel)
+                listLevel.paraCount = listLevel.paraCount + 1
+                listData.preParaLevel = paraAttr.listLevel
             }
             currLevel = listLevel
         }
@@ -192,7 +192,7 @@ class BNView : AbstractView() {
         paint = null
         charAttr = null
         if (currLevel != null) {
-            currLevel!!.setParaCount(currLevel!!.getParaCount() - 1)
+            currLevel!!.paraCount = currLevel!!.paraCount - 1
         }
     }
 }

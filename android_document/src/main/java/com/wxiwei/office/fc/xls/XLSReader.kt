@@ -49,8 +49,8 @@ class XLSReader(control: IControl, filePath: String) : SSReader() {
             val directory: DirectoryNode = POIFSFileSystem(input).root
             val workbookName = AWorkbook.getWorkbookDirEntryName(directory)
             val stream: InputStream = directory.createDocumentInputStream(workbookName)
-            val records: List<Record> = RecordFactory.createRecords(stream, this)
-            val workbook = InternalWorkbook.createWorkbook(records, this)
+            val records: List<Record> = RecordFactory.createRecords(stream, this) as List<Record>
+            val workbook = InternalWorkbook.createWorkbook(records as MutableList<Record>, this)
 
             var sheetIndex = 0
             while (sheetIndex < workbook.numSheets) {
@@ -62,7 +62,7 @@ class XLSReader(control: IControl, filePath: String) : SSReader() {
             val size = workbook.getSSTUniqueStringSize()
             for (i in 0 until size) {
                 checkAbortReader()
-                if (workbook.getSSTString(i).string.lowercase().contains(searchKey)) {
+                if (workbook.getSSTString(i)!!.string.lowercase().contains(searchKey)) {
                     return true
                 }
             }
@@ -78,7 +78,7 @@ class XLSReader(control: IControl, filePath: String) : SSReader() {
 
             for (i in 0 until workbook.numNames) {
                 val nameRecord: NameRecord = workbook.getNameRecord(i)
-                if (nameRecord.nameText.lowercase().contains(searchKey)) {
+                if (nameRecord.nameText?.lowercase()?.contains(searchKey) == true) {
                     return true
                 }
             }
@@ -101,10 +101,11 @@ class XLSReader(control: IControl, filePath: String) : SSReader() {
         return false
     }
 
-    private fun searchCell(cell: CellValueRecordInterface, key: String): Boolean {
+    private fun searchCell(cell: CellValueRecordInterface?, key: String): Boolean {
+        if (cell == null) return false
         val cellType = ACell.determineType(cell).toShort()
         return when (cellType.toInt()) {
-            Cell.CELL_TYPE_NUMERIC.toInt() -> (cell as NumberRecord).value.toString().contains(key)
+            Cell.CELL_TYPE_NUMERIC.toInt() -> (cell as NumberRecord).getValue().toString().contains(key)
             Cell.CELL_TYPE_STRING.toInt(), Cell.CELL_TYPE_BLANK.toInt(), Cell.CELL_TYPE_FORMULA.toInt() -> false
             Cell.CELL_TYPE_BOOLEAN.toInt() -> (cell as BoolErrRecord).booleanValue.toString().lowercase().contains(key)
             Cell.CELL_TYPE_ERROR.toInt() -> ErrorEval.getText((cell as BoolErrRecord).errorValue.toInt()).lowercase().contains(key)

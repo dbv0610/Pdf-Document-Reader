@@ -122,16 +122,16 @@ class ShapeView(sheetView: SheetView?) {
         val shapeRect = this.shapeRect!!
         canvas.save()
 
-        var bounds: Rectangle? = shape.getBounds()
+        var bounds: Rectangle? = shape.bounds
 
         //chart sheet
-        if (bounds == null && shape.getType() == AbstractShape.SHAPE_CHART) {
+        if (bounds == null && shape.type == AbstractShape.SHAPE_CHART) {
             val display = sheetView.getSpreadsheet()!!.getControl().getMainFrame()
                 .getActivity().resources.displayMetrics
             val width = Math.max(display.widthPixels, display.heightPixels)
             val height = Math.min(display.widthPixels, display.heightPixels)
             bounds = Rectangle(0, 0, Math.round(width.toFloat()), Math.round(height.toFloat()))
-            shape.setBounds(bounds)
+            shape.bounds = bounds
         }
 
         //shape rect
@@ -143,13 +143,13 @@ class ShapeView(sheetView: SheetView?) {
         }
         if (shape is GroupShape) {
             //flip vertical
-            if (shape.getFlipVertical()) {
+            if (shape.flipVertical) {
                 canvas.translate(shapeRect.left.toFloat(), shapeRect.bottom.toFloat())
                 canvas.scale(1f, -1f)
                 canvas.translate(-shapeRect.left.toFloat(), -shapeRect.top.toFloat())
             }
             //flip horizontal
-            if (shape.getFlipHorizontal()) {
+            if (shape.flipHorizontal) {
                 canvas.translate(shapeRect.right.toFloat(), shapeRect.top.toFloat())
                 canvas.scale(-1f, 1f)
                 canvas.translate(-shapeRect.left.toFloat(), -shapeRect.top.toFloat())
@@ -158,23 +158,23 @@ class ShapeView(sheetView: SheetView?) {
             val shapes = shape.getShapes()
             for (i in shapes.indices) {
                 val childShape = shapes[i]
-                if (shape.isHidden()) {
+                if (shape.isHidden) {
                     continue
                 }
                 drawShape(canvas, clip, control, shape, childShape)
             }
         } else {
-            when (shape.getType()) {
+            when (shape.type) {
                 AbstractShape.SHAPE_PICTURE -> {
                     val pictureShape = shape as PictureShape
                     processRotation(canvas, pictureShape, shapeRect)
 
                     BackgroundDrawer.drawLineAndFill(canvas, control, sheetView.getSheetIndex(), pictureShape, shapeRect, sheetView.getZoom())
 
-                    val pic = control.getSysKit().getPictureManage().getPicture(shape.getPictureIndex())
+                    val pic = control.getSysKit().getPictureManage().getPicture(shape.pictureIndex)
                     PictureKit.instance().drawPicture(
                         canvas, sheetView.getSpreadsheet()!!.getControl(), sheetView.getSheetIndex(), pic, shapeRect.left.toFloat(), shapeRect.top.toFloat(),
-                        sheetView.getZoom(), shapeRect.width().toFloat(), shapeRect.height().toFloat(), shape.getPictureEffectInfor()
+                        sheetView.getZoom(), shapeRect.width().toFloat(), shapeRect.height().toFloat(), shape.pictureEffectInfor
                     )
                 }
 
@@ -182,10 +182,10 @@ class ShapeView(sheetView: SheetView?) {
 
                 AbstractShape.SHAPE_CHART -> {
                     val achart = shape as AChart
-                    if (achart.getAChart() != null) {
+                    if (achart.aChart != null) {
                         processRotation(canvas, shape, shapeRect)
-                        achart.getAChart().setZoomRate(sheetView.getZoom()) //PictureKit.WMFZOOM
-                        achart.getAChart().draw(canvas, control, shapeRect.left, shapeRect.top, shapeRect.width(), shapeRect.height(), PaintKit.instance().getPaint())
+                        achart.aChart!!.setZoomRate(sheetView.getZoom()) //PictureKit.WMFZOOM
+                        achart.aChart!!.draw(canvas, control, shapeRect.left, shapeRect.top, shapeRect.width(), shapeRect.height(), PaintKit.instance().getPaint())
 //                        PictureKit.instance().drawPicture(canvas, control,
 //                            control.getSysKit().getPictureManage().getPicture(achart.getDrawingPicture(control)),
 //                            shapeRect.left, shapeRect.top , sheetView.getZoom(), shapeRect.width(), shapeRect.height(), null);
@@ -218,11 +218,11 @@ class ShapeView(sheetView: SheetView?) {
      * @param textboxData
      */
     private fun drawTextbox(canvas: Canvas, shapeRect: Rect, textbox: TextBox) {
-        val elem = textbox.getElement()
+        val elem = textbox.element ?: return
         if (elem.getEndOffset() - elem.getStartOffset() == 0L) {
             return
         }
-        if (textbox.isEditor()) {
+        if (textbox.isEditor) {
             /*int left = (int)(rect.x * zoom);
             int top =  (int)(rect.y * zoom);
             int right = left + (int)(rect.width * zoom);
@@ -235,22 +235,22 @@ class ShapeView(sheetView: SheetView?) {
         }
 
         processRotation(canvas, textbox, shapeRect)
-        var root: STRoot? = textbox.getRootView()
+        var root: STRoot? = textbox.rootView
         if (root == null) {
             val doc: IDocument = STDocument()
             doc.appendSection(elem)
 
             val attr = elem.getAttribute()
             // 宽度
-            AttrManage.instance().setPageWidth(attr, Math.round(textbox.getBounds().getWidth() * MainConstant.PIXEL_TO_TWIPS).toInt())
+            AttrManage.instance().setPageWidth(attr, Math.round(textbox.bounds!!.getWidth() * MainConstant.PIXEL_TO_TWIPS).toInt())
             // 高度
-            AttrManage.instance().setPageHeight(attr, Math.round(textbox.getBounds().getHeight() * MainConstant.PIXEL_TO_TWIPS).toInt())
+            AttrManage.instance().setPageHeight(attr, Math.round(textbox.bounds!!.getHeight() * MainConstant.PIXEL_TO_TWIPS).toInt())
 
             root = STRoot(sheetView!!.getSpreadsheet()!!.getEditor(), doc)
-            root.setWrapLine(textbox.isWrapLine())
+            root.setWrapLine(textbox.isWrapLine)
             root.doLayout()
 
-            textbox.setRootView(root)
+            textbox.rootView = root
         }
 
         if (root != null) {
@@ -265,9 +265,9 @@ class ShapeView(sheetView: SheetView?) {
      * @param zoom
      */
     private fun processRotation(canvas: Canvas, shape: IShape, shapeRect: Rect) {
-        var angle = shape.getRotation()
+        var angle = shape.rotation
         //flip vertical
-        if (shape.getFlipVertical()) {
+        if (shape.flipVertical) {
             angle += 180f
         }
 

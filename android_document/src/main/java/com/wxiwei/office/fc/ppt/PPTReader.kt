@@ -96,34 +96,35 @@ import kotlin.math.min
 
 /**
  * 处理ppt文档
- * 
- * 
- * 
- * 
+ *
+ *
+ *
+ *
  * Read版本:       Read V1.0
- * 
- * 
+ *
+ *
  * 作者:           jhy1790
- * 
- * 
+ *
+ *
  * 日期:           2012-1-30
- * 
- * 
+ *
+ *
  * 负责人:         jhy1790
- * 
- * 
+ *
+ *
+ *
  * 负责小组:
- * 
- * 
- * 
- * 
+ *
+ *
+ *
+ *
  */
 class PPTReader @JvmOverloads constructor(
     control: IControl?, //
     private var filePath: String?, isGetThumbnail: Boolean = false
 ) : AbstractReader() {
     /**
-     * 
+     *
      */
     @Throws(Exception::class)
     override fun getModel(): Any? {
@@ -142,15 +143,15 @@ class PPTReader @JvmOverloads constructor(
 
 
         // 页面size
-        val d = poiSlideShow!!.getPageSize()
+        val d = poiSlideShow!!.pageSize
         d.width = (d.width * MainConstant.POINT_TO_PIXEL).toInt()
         d.height = (d.height * MainConstant.POINT_TO_PIXEL).toInt()
         model!!.setPageSize(d)
 
-        val docAtom = poiSlideShow!!.documentRecord.documentAtom
+        val docAtom = poiSlideShow!!.documentRecord?.documentAtom
         if (docAtom != null) {
             model!!.setSlideNumberOffset(docAtom.firstSlideNum - 1)
-            model!!.setOmitTitleSlide(docAtom.omitTitlePlace)
+            model!!.setOmitTitleSlide(docAtom.getOmitTitlePlace())
         }
 
 
@@ -162,11 +163,11 @@ class PPTReader @JvmOverloads constructor(
             model.appendSlide(pgSlide);*/
             throw Exception("Format error")
         } else {
-            poiHeadersFooters = poiSlideShow!!.getSlideHeadersFooters()
+            poiHeadersFooters = poiSlideShow!!.slideHeadersFooters
             val len = min(count, FIRST_READ_SLIDE_NUM)
             var i = 0
             while (i < len && !abortReader) {
-                processSlide(poiSlideShow!!.getSlide(currentReaderIndex++))
+                processSlide(requireNotNull(poiSlideShow!!.getSlide(currentReaderIndex++)))
                 i++
             }
             if (!isReaderFinish() && !isGetThumbnail) {
@@ -178,8 +179,8 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
-     * 
+     *
+     *
      */
     override fun isReaderFinish(): Boolean {
         if (model != null && poiSlideShow != null) {
@@ -189,11 +190,11 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      */
     @Throws(Exception::class)
     override fun backReader() {
-        processSlide(poiSlideShow!!.getSlide(currentReaderIndex++))
+        processSlide(requireNotNull(poiSlideShow!!.getSlide(currentReaderIndex++)))
         //control.actionEvent(EventConstant.PG_REPAINT_ID, null);
         if (!isGetThumbnail) {
             control!!.actionEvent(EventConstant.APP_COUNT_PAGES_CHANGE_ID, null)
@@ -202,15 +203,15 @@ class PPTReader @JvmOverloads constructor(
 
     private fun isTitleSlide(slide: Slide): Boolean {
         var geometry = 0
-        val sa = slide.slideRecord.slideAtom
+        val sa = slide.slideRecord?.slideAtom
         if (sa != null && sa.sSlideLayoutAtom != null) {
-            geometry = sa.sSlideLayoutAtom.geometryType
+            geometry = sa.sSlideLayoutAtom!!.geometryType
         }
 
         if (geometry == SSlideLayoutAtom.TITLE_SLIDE) {
             return true
         } else if (geometry == SSlideLayoutAtom.BLANK_SLIDE) {
-            val shapes = slide.getShapes()
+            val shapes = slide.shapes
             for (shape in shapes) {
                 if (shape !is TextShape) {
                     return false
@@ -249,21 +250,21 @@ class PPTReader @JvmOverloads constructor(
 
 
         // 背景
-        if (slide.getBackground() != null) {
-            pgSlide.setBackgroundAndFill(converFill(pgSlide, slide.getBackground().getFill()))
+        slide.background?.let { background ->
+            pgSlide.setBackgroundAndFill(converFill(pgSlide, background.fill))
         }
         // master
         processMaster(pgSlide, slide)
-        val sa = slide.slideRecord.slideAtom
+        val sa = slide.slideRecord?.slideAtom
         if (sa != null && sa.sSlideLayoutAtom != null) {
-            pgSlide.setGeometryType(sa.sSlideLayoutAtom.geometryType)
+            pgSlide.setGeometryType(sa.sSlideLayoutAtom!!.geometryType)
         }
 
         resetFlag()
 
 
         // 处理shape
-        val shapes = slide.getShapes()
+        val shapes = slide.shapes
         for (shape in shapes) {
             processShape(pgSlide, null, shape, PGSlide.Slide_Normal.toInt())
         }
@@ -274,7 +275,7 @@ class PPTReader @JvmOverloads constructor(
             var tempShape: TextBox? = null
             val masterSlide: PGSlide? = model!!.getSlideMaster(pgSlide.getMasterIndexs()[0])
             if (masterSlide != null) {
-                val slideHeadersFooters = slide.getSlideHeadersFooters()
+                val slideHeadersFooters = slide.slideHeadersFooters
                 if (slideHeadersFooters != null) {
                     pgSlide.setShowMasterHeadersFooters(false)
 
@@ -290,25 +291,25 @@ class PPTReader @JvmOverloads constructor(
                         }
                     }
 
-                    if (!hasProcessedMasterFooter && slideHeadersFooters.isFooterVisible && slideHeadersFooters.getFooterText() != null) {
+                    if (!hasProcessedMasterFooter && slideHeadersFooters.isFooterVisible && slideHeadersFooters.footerText != null) {
                         tempShape =
                             masterSlide.getTextboxByPlaceHolderID(OEPlaceholderAtom.MasterFooter.toInt()) as TextBox?
                         if (tempShape != null) {
                             tempShape = processCurrentSlideHeadersFooters(
                                 tempShape,
-                                slideHeadersFooters.getFooterText()
+                                slideHeadersFooters.footerText
                             )
                             pgSlide.appendShapes(tempShape)
                         }
                     }
 
-                    if (!hasProcessedMasterDateTime && slideHeadersFooters.isUserDateVisible && slideHeadersFooters.getDateTimeText() != null) {
+                    if (!hasProcessedMasterDateTime && slideHeadersFooters.isUserDateVisible && slideHeadersFooters.dateTimeText != null) {
                         tempShape =
                             masterSlide.getTextboxByPlaceHolderID(OEPlaceholderAtom.MasterDate.toInt()) as TextBox?
                         if (tempShape != null) {
                             tempShape = processCurrentSlideHeadersFooters(
                                 tempShape,
-                                slideHeadersFooters.getDateTimeText()
+                                slideHeadersFooters.dateTimeText
                             )
                             pgSlide.appendShapes(tempShape)
                         }
@@ -340,7 +341,7 @@ class PPTReader @JvmOverloads constructor(
                         }
                     }
 
-                    if (!hasProcessedMasterFooter && poiHeadersFooters!!.isFooterVisible && poiHeadersFooters!!.getFooterText() != null) {
+                    if (!hasProcessedMasterFooter && poiHeadersFooters!!.isFooterVisible && poiHeadersFooters!!.footerText != null) {
                         tempShape =
                             masterSlide.getTextboxByPlaceHolderID(OEPlaceholderAtom.MasterFooter.toInt()) as TextBox?
                         if (tempShape != null) {
@@ -349,7 +350,7 @@ class PPTReader @JvmOverloads constructor(
                     }
 
                     if (!hasProcessedMasterDateTime
-                        && ((poiHeadersFooters!!.getDateTimeText() != null && poiHeadersFooters!!.isUserDateVisible)
+                        && ((poiHeadersFooters!!.dateTimeText != null && poiHeadersFooters!!.isUserDateVisible)
                                 || poiHeadersFooters!!.isDateTimeVisible)
                     ) {
                         tempShape =
@@ -374,7 +375,7 @@ class PPTReader @JvmOverloads constructor(
 
         //slide transition
         val slideInfotAtom = slide.slideShowSlideInfoAtom
-        pgSlide.setTransition(slideInfotAtom != null && slideInfotAtom.isValidateTransition())
+        pgSlide.setTransition(slideInfotAtom != null && slideInfotAtom.isValidateTransition)
         //slide animation
         processSlideshow(pgSlide, slide.slideProgTagsContainer)
 
@@ -393,8 +394,8 @@ class PPTReader @JvmOverloads constructor(
     private fun processCurrentSlideHeadersFooters(styleShape: TextBox?, text: String?): TextBox? {
         var text = text
         if (styleShape != null && text != null && text.length > 0) {
-            if (styleShape.element != null && styleShape.element
-                    .getEndOffset() - styleShape.element.getStartOffset() > 0
+            if (styleShape.element != null && styleShape.element!!
+                    .getEndOffset() - styleShape.element!!.getStartOffset() > 0
             ) {
                 val textShape = TextBox()
                 textShape.bounds = styleShape.bounds
@@ -405,12 +406,12 @@ class PPTReader @JvmOverloads constructor(
                 val secElem = SectionElement()
                 secElem.setStartOffset(0)
                 secElem.setEndOffset(text.length.toLong())
-                secElem.setAttribute(styleShape.element.getAttribute().clone())
+                secElem.setAttribute(styleShape.element!!.getAttribute().clone())
                 textShape.element = secElem
 
 
                 // para
-                val paraElem = styleShape.element.getParaCollection()!!
+                val paraElem = styleShape.element!!.getParaCollection()!!
                     .getElementForIndex(0) as ParagraphElement
                 val paraElemNew = ParagraphElement()
                 paraElemNew.setStartOffset(0)
@@ -448,8 +449,8 @@ class PPTReader @JvmOverloads constructor(
         var grpSpID: Int
         for (i in 0..<count) {
             val shape = pgSlide.getShape(i)
-            grpSpID = getGroupShapeID(shape!!.getShapeID(), grpShape)
-            shape!!.setGroupShapeID(grpSpID)
+            grpSpID = getGroupShapeID(shape!!.shapeID, grpShape)
+            shape.groupShapeID = grpSpID
         }
     }
 
@@ -656,11 +657,11 @@ class PPTReader @JvmOverloads constructor(
         var element: ParagraphElement? = null
         for (i in 0..<cnt) {
             if ((shapes[i] is TextBox)
-                && shapes[i].getShapeID() == visualElementAtom.targetElementID
+                && shapes[i].shapeID == visualElementAtom.targetElementID
             ) {
                 var offset: Long = 0
                 var paraID = 0
-                val sec = (shapes[i] as TextBox).element
+                val sec = (shapes[i] as TextBox).element ?: continue
                 element = sec.getElement(offset) as ParagraphElement?
                 while (element != null) {
                     offset = element.getEndOffset()
@@ -684,7 +685,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param pgSlide
      * @param slide
      */
@@ -697,7 +698,7 @@ class PPTReader @JvmOverloads constructor(
         }
 
         val sheet: MasterSheet? = null
-        val sa = slide.slideRecord.slideAtom
+        val sa = slide.slideRecord?.slideAtom
         sa?.followMasterObjects?.let {
             if (!it) {
                 return
@@ -705,7 +706,7 @@ class PPTReader @JvmOverloads constructor(
         }
         val masterId = sa?.masterID
 
-        val master = poiSlideShow!!.slidesMasters
+        val master = poiSlideShow!!.slidesMasters.orEmpty()
         for (i in master.indices) {
             if (masterId == master[i]!!._getSheetNumber()) {
                 var index = slideMasterIndexs!!.get(masterId)
@@ -717,7 +718,7 @@ class PPTReader @JvmOverloads constructor(
                     slideMaster.setSlideType(PGSlide.Slide_Master.toInt())
                     slideMaster.setBackgroundAndFill(pgSlide.getBackgroundAndFill())
 
-                    val sh = master[i]!!.getShapes()
+                    val sh = master[i]!!.shapes
                     for (j in sh.indices) {
                         processShape(slideMaster, null, sh[j], PGSlide.Slide_Master.toInt())
                     }
@@ -743,7 +744,7 @@ class PPTReader @JvmOverloads constructor(
                             slideMaster.setSlideType(PGSlide.Slide_Master.toInt())
                             slideMaster.setBackgroundAndFill(pgSlide.getBackgroundAndFill())
 
-                            val sh = titleMaster[i]!!.getShapes()
+                            val sh = titleMaster[i]!!.shapes
                             for (j in sh.indices) {
                                 processShape(slideMaster, null, sh[j], PGSlide.Slide_Master.toInt())
                             }
@@ -768,7 +769,7 @@ class PPTReader @JvmOverloads constructor(
         var line: Line? = null
         if (shape != null && shape.hasLine()) {
             val lineWidth = Math.round(shape.lineWidth * MainConstant.POINT_TO_PIXEL).toInt()
-            val dash = shape.getLineDashing() > AutoShapeConstant.LINESTYLE_SOLID
+            val dash = shape.lineDashing > AutoShapeConstant.LINESTYLE_SOLID
             val color = shape.lineColor
 
             if (color != null) {
@@ -792,7 +793,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      */
     private fun converFill(pgSlide: PGSlide, fill: Fill?): BackgroundAndFill? {
         var bgFill: BackgroundAndFill? = null
@@ -803,11 +804,12 @@ class PPTReader @JvmOverloads constructor(
             if (type == BackgroundAndFill.FILL_BACKGROUND.toInt()) {
                 bgFill = pgSlide.getBackgroundAndFill()
             } else if (type == BackgroundAndFill.FILL_SOLID.toInt()) {
-                if (fill.foregroundColor != null) {
+                val foregroundColor = fill.foregroundColor
+                if (foregroundColor != null) {
                     bgFill = BackgroundAndFill()
                     bgFill.fillType = BackgroundAndFill.FILL_SOLID
                     // 前景颜色
-                    bgFill.foregroundColor = converterColor(fill.foregroundColor)
+                    bgFill.foregroundColor = converterColor(foregroundColor)
                 }
             } else if (type == BackgroundAndFill.FILL_SHADE_LINEAR.toInt() || type == BackgroundAndFill.FILL_SHADE_RADIAL.toInt() || type == BackgroundAndFill.FILL_SHADE_RECT.toInt() || type == BackgroundAndFill.FILL_SHADE_SHAPE.toInt()) {
                 var angle = fill.fillAngle
@@ -860,7 +862,7 @@ class PPTReader @JvmOverloads constructor(
                 bgFill = BackgroundAndFill()
                 bgFill.fillType = BackgroundAndFill.FILL_SHADE_TILE
                 // 背景为图片
-                val pData = fill.getPictureData()
+                val pData = fill.pictureData
                 if (pData != null) {
                     // 图片数据
                     val index = control!!.getSysKit().getPictureManage().addPicture(pData)
@@ -871,7 +873,7 @@ class PPTReader @JvmOverloads constructor(
                 }
             } else if (type == BackgroundAndFill.FILL_PICTURE.toInt()) {
                 // 背景为图片
-                val pData = fill.getPictureData()
+                val pData = fill.pictureData
                 if (pData != null) {
                     bgFill = BackgroundAndFill()
                     bgFill.fillType = BackgroundAndFill.FILL_PICTURE
@@ -879,11 +881,12 @@ class PPTReader @JvmOverloads constructor(
                     bgFill.pictureIndex = control!!.getSysKit().getPictureManage().addPicture(pData)
                 }
             } else if (type == BackgroundAndFill.FILL_PATTERN.toInt()) {
-                if (fill.fillbackColor != null) {
+                val fillbackColor = fill.fillbackColor
+                if (fillbackColor != null) {
                     bgFill = BackgroundAndFill()
                     bgFill.fillType = BackgroundAndFill.FILL_SOLID
                     // 前景颜色
-                    bgFill.foregroundColor = converterColor(fill.fillbackColor)
+                    bgFill.foregroundColor = converterColor(fillbackColor)
                 }
             }
         }
@@ -892,22 +895,22 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      */
     private fun processNotes(pgSlide: PGSlide, notes: Notes?) {
         if (notes != null) {
             var note = ""
-            for (shape in notes.getShapes()) {
+            for (shape in notes.shapes) {
                 if (abortReader) {
                     break
                 }
-                if (shape is AutoShape // 文本框 
+                if (shape is AutoShape // 文本框
                     || shape is com.wxiwei.office.fc.hslf.model.TextBox
                 )  // 占位符
                 {
                     val phAtom = shape.placeholderAtom
                     if (phAtom != null && phAtom.placeholderId == OEPlaceholderAtom.NotesBody.toInt()) {
-                        val text = shape.getText()
+                        val text = shape.text
                         if (text != null && text.length > 0) {
                             note += text
                             note += '\n'
@@ -952,7 +955,7 @@ class PPTReader @JvmOverloads constructor(
 //                OEPlaceholderAtom placeHolder = ((TextShape)shape).getPlaceholderAtom();
 //                if (placeHolder != null)
 //                {
-//                    placeHolderID = placeHolder.getPlaceholderId();
+//                    placeHolderID = placeHolder.placeholderId;
 //                    if (placeHolderID == OEPlaceholderAtom.MasterFooter
 //                        || placeHolderID == OEPlaceholderAtom.MasterSlideNumber
 //                        || placeHolderID == OEPlaceholderAtom.MasterDate)
@@ -962,7 +965,7 @@ class PPTReader @JvmOverloads constructor(
 //                }
 //            }
 //        }
-//        
+//
 //        if (!addShape)
 //        {
 //            return;
@@ -987,7 +990,7 @@ class PPTReader @JvmOverloads constructor(
                     val count = master.getShapeCount()
                     for (i in 0..<count) {
                         val item = master.getShape(i)
-                        if (item!!.getShapeID() == masterShapeID) {
+                        if (item!!.shapeID == masterShapeID) {
                             masterShape = item
                             break
                         }
@@ -995,7 +998,7 @@ class PPTReader @JvmOverloads constructor(
                 }
             }
 
-            fill = converFill(pgSlide, shape.getFill())
+            fill = converFill(pgSlide, shape.fill)
             if (fill == null && masterShape != null && masterShape is AbstractShape) {
                 fill = masterShape.backgroundAndFill
             }
@@ -1019,16 +1022,16 @@ class PPTReader @JvmOverloads constructor(
                     lineShape.bounds = rect
                     lineShape.backgroundAndFill = fill
 
-                    lineShape.setLine(line)
+                    lineShape.line = line
 
                     val adj = shape.adjustmentValue
                     if (lineShape.shapeType == ShapeTypes.BentConnector2 && adj == null) {
-                        lineShape.adjustData = arrayOf<Float>(1.0f)
+                        lineShape.adjustData = arrayOf<Float?>(1.0f)
                     } else {
                         lineShape.adjustData = adj
                     }
 
-                    var type = shape.getStartArrowType()
+                    var type = shape.startArrowType
                     if (type > 0) {
                         lineShape.createStartArrow(
                             type.toByte(),
@@ -1037,7 +1040,7 @@ class PPTReader @JvmOverloads constructor(
                         )
                     }
 
-                    type = shape.getEndArrowType()
+                    type = shape.endArrowType
                     if (type > 0) {
                         lineShape.createEndArrow(
                             type.toByte(),
@@ -1063,7 +1066,7 @@ class PPTReader @JvmOverloads constructor(
                     var startArrowTailCenter: PointF? = null
                     var endArrowTailCenter: PointF? = null
 
-                    val startArrowType = shape.getStartArrowType()
+                    val startArrowType = shape.startArrowType
                     if (startArrowType > 0) {
                         val arrowPathAndTail = shape.getStartArrowPathAndTail(rect)
                         if (arrowPathAndTail != null && arrowPathAndTail.arrowPath != null) {
@@ -1091,7 +1094,7 @@ class PPTReader @JvmOverloads constructor(
                         }
                     }
 
-                    val endArrowType = shape.getEndArrowType()
+                    val endArrowType = shape.endArrowType
                     if (endArrowType > 0) {
                         val arrowPathAndTail = shape.getEndArrowPathAndTail(rect)
                         if (arrowPathAndTail != null && arrowPathAndTail.arrowPath != null) {
@@ -1153,7 +1156,7 @@ class PPTReader @JvmOverloads constructor(
                 || shape is com.wxiwei.office.fc.hslf.model.TextBox
             ) {
                 // autoShape
-                placeHolderID = shape.getPlaceholderId()
+                placeHolderID = shape.placeholderId
 
                 var autoShape: com.wxiwei.office.common.shape.AutoShape? = null
                 if (fill != null || line != null) {
@@ -1162,16 +1165,16 @@ class PPTReader @JvmOverloads constructor(
                         val lineShape = LineShape()
                         lineShape.shapeType = shape.shapeType
                         lineShape.bounds = rect
-                        lineShape.setLine(line)
+                        lineShape.line = line
 
                         val adj = shape.adjustmentValue
                         if (lineShape.shapeType == ShapeTypes.BentConnector2 && adj == null) {
-                            lineShape.adjustData = arrayOf<Float>(1.0f)
+                            lineShape.adjustData = arrayOf<Float?>(1.0f)
                         } else {
                             lineShape.adjustData = adj
                         }
 
-                        var type = shape.getStartArrowType()
+                        var type = shape.startArrowType
                         if (type > 0) {
                             lineShape.createStartArrow(
                                 type.toByte(),
@@ -1180,7 +1183,7 @@ class PPTReader @JvmOverloads constructor(
                             )
                         }
 
-                        type = shape.getEndArrowType()
+                        type = shape.endArrowType
                         if (type > 0) {
                             lineShape.createEndArrow(
                                 type.toByte(),
@@ -1197,7 +1200,7 @@ class PPTReader @JvmOverloads constructor(
                         autoShape.backgroundAndFill = fill
 
                         if (line != null) {
-                            autoShape.setLine(line)
+                            autoShape.line = line
                         }
                         if (shape.shapeType != ShapeTypes.TextBox) {
                             autoShape.adjustData = shape.adjustmentValue
@@ -1218,7 +1221,7 @@ class PPTReader @JvmOverloads constructor(
 
                 // text
                 val tb = TextBox()
-                val mcType = shape.getMetaCharactersType()
+                val mcType = shape.metaCharactersType
                 tb.mcType = mcType
 
                 processTextShape(tb, shape, rect, slideType, placeHolderID)
@@ -1266,7 +1269,7 @@ class PPTReader @JvmOverloads constructor(
                     )
 
                     pictureShape.backgroundAndFill = fill
-                    pictureShape.setLine(line)
+                    pictureShape.line = line
 
                     if (parent == null) {
                         pgSlide.appendShapes(pictureShape)
@@ -1279,7 +1282,7 @@ class PPTReader @JvmOverloads constructor(
                     autoShape.setAuotShape07(false)
                     autoShape.bounds = rect
                     autoShape.backgroundAndFill = fill
-                    autoShape.setLine(line)
+                    autoShape.line = line
                     if (parent == null) {
                         pgSlide.appendShapes(autoShape)
                     } else {
@@ -1302,7 +1305,7 @@ class PPTReader @JvmOverloads constructor(
             groupShape.parent = parent
             processGrpRotation(shape, groupShape)
 
-            val sh = shape.getShapes()
+            val sh = shape.shapes
             val childShapeLst: MutableList<Int> = ArrayList<Int>(sh.size)
             for (i in sh.indices) {
                 processShape(pgSlide, groupShape, sh[i]!!, slideType)
@@ -1318,7 +1321,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param pgSlide
      */
     private fun processTable(
@@ -1328,7 +1331,7 @@ class PPTReader @JvmOverloads constructor(
         slideType: Int
     ) {
         val clientAnchor = poiTable.getClientAnchor2D(poiTable)
-        val spgrAnchor = poiTable.getCoordinates()
+        val spgrAnchor = poiTable.coordinates
         tableShape = true
         val rows = poiTable.numberOfRows
         val columns = poiTable.numberOfColumns
@@ -1343,7 +1346,7 @@ class PPTReader @JvmOverloads constructor(
                 }
                 val poiCell = poiTable.getCell(i, j)
                 if (poiCell != null) {
-                    val anchor = poiCell.getLogicalAnchor2D()
+                    val anchor = poiCell.logicalAnchor2D
                     if (anchor != null) {
                         val scalex = spgrAnchor.getWidth() / clientAnchor.getWidth()
                         val scaley = spgrAnchor.getHeight() / clientAnchor.getHeight()
@@ -1362,23 +1365,23 @@ class PPTReader @JvmOverloads constructor(
                         rect.height = (height * MainConstant.POINT_TO_PIXEL).toFloat()
 
                         val cell = com.wxiwei.office.common.shape.TableCell()
-                        // 
+                        //
                         cell.bounds = rect
 
 
                         // border line color
-                        cell.leftLine = getShapeLine(poiCell.borderLeft, true)
-                        cell.rightLine = getShapeLine(poiCell.borderRight, true)
-                        cell.topLine = getShapeLine(poiCell.borderTop, true)
-                        cell.bottomLine = getShapeLine(poiCell.borderBottom, true)
+                        cell.leftLine = getShapeLine(poiCell.getBorderLeft(), true)
+                        cell.rightLine = getShapeLine(poiCell.getBorderRight(), true)
+                        cell.topLine = getShapeLine(poiCell.getBorderTop(), true)
+                        cell.bottomLine = getShapeLine(poiCell.getBorderBottom(), true)
 
 
                         // background
-                        cell.backgroundAndFill = converFill(pgSlide, poiCell.getFill())
+                        cell.backgroundAndFill = converFill(pgSlide, poiCell.fill)
 
 
                         // text
-                        val text = poiCell.getText()
+                        val text = poiCell.text
                         if (text != null && text.trim { it <= ' ' }.length > 0) {
                             val textBox = TextBox()
                             val r = Rectangle(
@@ -1401,11 +1404,11 @@ class PPTReader @JvmOverloads constructor(
 
 
         //table borders
-        val borders = poiTable.tableBorders
+        val borders = poiTable.tableBorders.orEmpty().filterNotNull()
         for (line in borders) {
             val aLine = getShapeLine(line, true)
             if (aLine != null) {
-                val rect2D = line.getLogicalAnchor2D()
+                val rect2D = line.logicalAnchor2D
                 if (rect2D == null) {
                     return
                 }
@@ -1418,11 +1421,11 @@ class PPTReader @JvmOverloads constructor(
                 val lineShape = LineShape()
                 lineShape.shapeType = line.shapeType
                 lineShape.bounds = rect
-                lineShape.setLine(aLine)
+                lineShape.line = aLine
 
                 val adj = line.adjustmentValue
                 if (lineShape.shapeType == ShapeTypes.BentConnector2 && adj == null) {
-                    lineShape.adjustData = arrayOf<Float>(1.0f)
+                    lineShape.adjustData = arrayOf<Float?>(1.0f)
                 } else {
                     lineShape.adjustData = null
                 }
@@ -1469,7 +1472,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param pgdoc
      * @param ts
      */
@@ -1482,7 +1485,7 @@ class PPTReader @JvmOverloads constructor(
     ) {
         var rect = rect
         if (rect == null) {
-            val rect2D = ts.getLogicalAnchor2D()
+            val rect2D = ts.logicalAnchor2D
             if (rect2D == null) {
                 return
             }
@@ -1492,12 +1495,12 @@ class PPTReader @JvmOverloads constructor(
             rect.width = (rect2D.getWidth() * MainConstant.POINT_TO_PIXEL).toInt()
             rect.height = (rect2D.getHeight() * MainConstant.POINT_TO_PIXEL).toInt()
         }
-        // 
+        //
         tb.bounds = rect
         // 自动换行
-        tb.isWrapLine = ts.getWordWrap() == 0
+        tb.isWrapLine = ts.wordWrap == 0
         // ======== 处理文本 ========
-        var text = ts.getText()
+        var text = ts.text
         if (text != null) {
             processNormalTextShape(tb, ts, rect, slideType, placeHolderID)
         } else {
@@ -1517,7 +1520,7 @@ class PPTReader @JvmOverloads constructor(
         slideType: Int,
         placeHolderID: Int
     ) {
-        val text = ts.getText()
+        val text = ts.text
         if (text != null && text.trim { it <= ' ' }.length > 0) {
             // 建立章节
             val secElem = SectionElement()
@@ -1532,19 +1535,19 @@ class PPTReader @JvmOverloads constructor(
                 .setPageHeight(attr, (rect.height * MainConstant.PIXEL_TO_TWIPS).toInt())
             // 左边距
             AttrManage.instance()
-                .setPageMarginLeft(attr, (ts.getMarginLeft() * MainConstant.POINT_TO_TWIPS).toInt())
+                .setPageMarginLeft(attr, (ts.marginLeft * MainConstant.POINT_TO_TWIPS).toInt())
             // 右边距
             AttrManage.instance().setPageMarginRight(
                 attr,
-                (ts.getMarginRight() * MainConstant.POINT_TO_TWIPS).toInt()
+                (ts.marginRight * MainConstant.POINT_TO_TWIPS).toInt()
             )
             // 上边距
             AttrManage.instance()
-                .setPageMarginTop(attr, (ts.getMarginTop() * MainConstant.POINT_TO_TWIPS).toInt())
+                .setPageMarginTop(attr, (ts.marginTop * MainConstant.POINT_TO_TWIPS).toInt())
             // 下边框
             AttrManage.instance().setPageMarginBottom(
                 attr,
-                (ts.getMarginBottom() * MainConstant.POINT_TO_TWIPS).toInt()
+                (ts.marginBottom * MainConstant.POINT_TO_TWIPS).toInt()
             )
             var verAlign = WPAttrConstant.PAGE_V_TOP
             /*if (tableShape)
@@ -1553,7 +1556,7 @@ class PPTReader @JvmOverloads constructor(
             }
             else*/
             run {
-                val align = ts.getVerticalAlignment()
+                val align = ts.verticalAlignment
                 when (align) {
                     TextShape.AnchorTop, TextShape.AnchorTopBaseline, TextShape.AnchorTopCentered, TextShape.AnchorTopCenteredBaseline -> verAlign =
                         WPAttrConstant.PAGE_V_TOP
@@ -1575,10 +1578,11 @@ class PPTReader @JvmOverloads constructor(
             offset = 0
             secElem.setStartOffset(offset.toLong())
             val len = text.length
-            val links = ts.getTextRun().hyperlinks
+            val textRun = ts.textRun ?: return
+            val links = textRun.hyperlinks
             var start = 0
             // title type just a paragraph needs be processed specially
-            if (ts.getTextRun().runType != TextHeaderAtom.TITLE_TYPE) {
+            if (textRun.runType != TextHeaderAtom.TITLE_TYPE) {
                 for (i in 0..<len) {
                     if (abortReader) {
                         break
@@ -1610,25 +1614,25 @@ class PPTReader @JvmOverloads constructor(
         var text: String? = text
         if (placeHolderID == OEPlaceholderAtom.MasterFooter.toInt() && text?.contains("*") == true) {
             if (slideType == PGSlide.Slide_Master.toInt()) {
-                if (poiHeadersFooters!!.getFooterText() != null) {
-                    text = poiHeadersFooters!!.getFooterText()
+                if (poiHeadersFooters!!.footerText != null) {
+                    text = poiHeadersFooters!!.footerText ?: text
                 }
             } else if (slideType == PGSlide.Slide_Normal.toInt()) {
                 text = null
 
-                if (poiHeadersFooters!!.getFooterText() != null) {
-                    text = poiHeadersFooters!!.getFooterText()
+                if (poiHeadersFooters!!.footerText != null) {
+                    text = poiHeadersFooters!!.footerText ?: text
                 }
             }
         } else if (placeHolderID == OEPlaceholderAtom.MasterDate.toInt() && text?.contains("*") == true) {
             if (slideType == PGSlide.Slide_Master.toInt()) {
-                if (poiHeadersFooters!!.getDateTimeText() != null) {
-                    text = poiHeadersFooters!!.getDateTimeText()
+                if (poiHeadersFooters!!.dateTimeText != null) {
+                    text = poiHeadersFooters!!.dateTimeText
                 }
             } else if (slideType == PGSlide.Slide_Normal.toInt()) {
                 text = null
-                if (poiHeadersFooters!!.getDateTimeText() != null) {
-                    text = poiHeadersFooters!!.getDateTimeText()
+                if (poiHeadersFooters!!.dateTimeText != null) {
+                    text = poiHeadersFooters!!.dateTimeText
                 }
             }
         }
@@ -1646,37 +1650,38 @@ class PPTReader @JvmOverloads constructor(
             .setPageHeight(attr, (rect.height * MainConstant.PIXEL_TO_TWIPS).toInt())
         // 左边距
         AttrManage.instance()
-            .setPageMarginLeft(attr, (ts.getMarginLeft() * MainConstant.POINT_TO_TWIPS).toInt())
+            .setPageMarginLeft(attr, (ts.marginLeft * MainConstant.POINT_TO_TWIPS).toInt())
         // 右边距
         AttrManage.instance()
-            .setPageMarginRight(attr, (ts.getMarginRight() * MainConstant.POINT_TO_TWIPS).toInt())
+            .setPageMarginRight(attr, (ts.marginRight * MainConstant.POINT_TO_TWIPS).toInt())
         // 上边距
         AttrManage.instance()
-            .setPageMarginTop(attr, (ts.getMarginTop() * MainConstant.POINT_TO_TWIPS).toInt())
+            .setPageMarginTop(attr, (ts.marginTop * MainConstant.POINT_TO_TWIPS).toInt())
         // 下边框
         AttrManage.instance()
-            .setPageMarginBottom(attr, (ts.getMarginBottom() * MainConstant.POINT_TO_TWIPS).toInt())
+            .setPageMarginBottom(attr, (ts.marginBottom * MainConstant.POINT_TO_TWIPS).toInt())
 
         AttrManage.instance().setPageHorizontalAlign(attr, WPAttrConstant.PAGE_H_CENTER)
         AttrManage.instance().setPageVerticalAlign(attr, WPAttrConstant.PAGE_V_CENTER)
 
         val width =
-            (rect.width - (ts.getMarginLeft() + ts.getMarginRight()) * MainConstant.POINT_TO_PIXEL).toInt()
+            (rect.width - (ts.marginLeft + ts.marginRight) * MainConstant.POINT_TO_PIXEL).toInt()
         val height =
-            (rect.height - (ts.getMarginTop() + ts.getMarginBottom()) * MainConstant.POINT_TO_PIXEL).toInt()
+            (rect.height - (ts.marginTop + ts.marginBottom) * MainConstant.POINT_TO_PIXEL).toInt()
 
 
         // 开始Offset
         offset = 0
         secElem.setStartOffset(offset.toLong())
-        val fill = ts.getFill()
+        val fill = ts.fill
         val type = fill.fillType
 
         var fontColor = -0x1000000
         // 填充类型
         if (type == BackgroundAndFill.FILL_SOLID.toInt()) {
-            if (fill.foregroundColor != null) {
-                fontColor = converterColor(fill.foregroundColor)
+            val foregroundColor = fill.foregroundColor
+            if (foregroundColor != null) {
+                fontColor = converterColor(foregroundColor)
             }
         } else if (type == BackgroundAndFill.FILL_SHADE_LINEAR.toInt() || type == BackgroundAndFill.FILL_SHADE_RADIAL.toInt() || type == BackgroundAndFill.FILL_SHADE_RECT.toInt() || type == BackgroundAndFill.FILL_SHADE_SHAPE.toInt()) {
             val fillColor = fill.foregroundColor
@@ -1701,7 +1706,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param pgdoc
      * @param ts
      * @param start
@@ -1716,7 +1721,8 @@ class PPTReader @JvmOverloads constructor(
         paraElem.setStartOffset(offset.toLong())
         // 属性
         val attr = paraElem.getAttribute()
-        val rt = ts.getTextRun().getRichTextRunAt(start)
+        val textRun = ts.textRun ?: return
+        val rt = textRun.getRichTextRunAt(start) ?: return
 
 
         // 水平对齐
@@ -1724,7 +1730,7 @@ class PPTReader @JvmOverloads constructor(
 
 
         // 行距
-        var temp = rt.getLineSpacing()
+        var temp = rt.lineSpacing
         // 多倍行距
         if (temp >= 0) {
             if (temp == 0) {
@@ -1754,14 +1760,14 @@ class PPTReader @JvmOverloads constructor(
         var bulletOffset = (rt.textOffset * MainConstant.POINT_TO_TWIPS).toInt()
         var textOffset = (rt.bulletOffset * MainConstant.POINT_TO_TWIPS).toInt()
         val indent = rt.indentLevel
-        val ruler = ts.getTextRun().getTextRuler()
+        val ruler = textRun.textRuler
         if (ruler != null) {
-            temp = ruler.bulletOffsets[indent]
+            temp = ruler.bulletOffsets?.getOrNull(indent) ?: -1
             if (temp >= 0) {
                 bulletOffset = (temp * MainConstant.POINT_DPI
                         / ShapeKit.MASTER_DPI * MainConstant.POINT_TO_TWIPS).toInt()
             }
-            temp = ruler.textOffsets[indent]
+            temp = ruler.textOffsets?.getOrNull(indent) ?: -1
             if (temp >= 0) {
                 textOffset = (temp * MainConstant.POINT_DPI
                         / ShapeKit.MASTER_DPI * MainConstant.POINT_TO_TWIPS).toInt()
@@ -1780,8 +1786,8 @@ class PPTReader @JvmOverloads constructor(
         // bullet number
         if (rt.isBullet && "\n" != text.substring(start, end)) {
             temp = BulletNumberManage.instance().addBulletNumber(
-                control!!, indent, ts.getTextRun().getNumberingType(start),
-                ts.getTextRun().getNumberingStart(start), rt.bulletChar
+                control!!, indent, textRun.getNumberingType(start),
+                textRun.getNumberingStart(start), rt.bulletChar
             )
             if (temp >= 0) {
                 AttrManage.instance().setPGParaBulletID(attr, temp)
@@ -1791,14 +1797,14 @@ class PPTReader @JvmOverloads constructor(
 
         // '\n' of title type needs be processed specially
         var handleReturn = false
-        if (ts.getTextRun().runType == TextHeaderAtom.TITLE_TYPE) {
+        if (textRun.runType == TextHeaderAtom.TITLE_TYPE) {
             handleReturn = true
         }
         while (start < end) {
             if (abortReader) {
                 break
             }
-            val run = ts.getTextRun().getRichTextRunAt(start)
+            val run = textRun.getRichTextRunAt(start)
             if (run == null) {
                 break
             }
@@ -1813,7 +1819,7 @@ class PPTReader @JvmOverloads constructor(
                     val linkEnd = links[i]!!.endIndex
                     if (linkStart >= start && linkStart <= rtEnd) {
                         temp = control!!.getSysKit().getHyperlinkManage().addHyperlink(
-                            links[i]!!.address,
+                            links[i]!!.getAddress(),
                             com.wxiwei.office.common.hyperlink.Hyperlink.LINK_URL
                         )
                         processRun(
@@ -1855,7 +1861,7 @@ class PPTReader @JvmOverloads constructor(
                         break
                     } else if (start > linkStart && linkEnd > start) {
                         temp = control!!.getSysKit().getHyperlinkManage().addHyperlink(
-                            links[i]!!.address,
+                            links[i]!!.getAddress(),
                             com.wxiwei.office.common.hyperlink.Hyperlink.LINK_URL
                         )
                         if (rtEnd <= linkEnd) {
@@ -1909,7 +1915,7 @@ class PPTReader @JvmOverloads constructor(
             }
         }
         // 段前
-        temp = rt.getSpaceBefore()
+        temp = rt.spaceBefore
         if (temp > 0) {
             AttrManage.instance().setParaBefore(
                 attr,
@@ -1922,7 +1928,7 @@ class PPTReader @JvmOverloads constructor(
 
 
         // 段后
-        temp = rt.getSpaceAfter()
+        temp = rt.spaceAfter
         if (temp >= 0) {
             AttrManage.instance().setParaAfter(
                 attr,
@@ -1938,7 +1944,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param pgdoc
      * @param ts
      * @param start
@@ -1963,7 +1969,7 @@ class PPTReader @JvmOverloads constructor(
         // 属性
         val attr = leaf.getAttribute()
         // 字号
-        //int temp = run.getFontSize();    	
+        //int temp = run.getFontSize();
         var fontsize = 12
         val paint = PaintKit.instance().getPaint()
         paint.textSize = fontsize.toFloat()
@@ -1998,7 +2004,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      */
     private fun processRun(
         ts: TextShape, run: RichTextRun, paraElem: ParagraphElement,
@@ -2007,7 +2013,7 @@ class PPTReader @JvmOverloads constructor(
         var text = text
         var start = start
         val sheet = ts.sheet
-        val mcType = ts.getMetaCharactersType()
+        val mcType = ts.metaCharactersType
 
         text = text.replace(160.toChar(), ' ')
         var pos = 0
@@ -2069,18 +2075,18 @@ class PPTReader @JvmOverloads constructor(
 //          {
 //              if (slideType == PGSlide.Slide_Master)
 //              {
-//                  if (poiHeadersFooters.getFooterText() != null)
+//                  if (poiHeadersFooters.footerText != null)
 //                  {
-//                      text = poiHeadersFooters.getFooterText();
+//                      text = poiHeadersFooters.footerText;
 //                  }
 //              }
 //              else if (slideType == PGSlide.Slide_Normal)
 //              {
 //                  text = null;
-//                  
-//                  if (poiHeadersFooters.getFooterText() != null)
+//
+//                  if (poiHeadersFooters.footerText != null)
 //                  {
-//                      text = poiHeadersFooters.getFooterText();
+//                      text = poiHeadersFooters.footerText;
 //                  }
 //              }
 //          }
@@ -2088,17 +2094,17 @@ class PPTReader @JvmOverloads constructor(
 //          {
 //              if (slideType == PGSlide.Slide_Master)
 //              {
-//                  if (poiHeadersFooters.getDateTimeText() != null)
+//                  if (poiHeadersFooters.dateTimeText != null)
 //                  {
-//                      text = poiHeadersFooters.getDateTimeText();
+//                      text = poiHeadersFooters.dateTimeText;
 //                  }
 //              }
 //              else if (slideType == PGSlide.Slide_Normal)
 //              {
         //                  text = null;
-//                  if (poiHeadersFooters.getDateTimeText() != null)
+//                  if (poiHeadersFooters.dateTimeText != null)
 //                  {
-//                      text = poiHeadersFooters.getDateTimeText();
+//                      text = poiHeadersFooters.dateTimeText;
 //                  }
 //              }
 //          }
@@ -2109,8 +2115,8 @@ class PPTReader @JvmOverloads constructor(
                 val `val` = NumericFormatter.instance()
                     .getFormatContents("yyyy/m/d", Date(System.currentTimeMillis()))
                 text = text.replace("*", `val`)
-            } else if (mcType == TextBox.MC_Footer && poiHeadersFooters!!.getFooterText() != null) {
-                text = poiHeadersFooters!!.getFooterText()
+            } else if (mcType == TextBox.MC_Footer && poiHeadersFooters!!.footerText != null) {
+                text = poiHeadersFooters!!.footerText ?: text
             }
         }
 
@@ -2130,7 +2136,7 @@ class PPTReader @JvmOverloads constructor(
                 }
             }
             // 字符颜色
-            AttrManage.instance().setFontColor(attr, converterColor(run.getFontColor()))
+            AttrManage.instance().setFontColor(attr, run.getFontColor()?.let { converterColor(it) } ?: android.graphics.Color.BLACK)
             // 粗体
             AttrManage.instance().setFontBold(attr, run.isBold)
             // 斜体
@@ -2146,8 +2152,8 @@ class PPTReader @JvmOverloads constructor(
             // hyperlink
             if (linkIndex >= 0) {
                 var color = android.graphics.Color.BLUE
-                if (sheet != null) {
-                    color = FCKit.BGRtoRGB(sheet.colorScheme.accentAndHyperlinkColourRGB)
+                sheet?.colorScheme?.let { colorScheme ->
+                    color = FCKit.BGRtoRGB(colorScheme.accentAndHyperlinkColourRGB)
                 }
                 AttrManage.instance().setFontColor(attr, color)
                 AttrManage.instance().setFontUnderline(attr, 1)
@@ -2166,7 +2172,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param file
      * @param key
      * @return
@@ -2174,10 +2180,10 @@ class PPTReader @JvmOverloads constructor(
     @Throws(Exception::class)
     override fun searchContent(file: File?, key: String): Boolean {
         val slideShow = SlideShow(HSLFSlideShow(control, filePath))
-        val slides = slideShow.slides
+        val slides = slideShow.slides.orEmpty().filterNotNull()
         for (slide in slides) {
             // search slide
-            val shapes = slide.getShapes()
+            val shapes = slide.shapes
             for (shape in shapes) {
                 if (searchShape(shape, key)) {
                     return true
@@ -2188,8 +2194,8 @@ class PPTReader @JvmOverloads constructor(
             // search notes
             val notes = slide.notesSheet
             if (notes != null) {
-                for (shape in notes.getShapes()) {
-                    if (shape is AutoShape // 文本框 
+                for (shape in notes.shapes) {
+                    if (shape is AutoShape // 文本框
                         || shape is com.wxiwei.office.fc.hslf.model.TextBox
                     )  // 占位符
                     {
@@ -2209,24 +2215,24 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param shape
      * @param key
      * @return
      */
     fun searchShape(shape: Shape?, key: String): Boolean {
         val sb = StringBuilder()
-        if (shape is AutoShape // 文本框 
+        if (shape is AutoShape // 文本框
             || shape is com.wxiwei.office.fc.hslf.model.TextBox
         )  // 占位符
         {
-            sb.append(shape.getText())
+            sb.append(shape.text)
             if (sb.indexOf(key) >= 0) {
                 return true
             }
             sb.delete(0, sb.length)
         } else if (shape is ShapeGroup) {
-            val sh = shape.getShapes()
+            val sh = shape.shapes
             for (i in sh.indices) {
                 if (searchShape(sh[i], key)) {
                     return true
@@ -2237,7 +2243,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      */
     private fun converterColor(color: Color): Int {
 //        if(color.getAlpha() == 0)
@@ -2248,7 +2254,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param size
      */
     fun setMaxFontSize(size: Int) {
@@ -2268,7 +2274,7 @@ class PPTReader @JvmOverloads constructor(
     }
 
     /**
-     * 
+     *
      * @param parent
      * @param shape
      * @param spPr
@@ -2276,11 +2282,11 @@ class PPTReader @JvmOverloads constructor(
     fun processGrpRotation(shape: Shape, autoShape: IShape) {
         var angle = shape.rotation.toFloat()
         if (shape.flipHorizontal) {
-            autoShape.setFlipHorizontal(true)
+            autoShape.flipHorizontal = true
             angle = -angle
         }
         if (shape.flipVertical) {
-            autoShape.setFlipVertical(true)
+            autoShape.flipVertical = true
             angle = -angle
         }
 
@@ -2291,7 +2297,7 @@ class PPTReader @JvmOverloads constructor(
                 angle -= 90f
             }
         }
-        autoShape.setRotation(angle)
+        autoShape.rotation = angle
     }
 
     /**

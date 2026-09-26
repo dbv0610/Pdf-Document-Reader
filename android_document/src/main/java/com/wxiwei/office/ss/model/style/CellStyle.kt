@@ -410,7 +410,7 @@ class CellStyle
     private fun checkFillPattern() {
         if (fill == null) {
             fill = BackgroundAndFill()
-            fill!!.setFillType(BackgroundAndFill.FILL_NO)
+            fill!!.fillType = BackgroundAndFill.FILL_NO
         }
     }
 
@@ -429,7 +429,7 @@ class CellStyle
      */
     fun setFillPatternType(type: Byte) {
         checkFillPattern()
-        fill!!.setFillType(type)
+        fill!!.fillType = type
     }
 
     /**
@@ -437,7 +437,7 @@ class CellStyle
      */
     fun getFillPatternType(): Byte {
         checkFillPattern()
-        return fill!!.getFillType()
+        return fill!!.fillType
     }
 
     /**
@@ -446,7 +446,7 @@ class CellStyle
      */
     fun setBgColor(color: Int) {
         checkFillPattern()
-        fill!!.setBackgoundColor(color)
+        fill!!.backgoundColor = color
     }
 
     /**
@@ -454,12 +454,12 @@ class CellStyle
      */
     fun getBgColor(): Int {
         checkFillPattern()
-        return fill!!.getBackgoundColor()
+        return fill!!.backgoundColor
     }
 
     fun setFgColor(color: Int) {
         checkFillPattern()
-        fill!!.setForegroundColor(color)
+        fill!!.foregroundColor = color
     }
 
     /**
@@ -467,7 +467,7 @@ class CellStyle
      */
     fun getFgColor(): Int {
         checkFillPattern()
-        return fill!!.getForegroundColor()
+        return fill!!.foregroundColor
     }
 
     /**

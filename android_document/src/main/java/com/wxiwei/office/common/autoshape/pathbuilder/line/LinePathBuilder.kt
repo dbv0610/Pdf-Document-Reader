@@ -56,7 +56,7 @@ object LinePathBuilder {
     fun getLinePath(shape: LineShape, rect: Rect, zoom: Float): MutableList<ExtendPath?>? {
         paths.clear()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.Line, ShapeTypes.StraightConnector1 -> return getStraightConnectorPath(
                 shape,
                 rect,
@@ -93,13 +93,12 @@ object LinePathBuilder {
         var y1 = rect.bottom
         val lineLength =
             sqrt((rect.width() * rect.width() + rect.height() * rect.height()).toDouble())
-        if (shape.getStartArrowhead() &&
-            (shape.getStartArrow().getType() == Arrow.Arrow_Triangle || shape.getStartArrow()
-                .getType() == Arrow.Arrow_Stealth)
+        if (shape.startArrowhead &&
+            (shape.startArrow!!.type == Arrow.Arrow_Triangle || shape.startArrow!!.type == Arrow.Arrow_Stealth)
         ) {
             val arrowLength = LineArrowPathBuilder.getArrowLength(
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth()
+                shape.startArrow,
+                shape.line!!.lineWidth
             )
             if (abs(x1 - x0) >= 1) {
                 x0 = (x0 + (arrowLength * zoom) / lineLength * (x1 - x0) * 0.75f).toInt()
@@ -109,13 +108,12 @@ object LinePathBuilder {
             }
         }
 
-        if (shape.getEndArrowhead() &&
-            (shape.getEndArrow().getType() == Arrow.Arrow_Triangle || shape.getEndArrow()
-                .getType() == Arrow.Arrow_Stealth)
+        if (shape.endArrowhead &&
+            (shape.endArrow!!.type == Arrow.Arrow_Triangle || shape.endArrow!!.type == Arrow.Arrow_Stealth)
         ) {
             val arrowLength = LineArrowPathBuilder.getArrowLength(
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth()
+                shape.endArrow,
+                shape.line!!.lineWidth
             )
             if (abs(x1 - x0) >= 1) {
                 x1 = (x1 + (arrowLength * zoom) / lineLength * (x0 - x1) * 0.75f).toInt()
@@ -128,16 +126,16 @@ object LinePathBuilder {
         path!!.moveTo(x0.toFloat(), y0.toFloat())
         path.lineTo(x1.toFloat(), y1.toFloat())
 
-        var bgFill = shape.getBackgroundAndFill()
+        var bgFill = shape.backgroundAndFill
         if (bgFill == null) {
-            bgFill = shape.getLine().getBackgroundAndFill()
+            bgFill = shape.line!!.backgroundAndFill
         }
         extendPath.backgroundAndFill = bgFill
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.path = path
         paths.add(extendPath)
 
-        if (shape.getEndArrowhead()) {
+        if (shape.endArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getDirectLineArrowPath(
@@ -145,20 +143,20 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 rect.right.toFloat(),
                 rect.bottom.toFloat(),
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth(),
+                shape.endArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getEndArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.endArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
 
-        if (shape.getStartArrowhead()) {
+        if (shape.startArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getDirectLineArrowPath(
@@ -166,15 +164,15 @@ object LinePathBuilder {
                 rect.bottom.toFloat(),
                 rect.left.toFloat(),
                 rect.top.toFloat(),
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth(),
+                shape.startArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getStartArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.startArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
@@ -187,7 +185,7 @@ object LinePathBuilder {
         zoom: Float
     ): MutableList<ExtendPath?> {
         var x = rect.width() * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = rect.width() * values[0]!!
@@ -201,25 +199,23 @@ object LinePathBuilder {
         val y0 = rect.top
         val x1 = rect.right
         var y1 = rect.bottom
-        if (shape.getStartArrowhead() &&
-            (shape.getStartArrow().getType() == Arrow.Arrow_Triangle || shape.getStartArrow()
-                .getType() == Arrow.Arrow_Stealth)
+        if (shape.startArrowhead &&
+            (shape.startArrow!!.type == Arrow.Arrow_Triangle || shape.startArrow!!.type == Arrow.Arrow_Stealth)
         ) {
             val length = LineArrowPathBuilder.getArrowLength(
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth()
+                shape.startArrow,
+                shape.line!!.lineWidth
             )
             x0 =
                 (x0 + ceil(((length * zoom) / abs(x1 - x0) * (x1 - x0) * 0.75f).toDouble())).toInt()
         }
 
-        if (shape.getEndArrowhead() &&
-            (shape.getEndArrow().getType() == Arrow.Arrow_Triangle || shape.getEndArrow()
-                .getType() == Arrow.Arrow_Stealth)
+        if (shape.endArrowhead &&
+            (shape.endArrow!!.type == Arrow.Arrow_Triangle || shape.endArrow!!.type == Arrow.Arrow_Stealth)
         ) {
             val length = LineArrowPathBuilder.getArrowLength(
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth()
+                shape.endArrow,
+                shape.line!!.lineWidth
             )
             y1 =
                 (y1 + ceil(((length * zoom) / abs(y1 - y0) * (y0 - y1) * 0.75f).toDouble())).toInt()
@@ -231,15 +227,15 @@ object LinePathBuilder {
         path.lineTo(rect.right.toFloat(), rect.top.toFloat())
         path.lineTo(x1.toFloat(), y1.toFloat())
 
-        var bgFill = shape.getBackgroundAndFill()
+        var bgFill = shape.backgroundAndFill
         if (bgFill == null) {
-            bgFill = shape.getLine().getBackgroundAndFill()
+            bgFill = shape.line!!.backgroundAndFill
         }
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         paths.add(extendPath)
 
-        if (shape.getEndArrowhead()) {
+        if (shape.endArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getDirectLineArrowPath(
@@ -247,19 +243,19 @@ object LinePathBuilder {
                 y1.toFloat(),
                 rect.right.toFloat(),
                 rect.bottom.toFloat(),
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth(),
+                shape.endArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getEndArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.endArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
-        if (shape.getStartArrowhead()) {
+        if (shape.startArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getDirectLineArrowPath(
@@ -267,15 +263,15 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 rect.left.toFloat(),
                 rect.top.toFloat(),
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth(),
+                shape.startArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getStartArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.startArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
@@ -288,7 +284,7 @@ object LinePathBuilder {
         zoom: Float
     ): MutableList<ExtendPath?> {
         var x = rect.width() * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = rect.width() * values[0]!!
@@ -303,25 +299,23 @@ object LinePathBuilder {
         var x1 = rect.right
         val y1 = rect.bottom
 
-        if (shape.getStartArrowhead() &&
-            (shape.getStartArrow().getType() == Arrow.Arrow_Triangle || shape.getStartArrow()
-                .getType() == Arrow.Arrow_Stealth)
+        if (shape.startArrowhead &&
+            (shape.startArrow!!.type == Arrow.Arrow_Triangle || shape.startArrow!!.type == Arrow.Arrow_Stealth)
         ) {
             val length = LineArrowPathBuilder.getArrowLength(
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth()
+                shape.startArrow,
+                shape.line!!.lineWidth
             )
             x0 =
                 (x0 + ceil(((length * zoom) / abs(x1 - x0) * (x1 - x0) * 0.75f).toDouble())).toInt()
         }
 
-        if (shape.getEndArrowhead() &&
-            (shape.getEndArrow().getType() == Arrow.Arrow_Triangle || shape.getEndArrow()
-                .getType() == Arrow.Arrow_Stealth)
+        if (shape.endArrowhead &&
+            (shape.endArrow!!.type == Arrow.Arrow_Triangle || shape.endArrow!!.type == Arrow.Arrow_Stealth)
         ) {
             val length = LineArrowPathBuilder.getArrowLength(
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth()
+                shape.endArrow,
+                shape.line!!.lineWidth
             )
             x1 =
                 (x1 + ceil(((length * zoom) / abs(x1 - x0) * (x0 - x1) * 0.75f).toDouble())).toInt()
@@ -334,15 +328,15 @@ object LinePathBuilder {
         path.lineTo(rect.left + x, rect.bottom.toFloat())
         path.lineTo(x1.toFloat(), y1.toFloat())
 
-        var bgFill = shape.getBackgroundAndFill()
+        var bgFill = shape.backgroundAndFill
         if (bgFill == null) {
-            bgFill = shape.getLine().getBackgroundAndFill()
+            bgFill = shape.line!!.backgroundAndFill
         }
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         paths.add(extendPath)
 
-        if (shape.getEndArrowhead()) {
+        if (shape.endArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getDirectLineArrowPath(
@@ -350,19 +344,19 @@ object LinePathBuilder {
                 rect.bottom.toFloat(),
                 rect.right.toFloat(),
                 rect.bottom.toFloat(),
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth(),
+                shape.endArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getEndArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.endArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
-        if (shape.getStartArrowhead()) {
+        if (shape.startArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getDirectLineArrowPath(
@@ -370,15 +364,15 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 rect.left.toFloat(),
                 rect.top.toFloat(),
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth(),
+                shape.startArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getStartArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.startArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
@@ -402,15 +396,15 @@ object LinePathBuilder {
             rect.bottom.toFloat()
         )
 
-        var bgFill = shape.getBackgroundAndFill()
+        var bgFill = shape.backgroundAndFill
         if (bgFill == null) {
-            bgFill = shape.getLine().getBackgroundAndFill()
+            bgFill = shape.line!!.backgroundAndFill
         }
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         paths.add(extendPath)
 
-        if (shape.getEndArrowhead()) {
+        if (shape.endArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getQuadBezArrowPath(
@@ -420,19 +414,19 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 rect.right.toFloat(),
                 rect.bottom.toFloat(),
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth(),
+                shape.endArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getEndArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.endArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
-        if (shape.getStartArrowhead()) {
+        if (shape.startArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getQuadBezArrowPath(
@@ -442,15 +436,15 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 rect.left.toFloat(),
                 rect.top.toFloat(),
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth(),
+                shape.startArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getStartArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.startArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
@@ -464,7 +458,7 @@ object LinePathBuilder {
         zoom: Float
     ): MutableList<ExtendPath?> {
         var x = rect.width() * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = rect.width() * values[0]!!
@@ -472,15 +466,15 @@ object LinePathBuilder {
         }
 
         var extendPath: ExtendPath? = null
-        var bgFill = shape.getBackgroundAndFill()
+        var bgFill = shape.backgroundAndFill
         if (bgFill == null) {
-            bgFill = shape.getLine().getBackgroundAndFill()
+            bgFill = shape.line!!.backgroundAndFill
         }
 
         var startArrowTailCenter: PointF? = null
         var endArrowTailCenter: PointF? = null
 
-        if (shape.getEndArrowhead()) {
+        if (shape.endArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             val arrowPathAndTail = LineArrowPathBuilder.getQuadBezArrowPath(
@@ -490,12 +484,12 @@ object LinePathBuilder {
                 rect.bottom.toFloat(),
                 rect.right.toFloat(),
                 rect.bottom.toFloat(),
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth(),
+                shape.endArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             )
 
-            val arrowType = shape.getEndArrow().getType()
+            val arrowType = shape.endArrow!!.type
             if (arrowType == Arrow.Arrow_Triangle || arrowType == Arrow.Arrow_Stealth) {
                 endArrowTailCenter = arrowPathAndTail.arrowTailCenter
             }
@@ -504,12 +498,12 @@ object LinePathBuilder {
             if (arrowType != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
 
-        if (shape.getStartArrowhead()) {
+        if (shape.startArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             val arrowPathAndTail = LineArrowPathBuilder.getQuadBezArrowPath(
@@ -519,12 +513,12 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 rect.left.toFloat(),
                 rect.top.toFloat(),
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth(),
+                shape.startArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             )
 
-            val arrowType = shape.getStartArrow().getType()
+            val arrowType = shape.startArrow!!.type
             if (arrowType == Arrow.Arrow_Triangle || arrowType == Arrow.Arrow_Stealth) {
                 startArrowTailCenter = arrowPathAndTail.arrowTailCenter
             }
@@ -533,7 +527,7 @@ object LinePathBuilder {
             if (arrowType != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
@@ -547,7 +541,7 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 startArrowTailCenter.x,
                 startArrowTailCenter.y,
-                shape.getStartArrow().getType()
+                shape.startArrow!!.type
             )
             path.moveTo(startArrowTailCenter.x, startArrowTailCenter.y)
         } else {
@@ -563,7 +557,7 @@ object LinePathBuilder {
                 rect.bottom.toFloat(),
                 endArrowTailCenter.x,
                 endArrowTailCenter.y,
-                shape.getEndArrow().getType()
+                shape.endArrow!!.type
             )
             path.quadTo(
                 rect.left + x,
@@ -582,7 +576,7 @@ object LinePathBuilder {
 
 
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         paths.add(extendPath)
 
         return paths
@@ -595,7 +589,7 @@ object LinePathBuilder {
     ): MutableList<ExtendPath?> {
         var x = rect.width() * 0.5f
         var y = rect.height() * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = rect.width() * values[0]!!
@@ -624,15 +618,15 @@ object LinePathBuilder {
         path.moveTo(x1, y1)
         path.quadTo(rect.right.toFloat(), y1, rect.right.toFloat(), rect.bottom.toFloat())
 
-        var bgFill = shape.getBackgroundAndFill()
+        var bgFill = shape.backgroundAndFill
         if (bgFill == null) {
-            bgFill = shape.getLine().getBackgroundAndFill()
+            bgFill = shape.line!!.backgroundAndFill
         }
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         paths.add(extendPath)
 
-        if (shape.getEndArrowhead()) {
+        if (shape.endArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getQuadBezArrowPath(
@@ -642,19 +636,19 @@ object LinePathBuilder {
                 y1,
                 rect.right.toFloat(),
                 rect.bottom.toFloat(),
-                shape.getEndArrow(),
-                shape.getLine().getLineWidth(),
+                shape.endArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getEndArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.endArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }
-        if (shape.getStartArrowhead()) {
+        if (shape.startArrowhead) {
             extendPath = ExtendPath()
             extendPath.setArrowFlag(true)
             path = LineArrowPathBuilder.getQuadBezArrowPath(
@@ -664,15 +658,15 @@ object LinePathBuilder {
                 rect.top.toFloat(),
                 rect.left.toFloat(),
                 rect.top.toFloat(),
-                shape.getStartArrow(),
-                shape.getLine().getLineWidth(),
+                shape.startArrow!!,
+                shape.line!!.lineWidth,
                 zoom
             ).arrowPath
             extendPath.path = path
-            if (shape.getStartArrow().getType() != Arrow.Arrow_Arrow) {
+            if (shape.startArrow!!.type != Arrow.Arrow_Arrow) {
                 extendPath.backgroundAndFill = bgFill
             } else {
-                extendPath.setLine(shape.getLine())
+                extendPath.setLine(shape.line)
             }
             paths.add(extendPath)
         }

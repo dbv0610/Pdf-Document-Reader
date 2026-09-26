@@ -79,15 +79,15 @@ class StyleReader private constructor() {
             val rgb = element.attribute("rgb")
             val indexed = element.attribute("indexed")
             if (theme != null) {
-                index = book!!.getThemeColorIndex(element.attributeValue("theme").toInt())
+                index = book!!.getThemeColorIndex(element.attributeValue("theme")!!.toInt())
                 val tint = element.attribute("tint")
-                if (tint != null) index = book!!.addColor(ColorUtil.instance().getColorWithTint(book!!.getColor(index), element.attributeValue("tint").toDouble()))
+                if (tint != null) index = book!!.addColor(ColorUtil.instance().getColorWithTint(book!!.getColor(index), element.attributeValue("tint")!!.toDouble()))
             } else if (rgb != null) {
                 var value = element.attributeValue("rgb")
-                if (value.length > 6) value = value.substring(value.length - 6)
-                index = book!!.addColor((0xff shl 24) or value.toInt(16))
+                if (value!!.length > 6) value = value!!.substring(value!!.length - 6)
+                index = book!!.addColor((0xff shl 24) or value!!.toInt(16))
             } else if (indexed != null) {
-                index = element.attributeValue("indexed").toInt()
+                index = element.attributeValue("indexed")!!.toInt()
                 if (index == Palette.FIRST_COLOR_INDEX + Palette.STANDARD_PALETTE_SIZE) index = 0
                 else if (index > Palette.FIRST_COLOR_INDEX + Palette.STANDARD_PALETTE_SIZE) index = Palette.FIRST_COLOR_INDEX + 1
             }
@@ -95,7 +95,7 @@ class StyleReader private constructor() {
         return index.toShort()
     }
 
-    private fun processNumberFormat(element: Element): NumberFormat = NumberFormat(element.attributeValue("numFmtId").toShort(), element.attributeValue("formatCode"))
+    private fun processNumberFormat(element: Element): NumberFormat = NumberFormat(element.attributeValue("numFmtId")!!.toShort(), element.attributeValue("formatCode"))
 
     private fun processFont(element: Element): Font {
         val font = Font()
@@ -124,30 +124,30 @@ class StyleReader private constructor() {
         if (pattern != null) {
             if (pattern.attributeValue("patternType").equals("none", true)) return null
             val fill = BackgroundAndFill()
-            pattern.element("fgColor")?.let { fill.setForegroundColor(book!!.getColor(colorIndex(it).toInt())) }
-            pattern.element("fgColor")?.let { fill.setFillType(BackgroundAndFill.FILL_SOLID) }
-            pattern.element("bgColor")?.let { fill.setBackgoundColor(book!!.getColor(colorIndex(it).toInt())) }
+            pattern.element("fgColor")?.let { fill.foregroundColor = book!!.getColor(colorIndex(it).toInt()) }
+            pattern.element("fgColor")?.let { fill.fillType = BackgroundAndFill.FILL_SOLID }
+            pattern.element("bgColor")?.let { fill.backgoundColor = book!!.getColor(colorIndex(it).toInt()) }
             return fill
         }
         val gradient = element.element("gradientFill") ?: return null
         val stops = gradient.elements("stop")
-        val colors = IntArray(stops.size)
-        val positions = FloatArray(stops.size)
-        for (i in stops.indices) {
-            val stop = stops[i] as Element
-            positions[i] = stop.attributeValue("position").toFloat()
+        val colors = IntArray(stops!!.size)
+        val positions = FloatArray(stops!!.size)
+        for (i in stops!!.indices) {
+            val stop = stops!![i] as Element
+            positions[i] = stop.attributeValue("position")!!.toFloat()
             colors[i] = book!!.getColor(colorIndex(stop.element("color")).toInt())
         }
         val fill = BackgroundAndFill()
         val shader: AShader
         if (!gradient.attributeValue("type").equals("path", true)) {
-            fill.setFillType(BackgroundAndFill.FILL_SHADE_LINEAR)
+            fill.fillType = BackgroundAndFill.FILL_SHADE_LINEAR
             shader = LinearGradientShader((gradient.attributeValue("degree")?.toFloat() ?: 0f), colors, positions)
         } else {
-            fill.setFillType(BackgroundAndFill.FILL_SHADE_RADIAL)
+            fill.fillType = BackgroundAndFill.FILL_SHADE_RADIAL
             shader = RadialGradientShader(radialCenter(gradient), colors, positions)
         }
-        fill.setShader(shader)
+        fill.shader = shader
         return fill
     }
 
@@ -221,20 +221,20 @@ class StyleReader private constructor() {
     }
 
     private inner class StyleSaxHandler : ElementHandler {
-        override fun onStart(path: ElementPath) {}
-        override fun onEnd(path: ElementPath) {
+        override fun onStart(path: ElementPath?) {}
+        override fun onEnd(path: ElementPath?) {
             if (iReader!!.isAborted()) throw AbortReaderError("abort Reader")
-            val element = path.getCurrent()
-            when (element.getName()) {
+            val element = path?.current
+            when (element!!.name) {
                 "numFmt" -> { val format = processNumberFormat(element); numFmts!![format.getNumberFormatID().toInt()] = format }
                 "font" -> book!!.addFont(fontIndex++, processFont(element))
                 "fill" -> fills!![fillIndex++] = processFill(element)
                 "border" -> cellBorders!![borderIndex++] = processBorder(element)
                 "xf" -> book!!.addCellStyle(styleIndex++, processCellStyle(element))
-                "rgbColor" -> book!!.addColor(indexedColor++, (0xff shl 24) or element.attributeValue("rgb").takeLast(6).toInt(16))
+                "rgbColor" -> book!!.addColor(indexedColor++, (0xff shl 24) or element!!.attributeValue("rgb")!!.takeLast(6).toInt(16))
                 "dxf" -> processTableFormat(element)
             }
-            element.detach()
+            element!!.detach()
         }
     }
 

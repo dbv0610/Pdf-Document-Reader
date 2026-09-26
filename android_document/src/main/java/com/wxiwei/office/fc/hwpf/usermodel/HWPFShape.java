@@ -409,7 +409,7 @@ public abstract class HWPFShape
             	lineFill.setForegroundColor(lineColor.getRGB());
             	Line line = new Line();
                 line.setBackgroundAndFill(lineFill);
-                line.setLineWidth(lineWidth);
+                line.lineWidth = lineWidth;
                 line.setDash(dash);
                 return line;
             }

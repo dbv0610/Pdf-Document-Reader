@@ -72,7 +72,7 @@ public class ReaderThumbnail
         Property property = poifs.getProperty("\u0005SummaryInformation");
         if (property != null)
         {
-            byte[] data = property.getDocumentRawData();
+            byte[] data = property.documentRawData;
             
             int offset = 0;
             int byteOrder = LittleEndian.getUShort(data, offset);

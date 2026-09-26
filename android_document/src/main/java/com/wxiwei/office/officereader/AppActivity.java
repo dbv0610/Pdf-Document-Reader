@@ -133,25 +133,25 @@ public class AppActivity extends AppCompatActivity implements IMainFrame {
 
             @Override
             public void setModeType(byte modeType) {
-                // TODO Auto-generated method stub
+             
 
             }
 
             @Override
             public byte getModeType() {
-                // TODO Auto-generated method stub
+             
                 return VIEW_CHANGE_END;
             }
 
             @Override
             public boolean isZoom() {
-                // TODO Auto-generated method stub
+             
                 return false;
             }
 
             @Override
             public void dispose() {
-                // TODO Auto-generated method stub
+             
 
             }
         });
@@ -975,7 +975,7 @@ public class AppActivity extends AppCompatActivity implements IMainFrame {
 
                         @Override
                         public void run() {
-                            // TODO Auto-generated method stub
+                         
                             control.actionEvent(EventConstant.APP_INIT_CALLOUTVIEW_ID, null);
 
                         }
@@ -996,7 +996,7 @@ public class AppActivity extends AppCompatActivity implements IMainFrame {
 
                             @Override
                             public void run() {
-                                // TODO Auto-generated method stub
+                             
                                 control.actionEvent(EventConstant.APP_INIT_CALLOUTVIEW_ID, null);
 
                             }
@@ -1364,13 +1364,13 @@ public class AppActivity extends AppCompatActivity implements IMainFrame {
 //    }
     @Override
     public void completeLayout(LayoutInfo info) {
-        // TODO Auto-generated method stub
+     
 
     }
 
     @Override
     public boolean isChangePage() {
-        // TODO Auto-generated method stub
+     
         return true;
     }
 

@@ -45,7 +45,7 @@ class ThemeReader {
         val saxreader = SAXReader()
         val `in` = themePart.getInputStream()
         val poiTheme = saxreader.read(`in`)
-        val root = poiTheme.getRootElement()
+        val root = poiTheme!!.rootElement
         if (root != null) {
             val themeElements = root.element("themeElements")
             if (themeElements != null) {
@@ -54,16 +54,16 @@ class ThemeReader {
 
                 // color map
                 val colorMap: MutableMap<String, Int> = HashMap<String, Int>()
-                val it = clrScheme.elementIterator()
-                while (it.hasNext()) {
-                    val clr = it.next() as Element
-                    val name = clr.getName()
+                val it = clrScheme!!.elementIterator()
+                while (it!!.hasNext()) {
+                    val clr = it!!.next() as Element
+                    val name = clr.name ?: continue
                     val srgbClr = clr.element("srgbClr")
                     val sysClr = clr.element("sysClr")
                     if (srgbClr != null) {
-                        colorMap.put(name, Color.parseColor("#" + srgbClr.attributeValue("val")))
+                        colorMap.put(name, Color.parseColor("#" + (srgbClr.attributeValue("val") ?: "")))
                     } else if (sysClr != null) {
-                        colorMap.put(name, Color.parseColor("#" + sysClr.attributeValue("lastClr")))
+                        colorMap.put(name, Color.parseColor("#" + (sysClr.attributeValue("lastClr") ?: "")))
                     } else {
                         colorMap.put(name, Color.WHITE)
                     }

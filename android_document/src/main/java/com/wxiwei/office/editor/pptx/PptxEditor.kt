@@ -53,20 +53,20 @@ class PptxEditor(private val source: File) {
     }
     val queuedCount: Int get() = ops.size
     fun slideSizeEmu(): Size = read(Size(0, 0)) { pkg ->
-        val s = pkg.xml("ppt/presentation.xml").rootElement.firstChild(P, "sldSz") ?: error("Missing slide size")
+        val s = pkg.xml("ppt/presentation.xml").rootElement!!.firstChild(P, "sldSz") ?: error("Missing slide size")
         Size(s.num("cx"), s.num("cy"))
     }
     private fun part(pkg: OoxmlPackage, index: Int): String {
-        val ids = pkg.xml("ppt/presentation.xml").rootElement.firstChild(P, "sldIdLst")?.childrenNamed(P, "sldId").orEmpty()
+        val ids = pkg.xml("ppt/presentation.xml").rootElement!!.firstChild(P, "sldIdLst")?.childrenNamed(P, "sldId").orEmpty()
         require(index in ids.indices) { "Slide index out of range: $index" }
         val rid = ids[index].attributeValue(QName("id", R))
         val rel = pkg.relationships("ppt/presentation.xml").firstOrNull { it.id == rid && it.type == REL_SLIDE && it.targetMode != "External" }
             ?: throw NoSuchElementException("Missing slide relationship: $rid")
         return pkg.resolveTarget("ppt/presentation.xml", rel.target)
     }
-    private fun tree(pkg: OoxmlPackage, part: String): Element = pkg.xml(part).rootElement.firstChild(P, "cSld")?.firstChild(P, "spTree") ?: error("Missing shape tree")
-    private fun descendants(e: Element): List<Element> = listOf(e) + e.elements().filterIsInstance<Element>().flatMap { descendants(it) }
-    private fun nv(e: Element) = e.elements().filterIsInstance<Element>().firstOrNull { it.namespaceURI == P.uri && it.name.startsWith("nv") }
+    private fun tree(pkg: OoxmlPackage, part: String): Element = pkg.xml(part).rootElement!!.firstChild(P, "cSld")?.firstChild(P, "spTree") ?: error("Missing shape tree")
+    private fun descendants(e: Element): List<Element> = listOf(e) + e.elements()!!.filterIsInstance<Element>().flatMap { descendants(it) }
+    private fun nv(e: Element) = e.elements()!!.filterIsInstance<Element>().firstOrNull { it.namespaceURI == P.uRI && it.name!!.startsWith("nv") }
     private fun identity(e: Element) = nv(e)?.firstChild(P, "cNvPr")
     private fun placeholder(e: Element) = nv(e)?.firstChild(P, "nvPr")?.firstChild(P, "ph")
     private fun xfrm(e: Element): Element? = when (e.name) {
@@ -84,7 +84,7 @@ class PptxEditor(private val source: File) {
         var ph = placeholder(shape) ?: return null
         var current = slide
         for (type in listOf("slideLayout", "slideMaster")) {
-            val rel = pkg.relationships(current).firstOrNull { it.type == "${R.uri}/$type" && it.targetMode != "External" } ?: continue
+            val rel = pkg.relationships(current).firstOrNull { it.type == "${R.uRI}/$type" && it.targetMode != "External" } ?: continue
             current = pkg.resolveTarget(current, rel.target)
             val candidates = descendants(tree(pkg, current)).filter { placeholder(it) != null }
             val match = if (type == "slideLayout") {
@@ -109,11 +109,11 @@ class PptxEditor(private val source: File) {
         companion object {
             private fun rectOf(x: Element?): Rect? {
                 val o = x?.firstChild(A, "off") ?: return null; val e = x.firstChild(A, "ext") ?: return null
-                return Rect(o.attributeValue("x").toLong(), o.attributeValue("y").toLong(), e.attributeValue("cx").toLong(), e.attributeValue("cy").toLong())
+                return Rect(o.attributeValue("x")!!.toLong(), o.attributeValue("y")!!.toLong(), e.attributeValue("cx")!!.toLong(), e.attributeValue("cy")!!.toLong())
             }
         }
     }
-    private fun walk(root: Element, t: Transform = Transform()): List<Pair<Element, Transform>> = root.elements().filterIsInstance<Element>().flatMap { e ->
+    private fun walk(root: Element, t: Transform = Transform()): List<Pair<Element, Transform>> = root.elements()!!.filterIsInstance<Element>().flatMap { e ->
         if (identity(e) == null) emptyList() else listOf(e to t) + if (e.name == "grpSp") walk(e, t.group(xfrm(e))) else emptyList()
     }
     fun listShapes(slideIndex: Int): List<PptxShapeInfo> = read(emptyList()) { pkg ->
@@ -122,24 +122,24 @@ class PptxEditor(private val source: File) {
             val id = identity(e)!!
             PptxShapeInfo(id.num("id").toInt(), id.attributeValue("name") ?: "", when (e.name) {
                 "sp" -> ShapeKind.TEXT; "pic" -> ShapeKind.PICTURE; "grpSp" -> ShapeKind.GROUP
-                "graphicFrame" -> if (descendants(e).any { it.namespaceURI == A.uri && it.name == "tbl" }) ShapeKind.TABLE else ShapeKind.OTHER
+                "graphicFrame" -> if (descendants(e).any { it.namespaceURI == A.uRI && it.name == "tbl" }) ShapeKind.TABLE else ShapeKind.OTHER
                 else -> ShapeKind.OTHER
             }, t.map(rect(xfrm(e)) ?: inherited(pkg, part, e) ?: Rect(0, 0, 0, 0)),
-                descendants(e).filter { it.namespaceURI == A.uri && it.name == "p" }.joinToString("\n") { p -> descendants(p).filter { it.namespaceURI == A.uri && it.name in listOf("t", "br") }.joinToString("") { if (it.name == "br") "\n" else it.text } }, placeholder(e) != null)
+                descendants(e).filter { it.namespaceURI == A.uRI && it.name == "p" }.joinToString("\n") { p -> descendants(p).filter { it.namespaceURI == A.uRI && it.name in listOf("t", "br") }.joinToString("") { if (it.name == "br") "\n" else it.text ?: "" } }, placeholder(e) != null)
         }
     }
     private fun nextId(index: Int): Int = read(-1) { pkg ->
-        val max = descendants(tree(pkg, part(pkg, index))).filter { it.namespaceURI == P.uri && it.name == "cNvPr" }.maxOfOrNull { it.num("id") } ?: 0L
+        val max = descendants(tree(pkg, part(pkg, index))).filter { it.namespaceURI == P.uRI && it.name == "cNvPr" }.maxOfOrNull { it.num("id") } ?: 0L
         require(max < Int.MAX_VALUE); (max + 1).toInt()
     }
-    private fun Element.child(ns: Namespace, name: String) = addElement(QName(name, ns))
+    private fun Element.child(ns: Namespace, name: String): Element = addElement(QName(name, ns))!!
     private fun geometry(e: Element, r: Rect) {
         require(r.width > 0 && r.height > 0) { "Positive shape dimensions required" }
-        e.child(A, "off").addAttribute("x", r.x.toString()).addAttribute("y", r.y.toString())
-        e.child(A, "ext").addAttribute("cx", r.width.toString()).addAttribute("cy", r.height.toString())
+        e.child(A, "off").addAttribute("x", r.x.toString())!!.addAttribute("y", r.y.toString())
+        e.child(A, "ext").addAttribute("cx", r.width.toString())!!.addAttribute("cy", r.height.toString())
     }
     private fun shapeProperties(e: Element, r: Rect) = e.child(P, "spPr").apply {
-        geometry(child(A, "xfrm"), r); child(A, "prstGeom").addAttribute("prst", "rect").child(A, "avLst")
+        geometry(child(A, "xfrm"), r); child(A, "prstGeom").addAttribute("prst", "rect")!!.child(A, "avLst")
     }
     private fun paragraphs(body: Element, text: String, rPr: Element?, pPr: Element?) {
         body.childrenNamed(A, "p").forEach { body.remove(it) }
@@ -153,11 +153,11 @@ class PptxEditor(private val source: File) {
         return if (queue { pkg ->
             require(sizePt.isFinite() && sizePt in 1f..4000f && rgbHex.matches(Regex("[0-9a-fA-F]{6}"))) { "Invalid font size or RGB" }
             val sp = tree(pkg, part(pkg, slideIndex)).child(P, "sp")
-            sp.child(P, "nvSpPr").apply { child(P, "cNvPr").addAttribute("id", "$id").addAttribute("name", "TextBox $id"); child(P, "cNvSpPr").addAttribute("txBox", "1"); child(P, "nvPr") }
+            sp.child(P, "nvSpPr").apply { child(P, "cNvPr").addAttribute("id", "$id")!!.addAttribute("name", "TextBox $id"); child(P, "cNvSpPr").addAttribute("txBox", "1"); child(P, "nvPr") }
             shapeProperties(sp, rectEmu).child(A, "noFill")
             val body = sp.child(P, "txBody")
-            body.child(A, "bodyPr").addAttribute("wrap", "square").addAttribute("rtlCol", "0").child(A, "spAutoFit"); body.child(A, "lstStyle")
-            val rp = newElement(A, "rPr").addAttribute("lang", "vi-VN").addAttribute("sz", (sizePt * 100).roundToLong().toString()).addAttribute("b", if (bold) "1" else "0")
+            body.child(A, "bodyPr").addAttribute("wrap", "square")!!.addAttribute("rtlCol", "0")!!.child(A, "spAutoFit"); body.child(A, "lstStyle")
+            val rp = newElement(A, "rPr").addAttribute("lang", "vi-VN")!!.addAttribute("sz", (sizePt * 100).roundToLong().toString())!!.addAttribute("b", if (bold) "1" else "0")!!
             rp.child(A, "solidFill").child(A, "srgbClr").addAttribute("val", rgbHex.uppercase())
             paragraphs(body, text, rp, null)
         }) id else -1
@@ -170,7 +170,7 @@ class PptxEditor(private val source: File) {
             val media = pkg.addMedia("ppt/media", bytes, imageFile.extension)
             val rid = pkg.addRelationship(part, REL_IMAGE, "../media/${media.substringAfterLast('/')}")
             val pic = tree(pkg, part).child(P, "pic")
-            pic.child(P, "nvPicPr").apply { child(P, "cNvPr").addAttribute("id", "$id").addAttribute("name", "Picture $id"); child(P, "cNvPicPr").child(A, "picLocks").addAttribute("noChangeAspect", "1"); child(P, "nvPr") }
+            pic.child(P, "nvPicPr").apply { child(P, "cNvPr").addAttribute("id", "$id")!!.addAttribute("name", "Picture $id"); child(P, "cNvPicPr").child(A, "picLocks").addAttribute("noChangeAspect", "1"); child(P, "nvPr") }
             pic.child(P, "blipFill").apply { child(A, "blip").addAttribute(QName("embed", R), rid); child(A, "stretch").child(A, "fillRect") }
             shapeProperties(pic, rectEmu)
         }) id else -1
@@ -179,7 +179,7 @@ class PptxEditor(private val source: File) {
     fun setShapeText(slideIndex: Int, shapeId: Int, text: String): Boolean = queue { pkg ->
         val e = find(pkg, slideIndex, shapeId).first
         val body = e.firstChild(P, "txBody") ?: throw IllegalArgumentException("Shape has no editable text body")
-        val rp = descendants(body).firstOrNull { it.namespaceURI == A.uri && it.name == "r" }?.firstChild(A, "rPr")?.createCopy()
+        val rp = descendants(body).firstOrNull { it.namespaceURI == A.uRI && it.name == "r" }?.firstChild(A, "rPr")?.createCopy()
         val pp = body.firstChild(A, "p")?.firstChild(A, "pPr")?.createCopy()
         paragraphs(body, text, rp, pp)
     }
@@ -191,17 +191,17 @@ class PptxEditor(private val source: File) {
         val replacement = old?.createCopy() ?: newElement(if (e.name == "graphicFrame") P else A, "xfrm")
         listOf("off", "ext").forEach { name -> replacement.childrenNamed(A, name).forEach { replacement.remove(it) } }
         val coords = newElement(A, "xfrm"); geometry(coords, r)
-        coords.elements().filterIsInstance<Element>().reversed().forEach { replacement.content().add(0, it.createCopy()) }
+        coords.elements()!!.filterIsInstance<Element>().reversed().forEach { (replacement.content() as MutableList<Any?>).add(0, it.createCopy()) }
         if (old != null) parent.remove(old)
-        parent.content().add(if (e.name == "graphicFrame") minOf(1, parent.content().size) else 0, replacement)
+        (parent.content() as MutableList<Any?>).add(if (e.name == "graphicFrame") minOf(1, parent.content()!!.size) else 0, replacement)
     }
     fun deleteShape(slideIndex: Int, shapeId: Int): Boolean = queue { pkg ->
         val part = part(pkg, slideIndex); val e = find(pkg, slideIndex, shapeId).first
         val embeds = descendants(e).mapNotNull { it.attributeValue(QName("embed", R)) }.toSet()
-        e.parent.remove(e)
-        val used = descendants(pkg.xml(part).rootElement).mapNotNull { it.attributeValue(QName("embed", R)) }.toSet()
+        e.parent!!.remove(e)
+        val used = descendants(pkg.xml(part).rootElement!!).mapNotNull { it.attributeValue(QName("embed", R)) }.toSet()
         val relPart = pkg.relsPartOf(part)
-        if (pkg.has(relPart)) { val rels = pkg.xml(relPart).rootElement; rels.elements().filterIsInstance<Element>().filter { it.attributeValue("Id") in (embeds - used) && it.attributeValue("Type") == REL_IMAGE }.forEach { rels.remove(it) } }
+        if (pkg.has(relPart)) { val rels = pkg.xml(relPart).rootElement; rels!!.elements()!!.filterIsInstance<Element>().filter { it.attributeValue("Id") in (embeds - used) && it.attributeValue("Type") == REL_IMAGE }.forEach { rels!!.remove(it) } }
     }
     fun save(target: File): EditResult {
         if (!source.extension.equals("pptx", true)) return EditResult.Error(Reason.UNSUPPORTED_FORMAT, "Legacy PPT is unsupported")

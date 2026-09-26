@@ -1205,11 +1205,11 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
     private fun processRotation(shape: HWPFAutoShape, autoShape: IShape) {
         var angle = shape.rotation.toFloat()
         if (shape.flipHorizontal) {
-            autoShape.setFlipHorizontal(true)
+            autoShape.flipHorizontal = true
             angle = -angle
         }
         if (shape.flipVertical) {
-            autoShape.setFlipVertical(true)
+            autoShape.flipVertical = true
             angle = -angle
         }
 
@@ -1221,7 +1221,7 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
                 angle -= 90f
             }
         }
-        autoShape.setRotation(angle)
+        autoShape.rotation = angle
     }
 
     /**
@@ -1319,10 +1319,10 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
 
                 autoShape.backgroundAndFill = fill
                 if (line != null) {
-                    autoShape.setLine(line)
+                    autoShape.line = line
                 }
                 val adj: Array<Float>? = shape.adjustmentValue
-                autoShape.adjustData = adj
+                autoShape.adjustData = adj?.map { it as Float? }?.toTypedArray()
                 processRotation(shape, autoShape)
 
                 processAutoshapePosition(shape, autoShape)
@@ -1455,13 +1455,13 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
                     // wrap
                     if (drawing.getWrap() == 3 && !drawing.isAnchorLock()) {
                         if (drawing.isBelowText()) {
-                            autoShape.setWrap(WPAutoShape.WRAP_BOTTOM)
+                            autoShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM)
                         } else {
-                            autoShape.setWrap(WPAutoShape.WRAP_TOP)
+                            autoShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_TOP)
                             fill = autoShape.backgroundAndFill
                         }
                     } else {
-                        autoShape.setWrap(WPAutoShape.WRAP_OLE)
+                        autoShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_OLE)
                     }
                     AttrManage.instance().setShapeID(leaf.getAttribute(), control!!.getSysKit().getWPShapeManage().addShape(autoShape))
                     return true
@@ -1503,9 +1503,9 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
             if (parent == null) {
                 // wrap
                 if (drawing.getWrap() == 3 && !drawing.isAnchorLock()) {
-                    (shape as WPAutoShape).setWrap(WPAutoShape.WRAP_TOP)
+                    (shape as WPAutoShape).setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_TOP)
                 } else {
-                    (shape as WPAutoShape).setWrap(WPAutoShape.WRAP_OLE)
+                    (shape as WPAutoShape).setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_OLE)
                 }
                 AttrManage.instance().setShapeID(leaf.getAttribute(), control!!.getSysKit().getWPShapeManage().addShape(shape))
             } else {
@@ -1571,9 +1571,9 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
         // 属性
         val attr: IAttributeSet = textboxElement.getAttribute()
         // 宽度 default a4 paper
-        AttrManage.instance().setPageWidth(attr, (autoShape.getBounds().width * MainConstant.PIXEL_TO_TWIPS).toInt())
+        AttrManage.instance().setPageWidth(attr, (autoShape.bounds!!.width * MainConstant.PIXEL_TO_TWIPS).toInt())
         // 高度 default a4 paper
-        AttrManage.instance().setPageHeight(attr, (autoShape.getBounds().height * MainConstant.PIXEL_TO_TWIPS).toInt())
+        AttrManage.instance().setPageHeight(attr, (autoShape.bounds!!.height * MainConstant.PIXEL_TO_TWIPS).toInt())
 
         //网格类型，高度
         if (section.gridType != PageAttr.GRIDTYPE_NONE.toInt()) {
@@ -1635,9 +1635,9 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
             // 属性
             val attr: IAttributeSet = textboxElement.getAttribute()
             // 宽度 default a4 paper
-            AttrManage.instance().setPageWidth(attr, (autoShape.getBounds().width * MainConstant.PIXEL_TO_TWIPS).toInt())
+            AttrManage.instance().setPageWidth(attr, (autoShape.bounds!!.width * MainConstant.PIXEL_TO_TWIPS).toInt())
             // 高度 default a4 paper
-            AttrManage.instance().setPageHeight(attr, (autoShape.getBounds().height * MainConstant.PIXEL_TO_TWIPS).toInt())
+            AttrManage.instance().setPageHeight(attr, (autoShape.bounds!!.height * MainConstant.PIXEL_TO_TWIPS).toInt())
 
             // 上边距
             AttrManage.instance().setPageMarginTop(attr, (ShapeKit.getTextboxMarginTop(escherContainer) * MainConstant.PIXEL_TO_TWIPS).toInt())
@@ -1652,8 +1652,8 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
 
             autoShape.isTextWrapLine = ShapeKit.isTextboxWrapLine(escherContainer)
 
-            val width = (autoShape.getBounds().width - ShapeKit.getTextboxMarginLeft(escherContainer) - ShapeKit.getTextboxMarginRight(escherContainer)).toInt()
-            val height = (autoShape.getBounds().height - ShapeKit.getTextboxMarginTop(escherContainer) - ShapeKit.getTextboxMarginBottom(escherContainer)).toInt()
+            val width = (autoShape.bounds!!.width - ShapeKit.getTextboxMarginLeft(escherContainer) - ShapeKit.getTextboxMarginRight(escherContainer)).toInt()
+            val height = (autoShape.bounds!!.height - ShapeKit.getTextboxMarginTop(escherContainer) - ShapeKit.getTextboxMarginBottom(escherContainer)).toInt()
             var fontsize = 12
             val paint: Paint = PaintKit.instance().getPaint()
             paint.textSize = fontsize.toFloat()
@@ -1780,14 +1780,14 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
                     // wrap
                     if (drawing.getWrap() == 3 && !drawing.isAnchorLock()) {
                         if (drawing.isBelowText()) {
-                            wpPictureShape.setWrap(WPAutoShape.WRAP_BOTTOM)
+                            wpPictureShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM)
                         } else {
-                            wpPictureShape.setWrap(WPAutoShape.WRAP_TOP)
+                            wpPictureShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_TOP)
                         }
 
                         processPicturePosition(drawing, wpPictureShape)
                     } else {
-                        wpPictureShape.setWrap(WPAutoShape.WRAP_OLE)
+                        wpPictureShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_OLE)
                     }
 
                     AttrManage.instance().setShapeID(leaf.getAttribute(), control!!.getSysKit().getWPShapeManage().addShape(wpPictureShape))
@@ -1802,7 +1802,7 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
         } else {
             // Picture
             val pictureTable: PicturesTable = poiDoc!!.picturesTable
-            val pic: com.wxiwei.office.fc.hwpf.usermodel.Picture? = pictureTable.extractPicture(control!!.getSysKit().getPictureManage().picTempPath,
+            val pic: com.wxiwei.office.fc.hwpf.usermodel.Picture? = pictureTable.extractPicture(control!!.getSysKit().getPictureManage().getPicTempPath(),
                 run, false)
 
             if (pic != null && isSupportPicture(pic.suggestPictureType())) {
@@ -1831,7 +1831,7 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
                 val wpPictureShape = WPPictureShape()
                 wpPictureShape.setPictureShape(picShape)
 
-                wpPictureShape.setWrap(WPAutoShape.WRAP_OLE)
+                wpPictureShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_OLE)
 
                 AttrManage.instance().setShapeID(leaf.getAttribute(), control!!.getSysKit().getWPShapeManage().addShape(wpPictureShape))
                 return true
@@ -1845,7 +1845,7 @@ class DOCReader(control: IControl?, filePath: String?) : AbstractReader() {
                     rect.width = (inlineShape.getDxaGoal() * MainConstant.TWIPS_TO_PIXEL * inlineShape.horizontalScalingFactor / 1000f).toInt()
                     rect.height = (inlineShape.getDyaGoal() * MainConstant.TWIPS_TO_PIXEL * inlineShape.verticalScalingFactor / 1000f).toInt()
                     autoShape.bounds = rect
-                    autoShape.setWrap(WPAutoShape.WRAP_OLE)
+                    autoShape.setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_OLE)
 
                     processWordArtTextbox(inlineShape.getInlineWordArt().spContainer, autoShape)
 

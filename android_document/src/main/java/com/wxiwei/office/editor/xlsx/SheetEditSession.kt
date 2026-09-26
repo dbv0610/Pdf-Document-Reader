@@ -116,7 +116,7 @@ class SheetEditSession internal constructor(
         if (formula != null) {
             // Evaluate the edited cell first so a bad reference shows as an error value, not a stale one
             try { engine.store(cell, engine.evaluate(key.sheet, cell)) } catch (e: Exception) {
-                cell.setCellType(Cell.CELL_TYPE_ERROR); cell.setCellValue(com.wxiwei.office.fc.hssf.usermodel.HSSFErrorConstants.ERROR_NAME.toByte())
+                cell.setCellType(Cell.CELL_TYPE_ERROR); cell.setCellValue(com.wxiwei.office.fc.ss.usermodel.ErrorConstants.ERROR_NAME.toByte())
             }
         }
         dirty.add(key)

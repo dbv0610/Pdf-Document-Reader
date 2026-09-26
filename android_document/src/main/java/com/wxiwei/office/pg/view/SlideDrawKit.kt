@@ -123,11 +123,11 @@ open class SlideDrawKit {
             val count = slide.getShapeCount()
             for (i in 0 until count) {
                 val shape = slide.getShape(i)!!
-                if (shape.isHidden()) {
+                if (shape.isHidden) {
                     continue
                 }
 
-                val placeHolderID = shape.getPlaceHolderID()
+                val placeHolderID = shape.placeHolderID
                 var draw = false
                 if (slide.getSlideType() == PGSlide.Slide_Normal.toInt()) {
                     draw = true
@@ -156,7 +156,7 @@ open class SlideDrawKit {
      * @return
      */
     private fun getShapeRect(shape: IShape, zoom: Float): Rect {
-        val shapeRect = shape.getBounds()
+        val shapeRect = requireNotNull(shape.bounds)
         val left = Math.round(shapeRect.x * zoom)
         val top = Math.round(shapeRect.y * zoom)
         val width = Math.round(shapeRect.width * zoom)
@@ -179,32 +179,32 @@ open class SlideDrawKit {
             val rect = getShapeRect(shape, zoom)
 
             //flip vertical
-            if (shape.getFlipVertical()) {
+            if (shape.flipVertical) {
                 canvas.translate(rect.left.toFloat(), rect.bottom.toFloat())
                 canvas.scale(1f, -1f)
                 canvas.translate(-rect.left.toFloat(), -rect.top.toFloat())
             }
             //flip horizontal
-            if (shape.getFlipHorizontal()) {
+            if (shape.flipHorizontal) {
                 canvas.translate(rect.right.toFloat(), rect.top.toFloat())
                 canvas.scale(-1f, 1f)
                 canvas.translate(-rect.left.toFloat(), -rect.top.toFloat())
             }
 
-            if (shape.getRotation() != 0f) {
-                canvas.rotate(shape.getRotation(), rect.exactCenterX(), rect.exactCenterY())
+            if (shape.rotation != 0f) {
+                canvas.rotate(shape.rotation, rect.exactCenterX(), rect.exactCenterY())
             }
 
             val shapes = shape.getShapes()
             for (i in shapes.indices) {
                 val childShape = shapes[i]
-                if (shape.isHidden()) {
+                if (shape.isHidden) {
                     continue
                 }
                 drawShape(canvas, pgModel, editor, slideNo, childShape, zoom, shapeVisible)
             }
         } else {
-            if (shape.getType() == AbstractShape.SHAPE_SMARTART) {
+            if (shape.type == AbstractShape.SHAPE_SMARTART) {
                 val rect = getShapeRect(shape, zoom)
 
                 val smartArt = shape as SmartArt
@@ -216,24 +216,24 @@ open class SlideDrawKit {
                 for (item in shapes) {
                     drawShape(canvas, pgModel, editor, slideNo, item, zoom, shapeVisible)
                 }
-            } else if (shape.getType() == AbstractShape.SHAPE_TEXTBOX) {
+            } else if (shape.type == AbstractShape.SHAPE_TEXTBOX) {
                 // 文本框
                 drawTextShape(canvas, pgModel, editor, slideNo, shape as TextBox, zoom, shapeVisible)
             } else {
                 // 自选图型
-                if (shape.getType() == AbstractShape.SHAPE_LINE || shape.getType() == AbstractShape.SHAPE_AUTOSHAPE) {
+                if (shape.type == AbstractShape.SHAPE_LINE || shape.type == AbstractShape.SHAPE_AUTOSHAPE) {
                     AutoShapeKit.instance().drawAutoShape(canvas, editor.getControl(), slideNo, shape as AutoShape, zoom)
                 }
                 // 图片
-                else if (shape.getType() == AbstractShape.SHAPE_PICTURE) {
+                else if (shape.type == AbstractShape.SHAPE_PICTURE) {
                     drawPicture(canvas, editor, slideNo, shape as PictureShape, zoom)
                 }
                 // chart
-                else if (shape.getType() == AbstractShape.SHAPE_CHART) {
+                else if (shape.type == AbstractShape.SHAPE_CHART) {
                     drawChart(canvas, editor, shape as AChart, zoom)
                 }
                 // table
-                else if (shape.getType() == AbstractShape.SHAPE_TABLE) {
+                else if (shape.type == AbstractShape.SHAPE_TABLE) {
                     drawTable(canvas, pgModel, editor, slideNo, shape as TableShape, zoom, shapeVisible)
                 }
             }
@@ -256,20 +256,20 @@ open class SlideDrawKit {
         zoom: Float,
         shapeVisible: Map<Int, MutableMap<Int, IAnimation>?>?
     ) {
-        val rect = shape.getBounds()
+        val rect = requireNotNull(shape.bounds)
         // 没有文本就不要绘制
-        var elem: SectionElement? = shape.getElement()
+        var elem: SectionElement? = shape.element
         if (elem == null || elem.getEndOffset() - elem.getStartOffset() == 0L) {
             return
         }
 
         canvas.save()
         var doc: IDocument? = null
-        var root: STRoot? = shape.getRootView()
+        var root: STRoot? = shape.rootView
         val pgView = editor.getPGView()
         // for slide number
         if (pgView != null && root == null
-            && (shape.getMCType() == TextBox.MC_SlideNumber || shape.getPlaceHolderID() == OEPlaceholderAtom.MasterSlideNumber.toInt())
+            && (shape.mcType == TextBox.MC_SlideNumber || shape.placeHolderID == OEPlaceholderAtom.MasterSlideNumber.toInt())
         ) {
             doc = pgModel.getRenderersDoc()
             doc!!.appendSection(elem)
@@ -281,10 +281,10 @@ open class SlideDrawKit {
                 elem = SectionElement()
                 elem.setStartOffset(0)
                 elem.setEndOffset(pageNumber.length.toLong())
-                elem.setAttribute(shape.getElement().getAttribute()!!.clone())
+                elem.setAttribute(shape.element!!.getAttribute()!!.clone())
 
                 // para
-                val paraElem = shape.getElement().getParaCollection()!!.getElementForIndex(0) as ParagraphElement
+                val paraElem = shape.element!!.getParaCollection()!!.getElementForIndex(0) as ParagraphElement
 
                 val paraElemNew = ParagraphElement()
                 paraElemNew.setStartOffset(0)
@@ -301,7 +301,7 @@ open class SlideDrawKit {
                 leafElemNew.setAttribute(leafElem.getAttribute()!!.clone())
                 paraElemNew.appendLeaf(leafElemNew)
 
-                shape.setElement(elem)
+                shape.element = elem
             }
         }
 //        processRotation(canvas, shape, zoom);
@@ -309,16 +309,16 @@ open class SlideDrawKit {
             doc = pgModel.getRenderersDoc()
             doc!!.appendSection(elem)
             root = STRoot(editor, doc)
-            root.setWrapLine(shape.isWrapLine())
+            root.setWrapLine(shape.isWrapLine)
             root.doLayout()
-            shape.setRootView(root)
+            shape.rootView = root
         }
         //
         if (shapeVisible != null) {
-            if (shape.getGroupShapeID() >= 0) {
-                editor.setShapeAnimation(shapeVisible[shape.getGroupShapeID()])
+            if (shape.groupShapeID >= 0) {
+                editor.setShapeAnimation(shapeVisible[shape.groupShapeID])
             } else {
-                editor.setShapeAnimation(shapeVisible[shape.getShapeID()])
+                editor.setShapeAnimation(shapeVisible[shape.shapeID])
             }
 
             root.draw(canvas, (rect.x * zoom).toInt(), (rect.y * zoom).toInt(), zoom)
@@ -342,7 +342,7 @@ open class SlideDrawKit {
     private fun drawPicture(canvas: Canvas, editor: PGEditor, slideNo: Int, pictureShape: PictureShape, zoom: Float) {
         canvas.save()
         processRotation(canvas, pictureShape, zoom)
-        val r = pictureShape.getBounds()
+        val r = requireNotNull(pictureShape.bounds)
 
         val rect = getShapeRect(pictureShape, zoom)
 
@@ -350,7 +350,7 @@ open class SlideDrawKit {
 
         PictureKit.instance().drawPicture(
             canvas, editor.getControl(), slideNo, pictureShape.getPicture(editor.getControl()),
-            r.x * zoom, r.y * zoom, zoom, r.width * zoom, r.height * zoom, pictureShape.getPictureEffectInfor(), pictureShape.getAnimation()
+            r.x * zoom, r.y * zoom, zoom, r.width * zoom, r.height * zoom, pictureShape.pictureEffectInfor, pictureShape.animation
         )
         canvas.restore()
     }
@@ -362,13 +362,13 @@ open class SlideDrawKit {
      * @param zoom
      */
     private fun drawChart(canvas: Canvas, editor: PGEditor, chart: AChart, zoom: Float) {
-        val animation = chart.getAnimation()
+        val animation = chart.animation
         if (animation != null && animation.getCurrentAnimationInfor()!!.getAlpha() == 0) {
             return
         }
 
         canvas.save()
-        var rect = chart.getBounds()
+        var rect = requireNotNull(chart.bounds)
         val paint = PaintKit.instance().getPaint()
         if (animation != null) {
             val shapeAnim = animation.getShapeAnimation()!!
@@ -384,15 +384,15 @@ open class SlideDrawKit {
                 val rate = a / 255f * 0.5f
                 val centerX = rect.getCenterX()
                 val centerY = rect.getCenterY()
-                rect = Rectangle(rect)
+                rect = Rectangle(requireNotNull(rect))
                 rect.x = Math.round((centerX - rect.width * rate).toFloat())
                 rect.y = Math.round((centerY - rect.height * rate).toFloat())
                 rect.width = (rect.width * (rate * 2)).toInt()
                 rect.height = (rect.height * (rate * 2)).toInt()
                 val zoomT = zoom * rate * 2
                 processRotation(canvas, chart, zoomT)
-                chart.getAChart().setZoomRate(zoomT)
-                chart.getAChart().draw(
+                chart.aChart!!.setZoomRate(zoomT)
+                chart.aChart!!.draw(
                     canvas, editor.getControl(), (rect.x * zoom).toInt(), (rect.y * zoom).toInt(),
                     (rect.width * zoom).toInt(), (rect.height * zoom).toInt(), paint
                 )
@@ -401,8 +401,8 @@ open class SlideDrawKit {
         }
 
         processRotation(canvas, chart, zoom)
-        chart.getAChart().setZoomRate(zoom)
-        chart.getAChart().draw(
+        chart.aChart!!.setZoomRate(zoom)
+        chart.aChart!!.draw(
             canvas, editor.getControl(), (rect.x * zoom).toInt(), (rect.y * zoom).toInt(),
             (rect.width * zoom).toInt(), (rect.height * zoom).toInt(), paint
         )
@@ -432,17 +432,17 @@ open class SlideDrawKit {
         canvas.save()
         processRotation(canvas, table, zoom)
         var alpha = 255
-        if (table.getAnimation() != null) {
-            alpha = table.getAnimation().getCurrentAnimationInfor()!!.getAlpha()
+        if (table.animation != null) {
+            alpha = table.animation!!.getCurrentAnimationInfor()!!.getAlpha()
         }
-        if (table.getAnimation() != null && alpha != 255) {
+        if (table.animation != null && alpha != 255) {
 //            int LAYERS_FLAGS = Canvas.MATRIX_SAVE_FLAG |
 //                Canvas.CLIP_SAVE_FLAG
 //                | Canvas.HAS_ALPHA_LAYER_SAVE_FLAG
 //                | Canvas.FULL_COLOR_LAYER_SAVE_FLAG
 //                | Canvas.CLIP_TO_LAYER_SAVE_FLAG;
 //            int LAYERS_FLAGS = 31;
-            val tableRect = table.getBounds()
+            val tableRect = table.bounds
             if (tableRect != null) {
                 @Suppress("DEPRECATION")
                 canvas.saveLayerAlpha(
@@ -452,18 +452,18 @@ open class SlideDrawKit {
                 )
             }
         }
-        val count = table.getCellCount()
+        val count = table.cellCount
         for (i in 0 until count) {
             val cell = table.getCell(i)
             if (cell != null) {
-                val rect = cell.getBounds()
+                val rect = cell.bounds ?: continue
 
                 brRect.set(
                     Math.round(rect.x * zoom), Math.round(rect.y * zoom),
                     Math.round((rect.x + rect.width) * zoom), Math.round((rect.y + rect.height) * zoom)
                 )
                 // background
-                BackgroundDrawer.drawBackground(canvas, editor.getControl(), slideNo, cell.getBackgroundAndFill(), brRect, null, zoom)
+                BackgroundDrawer.drawBackground(canvas, editor.getControl(), slideNo, cell.backgroundAndFill, brRect, null, zoom)
 
                 // border
 //                if(table.isTable07())
@@ -472,9 +472,9 @@ open class SlideDrawKit {
                 }
 
                 // text
-                val tb = cell.getText()
+                val tb = cell.text
                 if (tb != null) {
-                    drawTextShape(canvas, pgModel, editor, slideNo, cell.getText(), zoom, shapeVisible)
+                    drawTextShape(canvas, pgModel, editor, slideNo, tb, zoom, shapeVisible)
                 }
             }
         }
@@ -507,10 +507,10 @@ open class SlideDrawKit {
         canvas.save()
         val addExd = Math.max(1f, zoom)
         // left
-        var line = cell.getLeftLine()
+        var line = cell.leftLine
         if (line != null) {
-            paint.setColor(line.getBackgroundAndFill().getForegroundColor())
-            paint.setStrokeWidth(line.getLineWidth() * zoom)
+            paint.setColor(line.backgroundAndFill!!.foregroundColor)
+            paint.setStrokeWidth(line.lineWidth * zoom)
             if (animation != null) {
                 paint.setAlpha(animation.getCurrentAnimationInfor()!!.getAlpha())
             }
@@ -518,10 +518,10 @@ open class SlideDrawKit {
         }
 
         // top
-        line = cell.getTopLine()
+        line = cell.topLine
         if (line != null) {
-            paint.setColor(line.getBackgroundAndFill().getForegroundColor())
-            paint.setStrokeWidth(line.getLineWidth() * zoom)
+            paint.setColor(line.backgroundAndFill!!.foregroundColor)
+            paint.setStrokeWidth(line.lineWidth * zoom)
             if (animation != null) {
                 paint.setAlpha(animation.getCurrentAnimationInfor()!!.getAlpha())
             }
@@ -529,10 +529,10 @@ open class SlideDrawKit {
         }
 
         // right
-        line = cell.getRightLine()
+        line = cell.rightLine
         if (line != null) {
-            paint.setColor(line.getBackgroundAndFill().getForegroundColor())
-            paint.setStrokeWidth(line.getLineWidth() * zoom)
+            paint.setColor(line.backgroundAndFill!!.foregroundColor)
+            paint.setStrokeWidth(line.lineWidth * zoom)
             if (animation != null) {
                 paint.setAlpha(animation.getCurrentAnimationInfor()!!.getAlpha())
             }
@@ -543,10 +543,10 @@ open class SlideDrawKit {
         }
 
         // bottom
-        line = cell.getBottomLine()
+        line = cell.bottomLine
         if (line != null) {
-            paint.setColor(line.getBackgroundAndFill().getForegroundColor())
-            paint.setStrokeWidth(line.getLineWidth() * zoom)
+            paint.setColor(line.backgroundAndFill!!.foregroundColor)
+            paint.setStrokeWidth(line.lineWidth * zoom)
             if (animation != null) {
                 paint.setAlpha(animation.getCurrentAnimationInfor()!!.getAlpha())
             }
@@ -567,13 +567,13 @@ open class SlideDrawKit {
      * @param zoom
      */
     private fun processRotation(canvas: Canvas, shape: IShape, zoom: Float) {
-        val rect = shape.getBounds()
-        var angle = shape.getRotation()
+        val rect = requireNotNull(shape.bounds)
+        var angle = shape.rotation
         //flip vertical
-        if (shape.getFlipVertical()) {
+        if (shape.flipVertical) {
             angle += 180f
         }
-        val anim = shape.getAnimation()
+        val anim = shape.animation
         if (anim != null) {
             val shapeAnim = anim.getShapeAnimation()!!
             if (shapeAnim.getAnimationType() == ShapeAnimation.SA_EMPH) {
@@ -617,8 +617,8 @@ open class SlideDrawKit {
                 return null
             }
 
-            val b = PictureKit.instance().isDrawPictrue()
-            PictureKit.instance().setDrawPictrue(true)
+            val b = PictureKit.instance().isDrawPictrue
+            PictureKit.instance().isDrawPictrue = true
 
             val d = pgModel.getPageSize()!!
             val bitmap = Bitmap.createBitmap(d.width, d.height, Bitmap.Config.ARGB_8888)
@@ -636,7 +636,7 @@ open class SlideDrawKit {
             // 绘制shape
             drawShapes(canvas, pgModel, editor, slide, slide.getSlideNo(), 1f, shapeVisible)
 
-            PictureKit.instance().setDrawPictrue(b)
+            PictureKit.instance().isDrawPictrue = b
 
             return bitmap
         }
@@ -662,8 +662,8 @@ open class SlideDrawKit {
             if (slide == null) {
                 return null
             }
-            val b = PictureKit.instance().isDrawPictrue()
-            PictureKit.instance().setDrawPictrue(true)
+            val b = PictureKit.instance().isDrawPictrue
+            PictureKit.instance().isDrawPictrue = true
             //
             val paintZoom = Math.min(desWidth / srcWidth.toFloat(), desHeight / srcHeight.toFloat())
             var bitmap: Bitmap? = null
@@ -694,7 +694,7 @@ open class SlideDrawKit {
             // 绘制shape
             drawShapes(canvas, pgModel, editor, slide, slide.getSlideNo(), paintZoom, null)
 
-            PictureKit.instance().setDrawPictrue(b)
+            PictureKit.instance().isDrawPictrue = b
 
             return bitmap
         }
@@ -710,8 +710,8 @@ open class SlideDrawKit {
             if (slide == null) {
                 return null
             }
-            val b = PictureKit.instance().isDrawPictrue()
-            PictureKit.instance().setDrawPictrue(true)
+            val b = PictureKit.instance().isDrawPictrue
+            PictureKit.instance().isDrawPictrue = true
 
             val d = pgModel.getPageSize()!!
             val w = (d.width * zoom).toInt()
@@ -733,7 +733,7 @@ open class SlideDrawKit {
             // 绘制shape
             drawShapes(canvas, pgModel, editor, slide, slide.getSlideNo(), zoom, null)
 
-            PictureKit.instance().setDrawPictrue(b)
+            PictureKit.instance().isDrawPictrue = b
             return bitmap
         }
     }
@@ -747,26 +747,26 @@ open class SlideDrawKit {
             val count = slide.getShapeCount()
             for (i in 0 until count) {
                 val shape = slide.getShape(i)!!
-                if (shape.getType() == AbstractShape.SHAPE_TEXTBOX) // 文本框
+                if (shape.type == AbstractShape.SHAPE_TEXTBOX) // 文本框
                 {
-                    val root = (shape as TextBox).getRootView()
+                    val root = (shape as TextBox).rootView
                     if (root != null) {
                         root.dispose()
-                        shape.setRootView(null)
+                        shape.rootView = null
                     }
                 }
                 // table
-                else if (shape.getType() == AbstractShape.SHAPE_TABLE) {
-                    val cellCount = (shape as TableShape).getCellCount()
+                else if (shape.type == AbstractShape.SHAPE_TABLE) {
+                    val cellCount = (shape as TableShape).cellCount
                     for (j in 0 until cellCount) {
                         val cell = shape.getCell(j)
                         if (cell != null) {
-                            val tb = cell.getText()
+                            val tb = cell.text
                             if (tb != null) {
-                                val root = tb.getRootView()
+                                val root = tb.rootView
                                 if (root != null) {
                                     root.dispose()
-                                    tb.setRootView(null)
+                                    tb.rootView = null
                                 }
                             }
                         }

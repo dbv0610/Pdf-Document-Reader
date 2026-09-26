@@ -353,7 +353,7 @@ public class PackagePropertiesUnmarshaller implements PartUnmarshaller
     {
         // Check the current element
         @ SuppressWarnings("unchecked")
-        List<Namespace> declaredNamespaces = el.declaredNamespaces();
+        List<Namespace> declaredNamespaces = (List<Namespace>) (List<?>) el.declaredNamespaces();
         Iterator<Namespace> itNS = declaredNamespaces.iterator();
         while (itNS.hasNext())
         {
@@ -400,7 +400,7 @@ public class PackagePropertiesUnmarshaller implements PartUnmarshaller
 
         // Check its children
         @ SuppressWarnings("unchecked")
-        Iterator<Element> itChildren = el.elementIterator();
+        Iterator<Element> itChildren = (Iterator<Element>) (Iterator<?>) el.elementIterator();
         while (itChildren.hasNext())
         {
             checkElementForOPCCompliance(itChildren.next());

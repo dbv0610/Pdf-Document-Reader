@@ -78,6 +78,21 @@ object AttrIDConstant {
     const val PARA_PG_BULLET_ID: Short = (PARA_LIST_ID + 1).toShort() // 0x100E
     //
     const val PARA_TABS_CLEAR_POSITION_ID: Short = (PARA_PG_BULLET_ID + 1).toShort() //0x100F
+    // paragraph shading (ARGB), DOCX pPr/shd
+    const val PARA_SHADING_ID: Short = 0x1010
+    // paragraph borders, DOCX pPr/pBdr: per side width (eighths of a point, 0 = none), color, space (pt)
+    const val PARA_BORDER_TOP_ID: Short = 0x1011
+    const val PARA_BORDER_TOP_COLOR_ID: Short = 0x1012
+    const val PARA_BORDER_TOP_SPACE_ID: Short = 0x1013
+    const val PARA_BORDER_BOTTOM_ID: Short = 0x1014
+    const val PARA_BORDER_BOTTOM_COLOR_ID: Short = 0x1015
+    const val PARA_BORDER_BOTTOM_SPACE_ID: Short = 0x1016
+    const val PARA_BORDER_LEFT_ID: Short = 0x1017
+    const val PARA_BORDER_LEFT_COLOR_ID: Short = 0x1018
+    const val PARA_BORDER_LEFT_SPACE_ID: Short = 0x1019
+    const val PARA_BORDER_RIGHT_ID: Short = 0x101A
+    const val PARA_BORDER_RIGHT_COLOR_ID: Short = 0x101B
+    const val PARA_BORDER_RIGHT_SPACE_ID: Short = 0x101C
 
     /* ========= 章节属性 ========= */
     // 页面宽度

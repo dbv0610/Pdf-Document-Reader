@@ -134,7 +134,7 @@ class SSToolsbar : AToolsbar {
             setEnabled(
                 EventConstant.APP_HYPERLINK,
                 sheet.getActiveCell()!!.getHyperLink() != null && sheet.getActiveCell()!!
-                    .getHyperLink()!!.getAddress() != null
+                    .getHyperLink()!!.address != null
             )
         } else {
             setEnabled(EventConstant.FILE_COPY_ID, false)

@@ -28,7 +28,7 @@ internal object EmbeddedFontReader {
             return
         }
         val dir = File(control.getSysKit().getPictureManage().getPicTempPath())
-        for (font in fontLst.elements("embeddedFont").filterIsInstance<Element>()) {
+        for (font in fontLst.elements("embeddedFont")!!.filterIsInstance<Element>()) {
             try {
                 val name = font.element("font")?.attributeValue("typeface") ?: continue
                 if (FontTypefaceManage.instance().hasEmbeddedFont(name)) {

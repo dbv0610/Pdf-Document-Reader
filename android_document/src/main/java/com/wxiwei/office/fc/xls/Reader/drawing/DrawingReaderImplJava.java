@@ -167,7 +167,7 @@ public class DrawingReaderImplJava
         }
         
         @ SuppressWarnings("unchecked")
-        Iterator<Element> iter = root.elementIterator();
+        Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) root.elementIterator();
         Element shapeElement;
         CellAnchor anchor = null;
         while(iter.hasNext())
@@ -307,7 +307,7 @@ public class DrawingReaderImplJava
             {
                 // 文本框内自动换行
                 String value = bodyPr.attributeValue("wrap");
-                tb.setWrapLine(value == null || "square".equalsIgnoreCase(value));
+                tb.isWrapLine = value == null || "square".equalsIgnoreCase(value);
             }
             
             int offset = processParagraph(control, secElem, temp);
@@ -330,7 +330,7 @@ public class DrawingReaderImplJava
     private int processParagraph(IControl control, SectionElement secElem, Element txBody)
     {
         offset = 0;
-        List<Element> ps = txBody.elements("p");
+        List<Element> ps = (List<Element>) (List<?>) txBody.elements("p");
         for (Element p : ps)
         {   
             Element pPr = p.element("pPr");
@@ -353,7 +353,7 @@ public class DrawingReaderImplJava
         IAttributeSet attrLayout)
     {
         
-        List<Element> rs = p.elements("r");
+        List<Element> rs = (List<Element>) (List<?>) p.elements("r");
         LeafElement leaf = null;
         // 如果没有 r 元素，说明只有一个回车符的段落
         if (rs.size() == 0)
@@ -569,7 +569,7 @@ public class DrawingReaderImplJava
         }
         
         
-        Iterator<Element> iter = paragraph.elements("r").iterator();
+        Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) paragraph.elements("r").iterator();
         Element textRun;
         Font font = null;
         String run = "";
@@ -621,7 +621,7 @@ public class DrawingReaderImplJava
                 
                 int index = drawingList.get( ele.attributeValue("embed"));
                 picShape.setBounds(rect);
-                picShape.setPictureIndex(index);
+                picShape.pictureIndex = index;
                 picShape.setPictureEffectInfor(effectInfor);
                 ReaderKit.instance().processRotation(sp.element("spPr"), picShape);
                 return picShape;
@@ -685,7 +685,7 @@ public class DrawingReaderImplJava
                  Element sp, GroupShape parent, float zoomX, float zoomY, Rectangle rect2) throws Exception
     {
         Rectangle rect = null;
-        String name = sp.getName();       
+        String name = sp.getName();
         if (name.equals("grpSp"))
         {
             // shapeGroup
@@ -875,8 +875,8 @@ public class DrawingReaderImplJava
     {
         if (parent != null)
         {
-            rect.x += parent.getOffX();
-            rect.y += parent.getOffY();
+            rect.x += parent.offX;
+            rect.y += parent.offY;
         }
         return rect;
     }
@@ -888,7 +888,7 @@ public class DrawingReaderImplJava
         
         if (oleObjects != null)
         {
-            List<Element> oles = oleObjects.elements("oleObject");
+            List<Element> oles = (List<Element>) (List<?>) oleObjects.elements("oleObject");
             for (Element oleObject : oles)
             {
                 String spid = oleObject.attributeValue("shapeId");
@@ -901,7 +901,7 @@ public class DrawingReaderImplJava
                         if (anchor != null)
                         {
                             PictureShape picShape = new PictureShape();
-                            picShape.setPictureIndex(control.getSysKit().getPictureManage().addPicture(picPart));
+                            picShape.pictureIndex = control.getSysKit().getPictureManage().addPicture(picPart);
                             picShape.setBounds(ModelUtil.instance().getCellAnchor(sheet, anchor));
                             sheet.appendShapes(picShape);
                         }

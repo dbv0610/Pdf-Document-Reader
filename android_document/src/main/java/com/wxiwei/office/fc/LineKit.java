@@ -54,7 +54,7 @@ public class LineKit
                  {
                 	 Line line = new Line();
                 	 line.setBackgroundAndFill(lineFill);
-                	 line.setLineWidth(lineWidth);
+                	 line.lineWidth = lineWidth;
                 	 line.setDash(dash);
                 	 return line;
                  }
@@ -104,7 +104,7 @@ public class LineKit
                  if(lineFill == null && style != null && style.element("lnRef") != null)
                  {
                  	lineFill = new BackgroundAndFill();
-                 	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+                 	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
                  	lineFill.setForegroundColor(ReaderKit.instance().getColor(pgMaster, style.element("lnRef")));
                  }
              }
@@ -117,7 +117,7 @@ public class LineKit
             	 if((color & 0xFFFFFF) != 0)
             	 {
             		 lineFill = new BackgroundAndFill();
-                  	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+                  	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
                   	lineFill.setForegroundColor(color);
             	 }
              }
@@ -127,7 +127,7 @@ public class LineKit
          {
         	 Line line = new Line();
         	 line.setBackgroundAndFill(lineFill);
-        	 line.setLineWidth(lineWidth);
+        	 line.lineWidth = lineWidth;
         	 line.setDash(dash);
         	 return line;
          }
@@ -166,7 +166,7 @@ public class LineKit
         {
 	       	 Line line = new Line();
 	       	 line.setBackgroundAndFill(lineFill);
-	       	 line.setLineWidth(lineWidth);
+	       	 line.lineWidth = lineWidth;
 	       	 line.setDash(dash);
 	       	 return line;
         }
@@ -203,7 +203,7 @@ public class LineKit
             	if(lineFill == null && style != null && style.element("lnRef") != null)
                 {
                 	lineFill = new BackgroundAndFill();
-                	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+                	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
                 	lineFill.setForegroundColor(AutoShapeDataKit.getColor(schemeColor, style.element("lnRef")));
                 }
             }
@@ -214,7 +214,7 @@ public class LineKit
             {
             	
             	lineFill = new BackgroundAndFill();
-                lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+                lineFill.fillType = BackgroundAndFill.FILL_SOLID;
                 lineFill.setForegroundColor(AutoShapeDataKit.getColor(schemeColor, style.element("lnRef")));
             }
         }
@@ -223,7 +223,7 @@ public class LineKit
         {
 	       	 Line line = new Line();
 	       	 line.setBackgroundAndFill(lineFill);
-	       	 line.setLineWidth(lineWidth);
+	       	 line.lineWidth = lineWidth;
 	       	 line.setDash(dash);
 	       	 return line;
         }
@@ -259,7 +259,7 @@ public class LineKit
                 {
         	       	 Line line = new Line();
         	       	 line.setBackgroundAndFill(lineFill);
-        	       	 line.setLineWidth(lineWidth);
+        	       	 line.lineWidth = lineWidth;
         	       	 line.setDash(dash);
         	       	 return line;
                 }
@@ -270,10 +270,10 @@ public class LineKit
         	//auto line
         	Line line = new Line();
        	 	BackgroundAndFill lineFill = new BackgroundAndFill();
-       	 	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+       	 	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
        	 	lineFill.setForegroundColor(0xFF747474);
 	       	line.setBackgroundAndFill(lineFill);
-	       	line.setLineWidth(1);
+	       	line.lineWidth = 1;
 	       	
 	       	return line;
         }

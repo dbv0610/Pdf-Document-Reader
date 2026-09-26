@@ -32,27 +32,27 @@ class SSEditor(ss: Spreadsheet?) : IWord {
     private var ss: Spreadsheet? = ss
 
     override fun getHighlight(): IHighlight? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun modelToView(offset: Long, rect: Rectangle, isBack: Boolean): Rectangle? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getDocument(): IDocument? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getText(start: Long, end: Long): String {
-        // TODO Auto-generated method stub
+     
         return ""
     }
 
     override fun viewToModel(x: Int, y: Int, isBack: Boolean): Long {
-        // TODO Auto-generated method stub
+     
         return 0
     }
 
@@ -61,17 +61,17 @@ class SSEditor(ss: Spreadsheet?) : IWord {
     }
 
     override fun getParagraphAnimation(pargraphID: Int): IAnimation? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getTextBox(): IShape? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getControl(): IControl {
-        // TODO Auto-generated method stub
+     
         return ss!!.getControl()
     }
 

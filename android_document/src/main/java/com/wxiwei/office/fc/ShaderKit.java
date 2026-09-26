@@ -27,7 +27,7 @@ public class ShaderKit
     {
     	Element gsLstElement= gradFill.element("gsLst");    	
     	//Gradient stops list
-    	List<Element> gsLst = gsLstElement.elements("gs");
+    	List<Element> gsLst = (List<Element>) (List<?>) gsLstElement.elements("gs");
     	if(gsLst == null || gsLst.size() == 0)
     	{
     		return null;
@@ -76,7 +76,7 @@ public class ShaderKit
     {
     	Element gsLstElement= gradFill.element("gsLst");    	
     	//Gradient stops list
-    	List<Element> gsLst = gsLstElement.elements("gs");
+    	List<Element> gsLst = (List<Element>) (List<?>) gsLstElement.elements("gs");
     	if(gsLst == null || gsLst.size() == 0)
     	{
     		return null;

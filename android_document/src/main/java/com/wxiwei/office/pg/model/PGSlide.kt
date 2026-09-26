@@ -43,7 +43,7 @@ class PGSlide {
     fun setSlideType(slideType: Int) { this.slideType = slideType }
     fun appendShapes(shape: IShape?) {
         if (shape == null) return
-        if (!hasTable) hasTable = shape.getType() == AbstractShape.SHAPE_TABLE
+        if (!hasTable) hasTable = shape.type == AbstractShape.SHAPE_TABLE
         shapes?.add(shape)
     }
     /** Live editing: remove a top-level shape; returns its z-order index or -1. */
@@ -56,7 +56,7 @@ class PGSlide {
     fun insertShape(index: Int, shape: IShape) {
         val list = shapes ?: return
         list.add(index.coerceIn(0, list.size), shape)
-        if (!hasTable) hasTable = shape.getType() == AbstractShape.SHAPE_TABLE
+        if (!hasTable) hasTable = shape.type == AbstractShape.SHAPE_TABLE
         shapesForFind = null; shapeCountForFind = -1
     }
     fun getShapes(): Array<IShape> = shapes?.toTypedArray() ?: emptyArray()
@@ -67,11 +67,11 @@ class PGSlide {
         shapesForFind = ArrayList()
         var count = 0
         for (shape in shapes.orEmpty()) {
-            if (shape.getType() == AbstractShape.SHAPE_TABLE) {
+            if (shape.type == AbstractShape.SHAPE_TABLE) {
                 val table = shape as TableShape
-                for (i in 0 until table.getCellCount()) {
+                for (i in 0 until table.cellCount) {
                     val cell: TableCell? = table.getCell(i)
-                    if (cell?.getText() != null) { shapesForFind?.add(cell.getText()); count++ }
+                    cell?.text?.let { shapesForFind?.add(it); count++ }
                 }
             } else { shapesForFind?.add(shape); count++ }
         }
@@ -86,15 +86,15 @@ class PGSlide {
     private fun findShape(x: Float, y: Float, textboxOnly: Boolean): IShape? {
         val list = if (textboxOnly) shapes.orEmpty().asReversed() else shapes.orEmpty()
         for (shape in list) {
-            val rect = shape.getBounds()
-            if (shape.getType() == AbstractShape.SHAPE_TABLE) {
+            val rect = requireNotNull(shape.bounds)
+            if (shape.type == AbstractShape.SHAPE_TABLE) {
                 val table = shape as TableShape
-                for (i in 0 until table.getCellCount()) {
+                for (i in 0 until table.cellCount) {
                     val cell = table.getCell(i)
-                    val r: Rectanglef? = cell?.getBounds()
-                    if (r?.contains(x, y) == true) return cell.getText()
+                    val r: Rectanglef? = cell?.bounds
+                    if (r?.contains(x, y) == true) return cell.text
                 }
-            } else if (rect.contains(x.toInt(), y.toInt()) && (!textboxOnly || shape.getType() == AbstractShape.SHAPE_TEXTBOX)) return shape
+            } else if (rect.contains(x.toInt(), y.toInt()) && (!textboxOnly || shape.type == AbstractShape.SHAPE_TEXTBOX)) return shape
         }
         return null
     }
@@ -118,7 +118,7 @@ class PGSlide {
     fun getGroupShape(): MutableMap<Int, MutableList<Int>>? = grpShapeLst
     fun addSmartArt(id: String?, smartArt: SmartArt?) { if (smartArtList == null) smartArtList = HashMap(); if (id != null && smartArt != null) smartArtList?.put(id, smartArt) }
     fun getSmartArt(id: String?): SmartArt? = if (id != null) smartArtList?.remove(id) else null
-    fun getTextboxByPlaceHolderID(placeHolderID: Int): IShape? = shapes.orEmpty().firstOrNull { it.getType() == AbstractShape.SHAPE_TEXTBOX && it.getPlaceHolderID() == placeHolderID }
+    fun getTextboxByPlaceHolderID(placeHolderID: Int): IShape? = shapes.orEmpty().firstOrNull { it.type == AbstractShape.SHAPE_TEXTBOX && it.placeHolderID == placeHolderID }
     fun isShowMasterHeadersFooter(): Boolean = showMasterHeadersFooters
     fun setShowMasterHeadersFooters(value: Boolean) { showMasterHeadersFooters = value }
     fun getGeometryType(): Int = geometryType

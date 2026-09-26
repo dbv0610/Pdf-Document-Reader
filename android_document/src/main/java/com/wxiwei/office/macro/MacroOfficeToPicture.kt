@@ -16,18 +16,9 @@ internal class MacroOfficeToPicture internal constructor(
     private var officeToPictureListener: OfficeToPictureListener?
 ) : IOfficeToPicture {
 
-    private var modeType = IOfficeToPicture.VIEW_CHANGE_END
+    override var modeType = IOfficeToPicture.VIEW_CHANGE_END
 
-    /**
-     * set mode type
-     */
-    override fun setModeType(modeType: Byte) {
-        this.modeType = modeType
-    }
 
-    override fun getModeType(): Byte {
-        return modeType
-    }
 
     /**
      * Get converter to of picture Bitmap instance, if the return is empty, is not generated picture
@@ -54,9 +45,7 @@ internal class MacroOfficeToPicture internal constructor(
         officeToPictureListener?.callBack(bitmap)
     }
 
-    override fun isZoom(): Boolean {
-        return true
-    }
+    override val isZoom: Boolean get() = true
 
     override fun dispose() {
         officeToPictureListener = null

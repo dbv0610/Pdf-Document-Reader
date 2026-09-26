@@ -53,7 +53,7 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
     private fun sheetParts(pkg: OoxmlPackage): List<String> {
         val workbook = "xl/workbook.xml"
         val rels = pkg.relationships(workbook).associateBy { it.id }
-        val sheets = pkg.xml(workbook).rootElement.firstChild(SS, "sheets") ?: return emptyList()
+        val sheets = pkg.xml(workbook).rootElement!!.firstChild(SS, "sheets") ?: return emptyList()
         return sheets.childrenNamed(SS, "sheet").map { s ->
             val id = s.attributeValue(QName("id", R)) ?: ""
             rels[id]?.let { pkg.resolveTarget(workbook, it.target) } ?: ""
@@ -68,7 +68,7 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
     }
 
     private fun writeSheet(pkg: OoxmlPackage, part: String, sheetIndex: Int, cells: List<CellWrite>) {
-        val root = pkg.xml(part).rootElement
+        val root = pkg.xml(part).rootElement!!
         val data = root.firstChild(SS, "sheetData") ?: error("Missing sheetData in $part")
         for (w in cells.sortedWith(compareBy({ it.row }, { it.col }))) {
             val row = rowElement(data, w.row)
@@ -84,7 +84,7 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
         rows.firstOrNull { rowOf(it) == row }?.let { return it }
         val e = com.wxiwei.office.editor.ooxml.newElement(SS, "row").apply { addAttribute("r", (row + 1).toString()) }
         val next = rows.firstOrNull { rowOf(it) > row }
-        val content = data.content()
+        val content = data.content() as MutableList<Any?>
         if (next == null) content.add(e) else content.add(content.indexOf(next), e)
         return e
     }
@@ -95,7 +95,7 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
         val e = com.wxiwei.office.editor.ooxml.newElement(SS, "c").apply { addAttribute("r", ref(r, col)) }
         row.attributeValue("s")?.takeIf { row.attributeValue("customFormat") == "1" }?.let { e.addAttribute("s", it) }
         val next = cells.firstOrNull { colOf(it.attributeValue("r")) > col }
-        val content = row.content()
+        val content = row.content() as MutableList<Any?>
         if (next == null) content.add(e) else content.add(content.indexOf(next), e)
         // A row's spans hint is optional; drop it rather than leave it wrong
         row.attribute("spans")?.let { row.remove(it) }
@@ -113,7 +113,9 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             if (of.attributeValue("t") != "shared" || of.attributeValue("si") != si) continue
             val text = formulaOf(sheetIndex, rowOf(row), colOf(other.attributeValue("r"))) ?: continue
             other.remove(of)
-            other.content().add(0, com.wxiwei.office.editor.ooxml.newElement(SS, "f").apply { setText(text) })
+            (other.content() as MutableList<Any?>).add(0, com.wxiwei.office.editor.ooxml.newElement(SS, "f").apply {
+                this.text = text
+            })
         }
     }
 
@@ -121,7 +123,9 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
         listOf("f", "v", "is").forEach { name -> c.childrenNamed(SS, name).forEach { c.remove(it) } }
         c.attribute("t")?.let { c.remove(it) }
         c.attribute("cm")?.let { c.remove(it) }
-        fun add(name: String, text: String): Element = com.wxiwei.office.editor.ooxml.newElement(SS, name).apply { setText(text) }.also { c.add(it) }
+        fun add(name: String, text: String): Element = com.wxiwei.office.editor.ooxml.newElement(SS, name).apply {
+            this.text = text
+        }.also { c.add(it) }
         w.formulaText?.let { add("f", it) }
         when (w) {
             is CellWrite.Number -> add("v", number(w.value))
@@ -129,7 +133,7 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             is CellWrite.Error -> { c.addAttribute("t", "e"); add("v", ErrorEval.getText(w.code)) }
             is CellWrite.Text -> if (w.formula != null) { c.addAttribute("t", "str"); add("v", w.value) } else {
                 c.addAttribute("t", "inlineStr")
-                val t = com.wxiwei.office.editor.ooxml.newElement(SS, "t").apply { setText(w.value) }
+                val t = com.wxiwei.office.editor.ooxml.newElement(SS, "t").apply { text = w.value }
                 if (w.value.isNotEmpty() && (w.value.first().isWhitespace() || w.value.last().isWhitespace() || '\n' in w.value))
                     t.addAttribute(QName("space", com.wxiwei.office.fc.dom4j.Namespace.XML_NAMESPACE), "preserve")
                 c.add(com.wxiwei.office.editor.ooxml.newElement(SS, "is").apply { add(t) })
@@ -158,17 +162,17 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             val chain = pkg.resolveTarget(workbook, chainRel.target)
             pkg.remove(chain)
             val rels = pkg.xml(pkg.relsPartOf(workbook)).rootElement
-            rels.elements().filterIsInstance<Element>().filter { it.attributeValue("Id") == chainRel.id }.forEach { rels.remove(it) }
+            rels!!.elements()!!.filterIsInstance<Element>().filter { it.attributeValue("Id") == chainRel.id }.forEach { rels!!.remove(it) }
             if (pkg.has("[Content_Types].xml")) {
                 val types = pkg.xml("[Content_Types].xml").rootElement
-                types.elements().filterIsInstance<Element>().filter { it.attributeValue("PartName")?.trimStart('/') == chain }.forEach { types.remove(it) }
+                types!!.elements()!!.filterIsInstance<Element>().filter { it.attributeValue("PartName")?.trimStart('/') == chain }.forEach { types!!.remove(it) }
             }
         }
-        val book = pkg.xml(workbook).rootElement
+        val book = pkg.xml(workbook).rootElement!!
         val calcPr = book.firstChild(SS, "calcPr") ?: com.wxiwei.office.editor.ooxml.newElement(SS, "calcPr").also { e ->
             // CT_Workbook order: ... sheets, functionGroups, externalReferences, definedNames, calcPr ...
             val anchor = listOf("definedNames", "externalReferences", "functionGroups", "sheets").firstNotNullOfOrNull { book.firstChild(SS, it) }
-            val content = book.content()
+            val content = book.content() as MutableList<Any?>
             if (anchor == null) content.add(e) else content.add(content.indexOf(anchor) + 1, e)
         }
         calcPr.addAttribute("fullCalcOnLoad", "1")

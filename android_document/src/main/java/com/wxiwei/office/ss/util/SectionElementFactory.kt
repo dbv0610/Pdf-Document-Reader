@@ -103,11 +103,11 @@ class SectionElementFactory {
             // 高度
             AttrManage.instance().setPageHeight(attr, Math.round(rect.height * MainConstant.PIXEL_TO_TWIPS))
             //
-            AttrManage.instance().setPageMarginLeft(attr, Math.round(textbox.getMarginLeft() * MainConstant.PIXEL_TO_TWIPS))
+            AttrManage.instance().setPageMarginLeft(attr, Math.round(textbox.getMarginLeft() * MainConstant.PIXEL_TO_TWIPS).toInt())
             //
-            AttrManage.instance().setPageMarginTop(attr, Math.round(textbox.getMarginTop() * MainConstant.PIXEL_TO_TWIPS))
-            AttrManage.instance().setPageMarginRight(attr, Math.round(textbox.getMarginRight() * MainConstant.PIXEL_TO_TWIPS))
-            AttrManage.instance().setPageMarginBottom(attr, Math.round(textbox.getMarginBottom() * MainConstant.PIXEL_TO_TWIPS))
+            AttrManage.instance().setPageMarginTop(attr, Math.round(textbox.getMarginTop() * MainConstant.PIXEL_TO_TWIPS).toInt())
+            AttrManage.instance().setPageMarginRight(attr, Math.round(textbox.getMarginRight() * MainConstant.PIXEL_TO_TWIPS).toInt())
+            AttrManage.instance().setPageMarginBottom(attr, Math.round(textbox.getMarginBottom() * MainConstant.PIXEL_TO_TWIPS).toInt())
 
             var valign: Byte = 0
             when (textbox.getVerticalAlignment()) {
@@ -155,7 +155,7 @@ class SectionElementFactory {
                     halign
                 )
             } else {
-                val iter: Iterator<FormatRun> = unicodeString.formatIterator()
+                val iter: Iterator<FormatRun> = unicodeString.formatIterator()!!
                 var begin: FormatRun? = null
                 var end: FormatRun = iter.next()
                 //first
@@ -281,7 +281,7 @@ class SectionElementFactory {
             attrLayout = AttributeSetImpl()
             AttrManage.instance().setParaHorizontalAlign(paraElem!!.getAttribute(), halign.toInt())
 
-            val iter: Iterator<FormatRun> = richText.getUnicodeString().formatIterator()
+            val iter: Iterator<FormatRun> = richText.getUnicodeString()!!.formatIterator()!!
             var begin: FormatRun = iter.next()
             //别忘了简单格式的情况，即没有end
             var end: FormatRun? = null

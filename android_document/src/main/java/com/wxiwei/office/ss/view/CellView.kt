@@ -288,9 +288,9 @@ class CellView(sheetView: SheetView?) {
         canvas: Canvas, control: IControl, viewIndex: Int,
         fill: BackgroundAndFill, rect: RectF, zoom: Float, paint: Paint
     ) {
-        val aShader = fill.getShader()
+        val aShader = fill.shader
         if (aShader != null) {
-            var shader = aShader.getShader()
+            var shader = aShader.shader
             if (shader == null) {
                 val r = 1 / zoom
                 shader = aShader.createShader(
@@ -327,7 +327,7 @@ class CellView(sheetView: SheetView?) {
                         var focusY = 1f
 
                         if (aShader.getAngle() == 90) {
-                            when (aShader.getFocus()) {
+                            when (aShader.focus) {
                                 100 -> {
                                     focusX = 0f
                                     focusY = 0f
@@ -346,7 +346,7 @@ class CellView(sheetView: SheetView?) {
                                 }
                             }
                         } else {
-                            when (aShader.getFocus()) {
+                            when (aShader.focus) {
                                 100 -> {
                                     focusX = 0f
                                     focusY = 0f

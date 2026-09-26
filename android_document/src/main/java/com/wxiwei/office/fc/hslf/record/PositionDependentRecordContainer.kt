@@ -7,15 +7,13 @@ abstract class PositionDependentRecordContainer : RecordContainer(), PositionDep
 
     protected var myLastOnDiskOffset: Int = 0
 
-    override fun getLastOnDiskOffset(): Int {
-        return myLastOnDiskOffset
-    }
+    override var lastOnDiskOffset: Int
+        get() = myLastOnDiskOffset
+        set(offset) {
+            myLastOnDiskOffset = offset
+        }
 
-    override fun setLastOnDiskOffset(offset: Int) {
-        myLastOnDiskOffset = offset
-    }
-
-    override fun updateOtherRecordReferences(oldToNewReferencesLookup: Hashtable<Int, Int>?) {
+    override fun updateOtherRecordReferences(oldToNewReferencesLookup: Hashtable<Int?, Int?>?) {
         return
     }
 }

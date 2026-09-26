@@ -102,7 +102,7 @@ public class OfficeDrawingsImpl implements OfficeDrawings
                     if (blipRecord instanceof EscherMetafileBlip)
                     {
                         blipRecord.fillFields(_mainStream, bseRecord.getOffset(), recordFactory);
-                        blipRecord.setTempFilePath(control.getSysKit().getPictureManage().writeTempFile(blipRecord.getPicturedata()));
+                        blipRecord.tempFilePath = control.getSysKit().getPictureManage().writeTempFile(blipRecord.getPicturedata());
                     }
                     else
                     {
@@ -114,7 +114,7 @@ public class OfficeDrawingsImpl implements OfficeDrawings
                         System.arraycopy(_mainStream, pos + skip, b, 0, b.length);
                         blipRecord.setPictureData(b);
                         // 放到临时文件中
-                        blipRecord.setTempFilePath(control.getSysKit().getPictureManage().writeTempFile(_mainStream, pos + skip, bytesAfterHeader - skip));
+                        blipRecord.tempFilePath = control.getSysKit().getPictureManage().writeTempFile(_mainStream, pos + skip, bytesAfterHeader - skip);
                     }
                     //field_pictureData = new byte[bytesAfterHeader];
                     //System.arraycopy(data, pos, field_pictureData, 0, bytesAfterHeader);
@@ -406,7 +406,7 @@ public class OfficeDrawingsImpl implements OfficeDrawings
             }
             if (blipRecord != null)
             {
-                return blipRecord.getTempFilePath();
+                return blipRecord.tempFilePath;
             }
             return null;
         }

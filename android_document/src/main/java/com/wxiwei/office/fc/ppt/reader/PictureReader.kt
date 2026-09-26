@@ -78,7 +78,7 @@ class PictureReader {
             val saxreader = SAXReader()
             val `in` = vmlDrawingPart!!.getInputStream()
             val poiVml = saxreader.read(`in`)
-            val root = poiVml.getRootElement()
+            val root = poiVml!!.rootElement
             if (root != null) {
                 if (spIDs == null) {
                     spIDs = Hashtable<String?, String?>()

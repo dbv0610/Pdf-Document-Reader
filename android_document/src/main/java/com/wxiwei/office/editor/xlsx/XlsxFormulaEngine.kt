@@ -59,7 +59,7 @@ class XlsxFormulaEngine(val book: Workbook) {
     }
 
     /** Evaluate one formula cell without storing the result. */
-    fun evaluate(sheetIndex: Int, cell: Cell): ValueEval = evaluator.evaluate(adapter.cellAdapter(sheetIndex, cell)!!)
+    fun evaluate(sheetIndex: Int, cell: Cell): ValueEval = evaluator.evaluate(adapter.cellAdapter(sheetIndex, cell)!!)!!
 
     // ---- Dependency index: which formulas read a given cell -------------------------------
     private class Dep(val r1: Int, val r2: Int, val c1: Int, val c2: Int, val sheet: Int, val cell: Cell)
@@ -83,11 +83,11 @@ class XlsxFormulaEngine(val book: Workbook) {
                 // so trying it again on every edit would only cost time
                 if (ptgs == null) continue
                 for (p in ptgs) when (p) {
-                    is com.wxiwei.office.fc.hssf.formula.ptg.Area3DPtg -> add(Dep(p.getFirstRow(), p.getLastRow(), p.getFirstColumn(), p.getLastColumn(), p.getExternSheetIndex(), cell))
-                    is com.wxiwei.office.fc.hssf.formula.ptg.AreaPtgBase -> add(Dep(p.getFirstRow(), p.getLastRow(), p.getFirstColumn(), p.getLastColumn(), s, cell))
-                    is com.wxiwei.office.fc.hssf.formula.ptg.Ref3DPtg -> add(Dep(p.getRow(), p.getRow(), p.getColumn(), p.getColumn(), p.getExternSheetIndex(), cell))
-                    is com.wxiwei.office.fc.hssf.formula.ptg.RefPtgBase -> add(Dep(p.getRow(), p.getRow(), p.getColumn(), p.getColumn(), s, cell))
-                    is com.wxiwei.office.fc.hssf.formula.ptg.AbstractFunctionPtg -> if (p.getName().uppercase() in VOLATILE) always.add(s to cell)
+                    is com.wxiwei.office.fc.hssf.formula.ptg.Area3DPtg -> add(Dep(p.firstRow, p.lastRow, p.firstColumn, p.lastColumn, p.externSheetIndex, cell))
+                    is com.wxiwei.office.fc.hssf.formula.ptg.AreaPtgBase -> add(Dep(p.firstRow, p.lastRow, p.firstColumn, p.lastColumn, s, cell))
+                    is com.wxiwei.office.fc.hssf.formula.ptg.Ref3DPtg -> add(Dep(p.row, p.row, p.column, p.column, p.externSheetIndex, cell))
+                    is com.wxiwei.office.fc.hssf.formula.ptg.RefPtgBase -> add(Dep(p.row, p.row, p.column, p.column, s, cell))
+                    is com.wxiwei.office.fc.hssf.formula.ptg.AbstractFunctionPtg -> if (p.name!!.uppercase() in VOLATILE) always.add(s to cell)
                     is com.wxiwei.office.fc.hssf.formula.ptg.NamePtg, is com.wxiwei.office.fc.hssf.formula.ptg.NameXPtg -> always.add(s to cell)
                     else -> Unit
                 }

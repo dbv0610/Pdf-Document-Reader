@@ -54,8 +54,8 @@ class BackgroundReader {
             val bgRef = bg.element("bgRef")
             if (bgRef != null) {
                 val bgFill = BackgroundAndFill()
-                bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                bgFill.setForegroundColor(ReaderKit.instance().getColor(master, bgRef))
+                bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                bgFill.foregroundColor = ReaderKit.instance().getColor(master, bgRef)
                 return bgFill
             } else {
                 return processBackground(control, zipPackage, packagePart, master, bgPr)
@@ -100,8 +100,8 @@ class BackgroundReader {
             val bgFill = BackgroundAndFill()
             var fill = bgPr.element("solidFill")
             if (fill != null) {
-                bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                bgFill.setForegroundColor(ReaderKit.instance().getColor(master, fill, isTableStyle))
+                bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                bgFill.foregroundColor = ReaderKit.instance().getColor(master, fill, isTableStyle)
                 return bgFill
             } else if ((bgPr.element("blipFill").also { fill = it }) != null) {
                 val blip = fill!!.element("blip")
@@ -114,7 +114,7 @@ class BackgroundReader {
                             if (picPart != null) {
                                 val tile = fill.element("tile")
                                 if (tile == null) {
-                                    bgFill.setFillType(BackgroundAndFill.FILL_PICTURE)
+                                    bgFill.fillType = BackgroundAndFill.FILL_PICTURE
                                     val stretch = fill.element("stretch")
                                     if (stretch != null) {
                                         val fillRect = stretch.element("fillRect")
@@ -124,40 +124,38 @@ class BackgroundReader {
                                             var str = fillRect.attributeValue("l")
                                             if (str != null) {
                                                 validate = true
-                                                stretchInfo.setLeftOffset(str.toFloat() / 100000)
+                                                stretchInfo.leftOffset = str.toFloat() / 100000
                                             }
 
                                             str = fillRect.attributeValue("r")
                                             if (str != null) {
                                                 validate = true
-                                                stretchInfo.setRightOffset(str.toFloat() / 100000)
+                                                stretchInfo.rightOffset = str.toFloat() / 100000
                                             }
 
                                             str = fillRect.attributeValue("t")
                                             if (str != null) {
                                                 validate = true
-                                                stretchInfo.setTopOffset(str.toFloat() / 100000)
+                                                stretchInfo.topOffset = str.toFloat() / 100000
                                             }
 
                                             str = fillRect.attributeValue("b")
                                             if (str != null) {
                                                 validate = true
-                                                stretchInfo.setBottomOffset(str.toFloat() / 100000)
+                                                stretchInfo.bottomOffset = str.toFloat() / 100000
                                             }
 
                                             if (validate) {
-                                                bgFill.setStretch(stretchInfo)
+                                                bgFill.stretch = stretchInfo
                                             }
                                         }
                                     }
 
-                                    bgFill.setPictureIndex(
-                                        control.getSysKit().getPictureManage().addPicture(picPart)
-                                    )
+                                    bgFill.pictureIndex = control.getSysKit().getPictureManage().addPicture(picPart)
                                 } else {
                                     val index =
                                         control.getSysKit().getPictureManage().addPicture(picPart)
-                                    bgFill.setFillType(BackgroundAndFill.FILL_SHADE_TILE)
+                                    bgFill.fillType = BackgroundAndFill.FILL_SHADE_TILE
                                     val tileShader = ShaderKit.readTile(
                                         control.getSysKit().getPictureManage().getPicture(index),
                                         tile
@@ -166,10 +164,10 @@ class BackgroundReader {
                                     if (alphaModFix != null) {
                                         val amt = alphaModFix.attributeValue("amt")
                                         if (amt != null) {
-                                            tileShader.setAlpha(Math.round(amt.toInt() / 100000f * 255))
+                                            tileShader.alpha = Math.round(amt.toInt() / 100000f * 255)
                                         }
                                     }
-                                    bgFill.setShader(tileShader)
+                                    bgFill.shader = tileShader
                                 }
 
                                 return bgFill
@@ -180,19 +178,19 @@ class BackgroundReader {
             } else if ((bgPr.element("gradFill").also { fill = it }) != null) {
                 val gsLst = fill!!.element("gsLst")
                 if (gsLst != null) {
-                    bgFill.setFillType(ShaderKit.getGradientType(fill))
-                    bgFill.setShader(ShaderKit.readGradient(master, fill))
+                    bgFill.fillType = ShaderKit.getGradientType(fill)
+                    bgFill.shader = ShaderKit.readGradient(master, fill)
                     return bgFill
                 }
             } else if ((bgPr.element("fillRef").also { fill = it }) != null) {
-                bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                bgFill.setForegroundColor(ReaderKit.instance().getColor(master, fill))
+                bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                bgFill.foregroundColor = ReaderKit.instance().getColor(master, fill)
                 return bgFill
             } else if ((bgPr.element("pattFill").also { fill = it }) != null) {
                 val bgClr = fill!!.element("bgClr")
                 run {
-                    bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                    bgFill.setForegroundColor(ReaderKit.instance().getColor(master, bgClr))
+                    bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                    bgFill.foregroundColor = ReaderKit.instance().getColor(master, bgClr)
                     return bgFill
                 }
             }

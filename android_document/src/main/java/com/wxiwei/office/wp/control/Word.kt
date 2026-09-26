@@ -169,8 +169,8 @@ class Word : LinearLayout, IWord {
             item?.addRepaintImageView(null)
             return
         }
-        val b = PictureKit.instance().isDrawPictrue()
-        PictureKit.instance().setDrawPictrue(true)
+        val b = PictureKit.instance().isDrawPictrue
+        PictureKit.instance().isDrawPictrue = true
         val bitmap = otp.getBitmap(width, height) ?: return
         var paintZoom = getZoom()
         var tX = -scrollX.toFloat()
@@ -199,7 +199,7 @@ class Word : LinearLayout, IWord {
         }
         otp.callBack(bitmap)
 
-        PictureKit.instance().setDrawPictrue(b)
+        PictureKit.instance().isDrawPictrue = b
     }
 
     fun getSnapshot(bitmap: Bitmap?): Bitmap? {
@@ -207,8 +207,8 @@ class Word : LinearLayout, IWord {
         if (getCurrentRootType() == WPViewConstant.PRINT_ROOT.toInt() && printWord != null) {
             return printWord!!.getSnapshot(bitmap)
         }
-        val b = PictureKit.instance().isDrawPictrue()
-        PictureKit.instance().setDrawPictrue(true)
+        val b = PictureKit.instance().isDrawPictrue
+        PictureKit.instance().isDrawPictrue = true
         var paintZoom = getZoom()
         var tX = -scrollX.toFloat()
         var tY = -scrollY.toFloat()
@@ -234,7 +234,7 @@ class Word : LinearLayout, IWord {
         } else if (getCurrentRootType() == WPViewConstant.NORMAL_ROOT.toInt()) {
             normalRoot?.draw(canvas, 0, 0, paintZoom)
         }
-        PictureKit.instance().setDrawPictrue(b)
+        PictureKit.instance().isDrawPictrue = b
         return bitmap
     }
 
@@ -294,7 +294,7 @@ class Word : LinearLayout, IWord {
         if (rootType == getCurrentRootType()) return
         eventManage?.stopFling()
         setCurrentRootType(rootType)
-        PictureKit.instance().setDrawPictrue(true)
+        PictureKit.instance().isDrawPictrue = true
         when (getCurrentRootType()) {
             WPViewConstant.NORMAL_ROOT.toInt() -> {
                 if (normalRoot == null) {
@@ -649,8 +649,8 @@ class Word : LinearLayout, IWord {
         }
         val view = pageRoot.getPageView(pageNumber - 1)
         if (view != null && SysKit.isValidateRect(view.getWidth(), view.getHeight(), srcLeft, srcTop, srcWidth, srcHeight)) {
-            val b = PictureKit.instance().isDrawPictrue()
-            PictureKit.instance().setDrawPictrue(true)
+            val b = PictureKit.instance().isDrawPictrue
+            PictureKit.instance().isDrawPictrue = true
             val paintZoom = min(desWidth / srcWidth.toFloat(), desHeight / srcHeight.toFloat())
             val bitmap = try {
                 Bitmap.createBitmap((srcWidth * paintZoom).toInt(), (srcHeight * paintZoom).toInt(), Bitmap.Config.ARGB_8888)
@@ -663,7 +663,7 @@ class Word : LinearLayout, IWord {
             canvas.translate(tX, tY)
             canvas.drawColor(Color.WHITE)
             (view as PageView).draw(canvas, 0, 0, paintZoom)
-            PictureKit.instance().setDrawPictrue(b)
+            PictureKit.instance().isDrawPictrue = b
             return bitmap
         }
         return null

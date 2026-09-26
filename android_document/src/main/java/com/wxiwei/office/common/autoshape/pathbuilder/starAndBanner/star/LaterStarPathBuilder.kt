@@ -45,7 +45,7 @@ object LaterStarPathBuilder {
 
     @JvmStatic
     fun getStarPath(shape: AutoShape, rect: Rect): Path? {
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.Star4 -> return getStar4Path(shape, rect)
 
             ShapeTypes.Star5, ShapeTypes.Star -> return getStar5Path(shape, rect)
@@ -71,7 +71,7 @@ object LaterStarPathBuilder {
     }
 
     private fun getStar4Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         val width = len
@@ -103,7 +103,7 @@ object LaterStarPathBuilder {
     }
 
     private fun getStar5Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         var width = len
@@ -143,7 +143,7 @@ object LaterStarPathBuilder {
     }
 
     private fun getStar6Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         var width = len
@@ -179,7 +179,7 @@ object LaterStarPathBuilder {
     }
 
     private fun getStar7Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         var width = len
@@ -217,7 +217,7 @@ object LaterStarPathBuilder {
     }
 
     private fun getStar8Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         val width = len
@@ -249,7 +249,7 @@ object LaterStarPathBuilder {
     }
 
     private fun getStar10Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         var width = len
@@ -289,7 +289,7 @@ object LaterStarPathBuilder {
 
 
     private fun getStar12Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         val width = len
@@ -325,7 +325,7 @@ object LaterStarPathBuilder {
 
 
     private fun getStar16Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         val width = len
@@ -361,7 +361,7 @@ object LaterStarPathBuilder {
 
 
     private fun getStar24Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         val width = len
@@ -396,7 +396,7 @@ object LaterStarPathBuilder {
 
 
     private fun getStar32Path(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         val width = len

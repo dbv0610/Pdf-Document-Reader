@@ -165,13 +165,13 @@ class WPControl(private var mainControl: IControl?, doc: IDocument, filePath: St
                 val link = obj as Hyperlink?
                 if (link != null) {
                     try {
-                        if (link.getLinkType() == Hyperlink.LINK_BOOKMARK) {
-                            val bm: Bookmark? = getSysKit().getBookmarkManage().getBookmark(link.getAddress())
+                        if (link.linkType == Hyperlink.LINK_BOOKMARK) {
+                            val bm: Bookmark? = getSysKit().getBookmarkManage().getBookmark(link.address)
                             if (bm != null) {
-                                ControlKit.instance().gotoOffset(wpView, bm.getStart())
+                                ControlKit.instance().gotoOffset(wpView, bm.start)
                             }
                         } else {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.getAddress()))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.address))
                             getMainFrame().getActivity().startActivity(intent)
                         }
                     } catch (e: Exception) {

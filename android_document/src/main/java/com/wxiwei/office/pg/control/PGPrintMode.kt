@@ -156,7 +156,7 @@ class PGPrintMode : FrameLayout, IPageListViewListener {
             try {
                 val slide = pgModel?.getSlide(page.getPageIndex()) ?: return@post
                 val otp = ctl.getOfficeToPicture()
-                if (otp != null && otp.getModeType() == IOfficeToPicture.VIEW_CHANGE_END) {
+                if (otp != null && otp.modeType == IOfficeToPicture.VIEW_CHANGE_END) {
                     val rW = minOf(width, page.getWidth())
                     val rH = minOf(height, page.getHeight())
                     val dst = otp.getBitmap(rW, rH) ?: return@post
@@ -217,12 +217,12 @@ class PGPrintMode : FrameLayout, IPageListViewListener {
                 val x = ((e1.x - item.getLeft()) / zoom).toInt()
                 val y = ((e1.y - item.getTop()) / zoom).toInt()
                 val shape = pgModel?.getSlide(item.getPageIndex())?.getTextboxShape(x, y)
-                if (shape != null && shape.getType() == AbstractShape.SHAPE_TEXTBOX) {
-                    val root: STRoot? = (shape as TextBox).getRootView()
+                if (shape != null && shape.type == AbstractShape.SHAPE_TEXTBOX) {
+                    val root: STRoot? = (shape as TextBox).rootView
                     if (root != null) {
-                        val offset = root.viewToModel(x - shape.getBounds().x, y - shape.getBounds().y, false)
+                        val offset = root.viewToModel(x - shape.bounds!!.x, y - shape.bounds!!.y, false)
                         if (offset >= 0) {
-                            val para = (shape as TextBox).getElement()?.getElement(offset) as? ParagraphElement
+                            val para = (shape as TextBox).element?.getElement(offset) as? ParagraphElement
                             val leaf: IElement? = para?.getLeaf(offset)
                             if (leaf != null) {
                                 val id = AttrManage.instance().getHperlinkID(leaf.getAttribute())
@@ -247,7 +247,7 @@ class PGPrintMode : FrameLayout, IPageListViewListener {
     override fun isTouchZoom(): Boolean = control?.getMainFrame()?.isTouchZoom() ?: false
     override fun isShowZoomingMsg(): Boolean = control?.getMainFrame()?.isShowZoomingMsg() ?: false
     override fun changeZoom() { control?.getMainFrame()?.changeZoom() }
-    override fun setDrawPictrue(value: Boolean) { PictureKit.instance().setDrawPictrue(value) }
+    override fun setDrawPictrue(value: Boolean) { PictureKit.instance().isDrawPictrue = value }
     fun getCurrentPGSlide(): PGSlide? = (listView?.getCurrentPageView() as? PGPageListItem)?.let { pgModel?.getSlide(it.getPageIndex()) } ?: pgModel?.getSlide(0)
 
     private fun drawPageNubmer(canvas: Canvas) {

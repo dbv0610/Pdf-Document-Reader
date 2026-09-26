@@ -456,7 +456,7 @@ public class ChartConverterImplJava
                 col = (short)(row.getFirstCol() - 1);
                 
             }
-            else if( row.getLastCol() < HSSFCell.LAST_COLUMN_NUMBER)
+            else if( row.getLastCol() < HSSFCell.Companion.getLAST_COLUMN_NUMBER())
             {
                 col = (short)(row.getLastCol() + 1);
             }

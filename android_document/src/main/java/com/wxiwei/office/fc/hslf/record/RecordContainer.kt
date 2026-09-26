@@ -157,7 +157,7 @@ abstract class RecordContainer : Record() {
             val children = br.getChildRecords()
             for (record in children) {
                 if (record is ParentAwareRecord) {
-                    record.setParentRecord(br)
+                    record.parentRecord = br
                 }
                 if (record is RecordContainer) {
                     handleParentAwareRecords(record)

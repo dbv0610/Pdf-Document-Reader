@@ -157,7 +157,7 @@ class ParaAttr {
                 }
             } else if (attrLayout == null && styleElement != null) {
                 val fontRef = styleElement.element("fontRef")
-                if (fontRef.elements().size > 0) {
+                if (fontRef!!.elements()!!.size > 0) {
                     val fontColor = ReaderKit.instance().getColor(master, fontRef)
                     attrLayout = AttributeSetImpl()
                     AttrManage.instance().setFontColor(attrLayout, fontColor)
@@ -175,7 +175,7 @@ class ParaAttr {
 
 
             // when leafElem only contains \n, don't show bullet number 
-            if (p.elements("r").size == 0 && p.elements("fld").size == 0) {
+            if (p.elements("r")!!.isEmpty() && p.elements("fld")!!.isEmpty()) {
                 setParaAttribute(
                     control, pPr, paraElem.getAttribute(), attrLayout, layoutStyle, masterStyle,
                     lnSpcReduction, false, subTitle
@@ -344,7 +344,7 @@ class ParaAttr {
             var temp: Element?
             if (pPr.attribute("algn") != null) {
                 `val` = pPr.attributeValue("algn")
-                setParaAlign(attr, `val`)
+                setParaAlign(attr, `val`!!)
             } else {
                 setParaHorizontalAlign(attrLayout, attr)
             }

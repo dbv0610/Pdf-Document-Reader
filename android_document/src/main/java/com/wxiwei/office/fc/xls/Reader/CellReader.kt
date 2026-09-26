@@ -34,7 +34,7 @@ class CellReader private constructor() {
         val book = sheet.getWorkbook() ?: return false
         val style = cellElement.attributeValue("s")
         if (style != null) return Workbook.isValidateStyle(book.getCellStyle(style.toInt()))
-        val ref = cellElement.attributeValue("r")
+        val ref = cellElement.attributeValue("r") ?: return false
         val col = ReferenceUtil.instance().getColumnIndex(ref)
         val row = sheet.getRow(ReferenceUtil.instance().getRowIndex(ref))
         return (row != null && Workbook.isValidateStyle(book.getCellStyle(row.getRowStyle()))) || Workbook.isValidateStyle(book.getCellStyle(col))
@@ -50,7 +50,7 @@ class CellReader private constructor() {
             CELLTYPE_ERROR -> Cell(Cell.CELL_TYPE_ERROR)
             else -> Cell(Cell.CELL_TYPE_BLANK)
         }
-        val ref = cellElement.attributeValue("r")
+        val ref = cellElement.attributeValue("r") ?: return null
         cell.setColNumber(ReferenceUtil.instance().getColumnIndex(ref))
         cell.setRowNumber(ReferenceUtil.instance().getRowIndex(ref))
         val book = sheet.getWorkbook()!!
@@ -68,11 +68,11 @@ class CellReader private constructor() {
             val value = valueElement.text
             when (type) {
                 CELLTYPE_SHAREDSTRING -> {
-                    val item = book.getSharedItem(value.toInt())
+                    val item = book.getSharedItem(value!!.toInt())
                     if (item is Element) {
                         cell.setSheet(sheet)
                         cell.setCellValue(book.addSharedString(processComplexSST(cell, item)))
-                    } else cell.setCellValue(value.toInt())
+                    } else cell.setCellValue(value!!.toInt())
                 }
                 CELLTYPE_STRING -> cell.setCellValue(book.addSharedString(value))
                 CELLTYPE_INLINESTRING -> {
@@ -80,9 +80,9 @@ class CellReader private constructor() {
                     val text = textElement?.text ?: value
                     cell.setCellValue(book.addSharedString(text))
                 }
-                CELLTYPE_NUMBER -> cell.setCellValue(value.toDouble())
-                CELLTYPE_BOOLEAN -> cell.setCellValue(value.toInt() != 0)
-                CELLTYPE_ERROR -> cell.setCellValue(value.toByteOrNull() ?: 0)
+                CELLTYPE_NUMBER -> cell.setCellValue(value!!.toDouble())
+                CELLTYPE_BOOLEAN -> cell.setCellValue(value!!.toInt() != 0)
+                CELLTYPE_ERROR -> cell.setCellValue(value!!.toByteOrNull() ?: 0)
                 else -> cell.setCellValue(value)
             }
         }
@@ -136,7 +136,7 @@ class CellReader private constructor() {
         val book = cell.getSheet()!!.getWorkbook()!!
         val paragraph = paraElem!!
         val runs = si.elements()
-        if (runs.isEmpty()) {
+        if (runs!!.isEmpty()) {
             leaf = LeafElement("\n")
             RunAttr.instance().setRunAttribute(book, fontId, null, leaf!!.getAttribute(), attrLayout)
             leaf!!.setStartOffset(offset.toLong())
@@ -150,14 +150,14 @@ class CellReader private constructor() {
             if (!run.name.equals("r", true)) continue
             val textElement = run.element("t") ?: continue
             var text = textElement.text
-            if (!cell.getCellStyle()!!.isWrapText()) text = text.replace("\n", "")
-            if (text.contains("\n") && cell.getCellStyle()!!.isWrapText()) {
+            if (!cell.getCellStyle()!!.isWrapText()) text = text!!.replace("\n", "")
+            if (text!!.contains("\n") && cell.getCellStyle()!!.isWrapText()) {
                 processBreakLine(cell, section, fontId, run, text)
-            } else if (text.isNotEmpty()) {
+            } else if (text!!.isNotEmpty()) {
                 leaf = LeafElement(text)
                 RunAttr.instance().setRunAttribute(book, fontId, run.element("rPr"), leaf!!.getAttribute(), attrLayout)
                 leaf!!.setStartOffset(offset.toLong())
-                offset += text.length
+                offset += text!!.length
                 leaf!!.setEndOffset(offset.toLong())
                 paragraph.appendLeaf(leaf)
             }
@@ -196,6 +196,6 @@ class CellReader private constructor() {
 
     fun searchContent(cellElement: Element, key: String): Boolean {
         val value = cellElement.element("v")
-        return value != null && getCellType(cellElement.attributeValue("t")) != CELLTYPE_SHAREDSTRING && value.text.lowercase().contains(key)
+        return value != null && getCellType(cellElement.attributeValue("t")) != CELLTYPE_SHAREDSTRING && value.text!!.lowercase().contains(key)
     }
 }

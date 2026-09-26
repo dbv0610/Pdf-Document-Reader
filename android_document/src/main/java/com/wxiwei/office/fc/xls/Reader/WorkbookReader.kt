@@ -207,12 +207,12 @@ class WorkbookReader private constructor() {
     @Throws(Exception::class)
     private fun searchContentSheetName(documentPart: PackagePart, key: String): Boolean {
         val input = documentPart.inputStream
-        val root = SAXReader().read(input).rootElement
+        val root = SAXReader().read(input)!!.rootElement
         input.close()
-        val iterator = root.element("sheets").elementIterator()
-        while (iterator.hasNext()) {
-            val element = iterator.next() as Element
-            if (element.attributeValue("name").lowercase().contains(key)) return true
+        val iterator = root!!.element("sheets")!!.elementIterator()
+        while (iterator!!.hasNext()) {
+            val element = iterator!!.next() as Element
+            if (element.attributeValue("name")!!.lowercase().contains(key)) return true
         }
         return false
     }
@@ -252,20 +252,22 @@ class WorkbookReader private constructor() {
     }
 
     private inner class WorkBookSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {}
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {}
+        override fun onEnd(elementPath: ElementPath?) {
             if (iReader?.isAborted() == true) throw AbortReaderError("abort Reader")
-            val element = elementPath.current
-            when (element.name) {
+            val element = elementPath?.current
+            when (element!!.name) {
                 "sheet" -> {
-                    val id = element.attributeValue("id")
-                    val name = element.attributeValue("name")
-                    sheetIndexList!![tempIndex++] = id
-                    sheetNameList!![id] = name
+                    val id = element!!.attributeValue("id") ?: ""
+                    val name = element!!.attributeValue("name") ?: ""
+                    if (id.isNotEmpty()) {
+                        sheetIndexList!![tempIndex++] = id
+                        sheetNameList!![id] = name
+                    }
                 }
-                "workbookPr" -> book?.setUsing1904DateWindowing(element.attributeValue("date1904")?.let { it.toInt() != 0 } ?: false)
+                "workbookPr" -> book?.setUsing1904DateWindowing(element!!.attributeValue("date1904")?.let { it.toInt() != 0 } ?: false)
             }
-            element.detach()
+            element!!.detach()
         }
     }
 }

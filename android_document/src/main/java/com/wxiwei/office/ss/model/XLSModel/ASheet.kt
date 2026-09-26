@@ -89,40 +89,40 @@ open class ASheet
         book = workbook
 
         // merge range
-        val count = sheet.getNumMergedRegions()
+        val count = sheet.numMergedRegions
         for (i in 0 until count) {
             val range = sheet.getMergedRegionAt(i)
             addMergeRange(
                 CellRangeAddress(
-                    range.getFirstRow(),
-                    range.getFirstColumn(), range.getLastRow(), range.getLastColumn()
+                    range!!.getFirstRow(),
+                    range!!.getFirstColumn(), range!!.getLastRow(), range!!.getLastColumn()
                 )
             )
         }
 
         // PaneInformation
-        val pane = sheet.getPaneInformation()
+        val pane = sheet.paneInformation
         if (pane != null) {
             setPaneInformation(
                 PaneInformation(
-                    pane.getHorizontalSplitTopRow(),
-                    pane.getVerticalSplitLeftColumn(), pane.isFreezePane()
+                    pane.horizontalSplitTopRow,
+                    pane.verticalSplitLeftColumn, pane.isFreezePane
                 )
             )
         }
 
         // cloumn width, style, hidden
-        val hssfColumnInfoList = sheet.getColumnInfo()
+        val hssfColumnInfoList = sheet.columnInfo
         if (hssfColumnInfoList != null) {
             val iter = hssfColumnInfoList.iterator()
             while (iter.hasNext()) {
-                val hssfColumnInfo = iter.next()
+                val hssfColumnInfo = iter.next() ?: continue
                 val columnInfo = ColumnInfo(
-                    hssfColumnInfo.getFirstCol(),
-                    hssfColumnInfo.getLastCol(),
-                    (hssfColumnInfo.getColWidth() / 256.0 * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt().toFloat(),
-                    hssfColumnInfo.getStyle(),
-                    hssfColumnInfo.isHidden()
+                    hssfColumnInfo.firstCol,
+                    hssfColumnInfo.lastCol,
+                    (hssfColumnInfo.colWidth / 256.0 * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt().toFloat(),
+                    hssfColumnInfo.style,
+                    hssfColumnInfo.isHidden
                 )
 
                 addColumnInfo(columnInfo)
@@ -150,7 +150,7 @@ open class ASheet
      */
     private fun processHyperlinkfromSheet(sheet: InternalSheet) {
         try {
-            val it = sheet.getRecords().iterator()
+            val it = sheet.records.iterator()
             while (it.hasNext()) {
                 val rec = it.next()
                 if (rec is HyperlinkRecord) {
@@ -158,20 +158,20 @@ open class ASheet
                     val link = Hyperlink()
                     // Figure out the type
                     if (linkRec.isFileLink()) {
-                        link.setLinkType(Hyperlink.LINK_FILE)
+                        link.linkType = Hyperlink.LINK_FILE
                     } else if (linkRec.isDocumentLink()) {
-                        link.setLinkType(Hyperlink.LINK_DOCUMENT)
+                        link.linkType = Hyperlink.LINK_DOCUMENT
                     } else {
                         if (linkRec.getAddress() != null &&
-                            linkRec.getAddress().startsWith("mailto:")
+                            linkRec.getAddress()!!.startsWith("mailto:")
                         ) {
-                            link.setLinkType(Hyperlink.LINK_EMAIL)
+                            link.linkType = Hyperlink.LINK_EMAIL
                         } else {
-                            link.setLinkType(Hyperlink.LINK_URL)
+                            link.linkType = Hyperlink.LINK_URL
                         }
                     }
-                    link.setAddress(linkRec.getAddress())
-                    link.setTitle(linkRec.getLabel())
+                    link.address = linkRec.getAddress()
+                    link.title = linkRec.getLabel()
 
                     var row = getRow(linkRec.getFirstRow())
                     if (row == null) {
@@ -185,9 +185,9 @@ open class ASheet
                     var cell = row.getCell(linkRec.getFirstColumn())
                     if (cell == null) {
                         val brec = BlankRecord()
-                        brec.setRow(linkRec.getFirstRow())
-                        brec.setColumn(linkRec.getFirstColumn().toShort())
-                        brec.setXFIndex(row.getRowStyle().toShort())
+                        brec.row = linkRec.getFirstRow()
+                        brec.column = linkRec.getFirstColumn().toShort()
+                        brec.xFIndex = row.getRowStyle().toShort()
 
                         cell = ACell(this, brec)
                         row.addCell(cell)
@@ -203,7 +203,7 @@ open class ASheet
      * used internally to set the properties given a Sheet object
      */
     private fun processRowsAndCells(sheet: InternalSheet, iAbortListener: AbstractReader) {
-        var row = sheet.getNextRow()
+        var row = sheet.nextRow
         @Suppress("UNUSED_VARIABLE")
         val rowRecordsAlreadyPresent = row != null
         //process rows
@@ -212,11 +212,11 @@ open class ASheet
                 throw AbortReaderError("abort Reader")
             }
             createValidateRowFromRecord(row)
-            row = sheet.getNextRow()
+            row = sheet.nextRow
         }
 
         //create cells of all rows
-        val iter = sheet.getCellValueIterator()
+        val iter = sheet.cellValueIterator
         var lastrow: ARow? = null
         // Add every cell to its row
         while (iter.hasNext()) {
@@ -224,16 +224,16 @@ open class ASheet
                 throw AbortReaderError("abort Reader")
             }
 
-            val cval = iter.next()
+            val cval = iter.next()!!
             iter.remove()
 
             var hrow = lastrow
-            if (hrow == null || hrow.getRowNumber() != cval.getRow()) {
+            if (hrow == null || hrow.getRowNumber() != cval.row) {
                 if (lastrow != null) {
                     lastrow.completed()
                 }
 
-                hrow = getRow(cval.getRow()) as ARow?
+                hrow = getRow(cval.row) as ARow?
                 lastrow = hrow
                 if (hrow == null) {
                     // Some tools (like Perl module Spreadsheet::WriteExcel - bug 41187) skip the RowRecords
@@ -245,7 +245,7 @@ open class ASheet
 //                            "Unexpected missing row when some rows already present");
 //                    }
                     // create the row record on the fly now.
-                    val rowRec = RowRecord(cval.getRow())
+                    val rowRec = RowRecord(cval.row)
 //                    sheet.addRow(rowRec);
                     hrow = createRowFromRecord(rowRec)
                 }
@@ -340,9 +340,9 @@ open class ASheet
                     cell = row.getCell(k)
                     if (cell == null) {
                         val brec = BlankRecord()
-                        brec.setRow(j)
-                        brec.setColumn(k.toShort())
-                        brec.setXFIndex(row.getRowStyle().toShort())
+                        brec.row = j
+                        brec.column = k.toShort()
+                        brec.xFIndex = row.getRowStyle().toShort()
 
                         cell = ACell(this, brec)
                         row.addCell(cell)
@@ -365,13 +365,9 @@ open class ASheet
         val internalWorkbook = (book as AWorkbook).getInternalWorkbook()!!
         internalWorkbook.findDrawingGroup()
 
-        // If there's now no drawing manager, then there's
-        //  no drawing escher records on the workbook
-        if (internalWorkbook.getDrawingManager() == null) {
-            return null
-        }
+        val dm = internalWorkbook.drawingManager ?: return null
 
-        val found = sheet!!.aggregateDrawingRecords(internalWorkbook.getDrawingManager(), false)
+        val found = sheet!!.aggregateDrawingRecords(dm, false)
         if (found == -1) {
             // Workbook has drawing stuff, but this sheet doesn't
             return null
@@ -428,51 +424,51 @@ open class ASheet
     private fun converFill(shape: HSSFShape?, control: IControl): BackgroundAndFill? {
         var bgFill: BackgroundAndFill? = null
         if (shape != null) {
-            if (shape.isGradientTile()) {
+            if (shape.isGradientTile) {
                 return shape.getGradientTileBackground(book as AWorkbook, control)
             }
 
-            val type = shape.getFillType()
+            val type = shape.fillType
             if (type == BackgroundAndFill.FILL_PICTURE.toInt()) {
-                val picData = shape.getBGPictureData()
+                val picData = shape.bGPictureData
                 if (picData != null) {
                     val pic = Picture()
-                    pic.setData(picData)
+                    pic.data = picData
                     val picIndex = control.getSysKit().getPictureManage().addPicture(pic)
                     bgFill = BackgroundAndFill()
-                    bgFill.setFillType(BackgroundAndFill.FILL_PICTURE)
-                    bgFill.setPictureIndex(picIndex)
+                    bgFill.fillType = BackgroundAndFill.FILL_PICTURE
+                    bgFill.pictureIndex = picIndex
                 }
             } else {
                 bgFill = BackgroundAndFill()
-                bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                bgFill.setForegroundColor(shape.getFillColor())
+                bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                bgFill.foregroundColor = shape.fillColor
             }
         }
         return bgFill
     }
 
     fun processRotationAndFlip(shape: HSSFShape, autoShape: IShape) {
-        var angle = shape.getRotation().toFloat()
-        if (shape.getFlipH()) {
-            autoShape.setFlipHorizontal(true)
+        var angle = shape.rotation.toFloat()
+        if (shape.flipH) {
+            autoShape.flipHorizontal = true
             angle = -angle
         }
-        if (shape.getFlipV()) {
-            autoShape.setFlipVertical(true)
+        if (shape.flipV) {
+            autoShape.flipVertical = true
             angle = -angle
         }
 
         if (autoShape is LineShape) {
             if ((angle == 45f || angle == 135f || angle == 225f)
-                && !autoShape.getFlipHorizontal()
-                && !autoShape.getFlipVertical()
+                && !autoShape.flipHorizontal
+                && !autoShape.flipVertical
             ) {
                 angle -= 90f
             }
         }
 
-        autoShape.setRotation(angle)
+        autoShape.rotation = angle
     }
 
     /**
@@ -503,7 +499,7 @@ open class ASheet
                 throw AbortReaderError("abort Reader")
             }
 
-            val chart = sheet!!.getChart()
+            val chart = sheet!!.chart!!
             val achart = AChart()
             val abstractChart = ChartConverter.instance().converter(this, chart)
             if (abstractChart != null) {
@@ -515,17 +511,17 @@ open class ASheet
                 }
 
                 if (renderer != null) {
-                    if (!chart.isNoBorder()) {
-                        renderer.setChartFrame(chart.getLine())
+                    if (!chart.isNoBorder) {
+                        renderer.setChartFrame(chart.line)
                     }
 
-//                     if (!chart.isNoFill())
+//                     if (!chart.isNoFill)
 //                     {
 //                    	 renderer.setBackgroundAndFill(converFill(chart, control));
 //                     }
                 }
 
-                achart.setAChart(abstractChart)
+                achart.aChart = abstractChart
                 shapesList!!.add(achart)
             }
         }
@@ -540,27 +536,27 @@ open class ASheet
         val from = AnchorPoint()
         val end = AnchorPoint()
 
-        from.setColumn(anchor.getCol1())
-        from.setRow(anchor.getRow1())
+        from.setColumn(anchor.col1)
+        from.setRow(anchor.row1)
 
-        end.setRow(anchor.getRow2())
-        end.setColumn(anchor.getCol2())
+        end.setRow(anchor.row2)
+        end.setColumn(anchor.col2)
 
         //dx
-        var colWidth = getColumnPixelWidth(anchor.getCol1().toInt())
-        from.setDX(Math.round(anchor.getDx1() / 1024f * colWidth))
+        var colWidth = getColumnPixelWidth(anchor.col1.toInt())
+        from.setDX(Math.round(anchor.dx1 / 1024f * colWidth))
 
-        colWidth = getColumnPixelWidth(anchor.getCol2().toInt())
-        end.setDX(Math.round(anchor.getDx2() / 1024f * colWidth))
+        colWidth = getColumnPixelWidth(anchor.col2.toInt())
+        end.setDX(Math.round(anchor.dx2 / 1024f * colWidth))
 
         //dy
-        var row = getRow(anchor.getRow1())
+        var row = getRow(anchor.row1)
         var rowHeight = if (row == null) getDefaultRowHeight().toFloat() else row.getRowPixelHeight()
-        from.setDY(Math.round(anchor.getDy1() / 256f * rowHeight))
+        from.setDY(Math.round(anchor.dy1 / 256f * rowHeight))
 
-        row = getRow(anchor.getRow2())
+        row = getRow(anchor.row2)
         rowHeight = if (row == null) getDefaultRowHeight().toFloat() else row.getRowPixelHeight()
-        end.setDY(Math.round(anchor.getDy2() / 256f * rowHeight))
+        end.setDY(Math.round(anchor.dy2 / 256f * rowHeight))
 
         val cellAnchor = CellAnchor(CellAnchor.TWOCELLANCHOR)
         cellAnchor.setStart(from)
@@ -582,7 +578,7 @@ open class ASheet
                 }
                 rect = ModelUtil.instance().getCellAnchor(this, ClientAnchorToTwoCellAnchor(anchor))
                 if (rect != null) {
-                    rect = ModelUtil.processRect(rect, shape.getRotation().toFloat())
+                    rect = ModelUtil.processRect(rect, shape.rotation.toFloat())
                 }
             } else {
                 //
@@ -593,15 +589,15 @@ open class ASheet
                 rect = Rectangle()
                 val hp = hssfParent!!
                 val pr = parentRect!!
-                rect.x = pr.x + Math.round((anchor.getDx1() - hp.getX1()) / (hp.getX2() - hp.getX1()).toFloat() * pr.width)
-                rect.y = pr.y + Math.round((anchor.getDy1() - hp.getY1()) / (hp.getY2() - hp.getY1()).toFloat() * pr.height)
-                rect.width = Math.round((anchor.getDx2() - anchor.getDx1()) / (hp.getX2() - hp.getX1()).toFloat() * pr.width)
-                rect.height = Math.round((anchor.getDy2() - anchor.getDy1()) / (hp.getY2() - hp.getY1()).toFloat() * pr.height)
+                rect.x = pr.x + Math.round((anchor.dx1 - hp.x1) / (hp.x2 - hp.x1).toFloat() * pr.width)
+                rect.y = pr.y + Math.round((anchor.dy1 - hp.y1) / (hp.y2 - hp.y1).toFloat() * pr.height)
+                rect.width = Math.round((anchor.dx2 - anchor.dx1) / (hp.x2 - hp.x1).toFloat() * pr.width)
+                rect.height = Math.round((anchor.dy2 - anchor.dy1) / (hp.y2 - hp.y1).toFloat() * pr.height)
 
-                rect = ModelUtil.processRect(rect, shape.getRotation().toFloat())
+                rect = ModelUtil.processRect(rect, shape.rotation.toFloat())
             }
 
-            val type = shape.getShapeType()
+            val type = shape.shapeType
             if (type != ShapeTypes.Line && type != ShapeTypes.StraightConnector1 && (rect!!.width == 0 || rect.height == 0)) {
                 return
             }
@@ -609,7 +605,7 @@ open class ASheet
 
         if (shape is HSSFShapeGroup) {
             val groupShape = GroupShape()
-            groupShape.setBounds(rect)
+            groupShape.bounds = rect
             val shapes = shape.getChildren()
             for (item in shapes) {
                 processShape(control, groupShape, shape, item, rect)
@@ -633,27 +629,27 @@ open class ASheet
                 val data = picData.getData()
                 if (data != null) {
                     val pic = Picture()
-                    pic.setData(data)
+                    pic.data = data
                     var type = Picture.PNG
-                    when (picData.getFormat()) {
-                        HSSFWorkbook.PICTURE_TYPE_EMF -> type = Picture.EMF
+                    when (picData.format) {
+                        com.wxiwei.office.fc.ss.usermodel.Workbook.PICTURE_TYPE_EMF -> type = Picture.EMF
 
-                        HSSFWorkbook.PICTURE_TYPE_WMF -> type = Picture.WMF
+                        com.wxiwei.office.fc.ss.usermodel.Workbook.PICTURE_TYPE_WMF -> type = Picture.WMF
                     }
-                    pic.setPictureType(type)
+                    pic.pictureType = type
                     val picIndex = control.getSysKit().getPictureManage().addPicture(pic)
 
                     val picShape = PictureShape()
-                    picShape.setPictureIndex(picIndex)
-                    picShape.setBounds(rect)
-                    picShape.setPictureEffectInfor(PictureEffectInfoFactory.getPictureEffectInfor(picture.getEscherOptRecord()))
+                    picShape.pictureIndex = picIndex
+                    picShape.bounds = rect
+                    picShape.pictureEffectInfor = PictureEffectInfoFactory.getPictureEffectInfor(picture.escherOptRecord)
                     processRotationAndFlip(shape, picShape)
                     // border
-                    if (!shape.isNoBorder()) {
-                        picShape.setLine(shape.getLine())
+                    if (!shape.isNoBorder) {
+                        picShape.line = shape.line
                     }
-                    if (!shape.isNoFill()) {
-                        picShape.setBackgroundAndFill(converFill(shape, control))
+                    if (!shape.isNoFill) {
+                        picShape.backgroundAndFill = converFill(shape, control)
                     }
 
                     if (parent == null) {
@@ -662,16 +658,16 @@ open class ASheet
                         parent.appendShapes(picShape)
                     }
                 }
-            } else if (!shape.isNoBorder() || !shape.isNoFill()) {
+            } else if (!shape.isNoBorder || !shape.isNoFill) {
                 val autoShape = AutoShape(ShapeTypes.Rectangle)
                 autoShape.setAuotShape07(false)
-                autoShape.setBounds(rect)
+                autoShape.bounds = rect
                 // border
-                if (!shape.isNoBorder()) {
-                    autoShape.setLine(shape.getLine())
+                if (!shape.isNoBorder) {
+                    autoShape.line = shape.line
                 }
-                if (!shape.isNoFill()) {
-                    autoShape.setBackgroundAndFill(converFill(shape, control))
+                if (!shape.isNoFill) {
+                    autoShape.backgroundAndFill = converFill(shape, control)
                 }
                 processRotationAndFlip(shape, autoShape)
 
@@ -686,7 +682,7 @@ open class ASheet
 //            if (ChartConverter.instance().getChartType(chart) != AbstractChart.CHART_UNKOWN)
             run {
                 val achart = AChart()
-                achart.setBounds(rect)
+                achart.bounds = rect
 
                 val abstractChart: AbstractChart? = ChartConverter.instance().converter(this, chart)
                 if (abstractChart != null) {
@@ -698,16 +694,16 @@ open class ASheet
                     }
 
                     if (renderer != null) {
-                        if (!chart.isNoBorder()) {
-                            renderer.setChartFrame(chart.getLine())
+                        if (!chart.isNoBorder) {
+                            renderer.setChartFrame(chart.line)
                         }
 
-                        if (!chart.isNoFill()) {
+                        if (!chart.isNoFill) {
                             renderer.setBackgroundAndFill(converFill(chart, control))
                         }
                     }
 
-                    achart.setAChart(abstractChart)
+                    achart.aChart = abstractChart
                     if (parent == null) {
                         shapesList!!.add(achart)
                     } else {
@@ -716,33 +712,33 @@ open class ASheet
                 }
             }
         } else if (shape is HSSFLine) {
-            if (!shape.isNoBorder()) {
+            if (!shape.isNoBorder) {
                 val lineShape = LineShape()
                 lineShape.setAuotShape07(false)
-                lineShape.setShapeType(shape.getShapeType())
-                lineShape.setBounds(rect)
-                lineShape.setLine(shape.getLine())
+                lineShape.shapeType = shape.shapeType
+                lineShape.bounds = rect
+                lineShape.line = shape.line
 
-                val adj = shape.getAdjustmentValue()
-                if (lineShape.getShapeType() == ShapeTypes.BentConnector2 && adj == null) {
-                    lineShape.setAdjustData(arrayOf(1.0f))
+                val adj = shape.adjustmentValue
+                if (lineShape.shapeType == ShapeTypes.BentConnector2 && adj == null) {
+                    lineShape.adjustData = arrayOf(1.0f)
                 } else {
-                    lineShape.setAdjustData(adj)
+                    lineShape.adjustData = adj
                 }
 
-                if (shape.getStartArrowType() > 0) {
+                if (shape.startArrowType > 0) {
                     lineShape.createStartArrow(
-                        shape.getStartArrowType().toByte(),
-                        shape.getStartArrowWidth(),
-                        shape.getStartArrowLength()
+                        shape.startArrowType.toByte(),
+                        shape.startArrowWidth,
+                        shape.startArrowLength
                     )
                 }
 
-                if (shape.getEndArrowType() > 0) {
+                if (shape.endArrowType > 0) {
                     lineShape.createEndArrow(
-                        shape.getEndArrowType().toByte(),
-                        shape.getEndArrowWidth(),
-                        shape.getEndArrowLength()
+                        shape.endArrowType.toByte(),
+                        shape.endArrowWidth,
+                        shape.endArrowLength
                     )
                 }
 
@@ -755,16 +751,16 @@ open class ASheet
                 }
             }
         } else if (shape is HSSFFreeform) {
-            if (!shape.isNoBorder() || !shape.isNoFill()) {
+            if (!shape.isNoBorder || !shape.isNoFill) {
                 val arbitraryPolygonShape = ArbitraryPolygonShape()
-                arbitraryPolygonShape.setShapeType(ShapeTypes.ArbitraryPolygon)
-                arbitraryPolygonShape.setBounds(rect)
-                val line = shape.getLine()
+                arbitraryPolygonShape.shapeType = ShapeTypes.ArbitraryPolygon
+                arbitraryPolygonShape.bounds = rect
+                val line = shape.line
 
                 var startArrowTailCenter: PointF? = null
                 var endArrowTailCenter: PointF? = null
 
-                val startArrowType = shape.getStartArrowType()
+                val startArrowType = shape.startArrowType
                 if (startArrowType > 0) {
                     val arrowPathAndTail = shape.getStartArrowPath(rect)
                     if (arrowPathAndTail != null && arrowPathAndTail.arrowPath != null) {
@@ -775,12 +771,12 @@ open class ASheet
                         pathExtend.setArrowFlag(true)
                         if (startArrowType != Arrow.Arrow_Arrow.toInt()) {
                             var fill: BackgroundAndFill? = null
-                            if (shape.isNoFill()) {
+                            if (shape.isNoFill) {
                                 fill = BackgroundAndFill()
-                                fill.setFillType(BackgroundAndFill.FILL_SOLID)
-                                fill.setForegroundColor(shape.getLineStyleColor())
+                                fill.fillType = BackgroundAndFill.FILL_SOLID
+                                fill.foregroundColor = shape.lineStyleColor
                             } else if (line != null) {
-                                fill = line.getBackgroundAndFill()
+                                fill = line.backgroundAndFill
                             }
                             pathExtend.backgroundAndFill = fill
                         } else {
@@ -790,7 +786,7 @@ open class ASheet
                     }
                 }
 
-                val endArrowType = shape.getEndArrowType()
+                val endArrowType = shape.endArrowType
                 if (endArrowType > 0) {
                     val arrowPathAndTail = shape.getEndArrowPath(rect)
                     if (arrowPathAndTail != null && arrowPathAndTail.arrowPath != null) {
@@ -801,12 +797,12 @@ open class ASheet
                         pathExtend.setArrowFlag(true)
                         if (endArrowType != Arrow.Arrow_Arrow.toInt()) {
                             var fill: BackgroundAndFill? = null
-                            if (shape.isNoFill()) {
+                            if (shape.isNoFill) {
                                 fill = BackgroundAndFill()
-                                fill.setFillType(BackgroundAndFill.FILL_SOLID)
-                                fill.setForegroundColor(shape.getLineStyleColor())
+                                fill.fillType = BackgroundAndFill.FILL_SOLID
+                                fill.foregroundColor = shape.lineStyleColor
                             } else if (line != null) {
-                                fill = line.getBackgroundAndFill()
+                                fill = line.backgroundAndFill
                             }
                             pathExtend.backgroundAndFill = fill
                         } else {
@@ -816,17 +812,17 @@ open class ASheet
                     }
                 }
 
-                val paths: Array<Path> = shape.getFreeformPath(
+                val paths = shape.getFreeformPath(
                     rect, startArrowTailCenter, startArrowType.toByte(),
                     endArrowTailCenter, endArrowType.toByte()
-                )
+                )!!
                 for (i in paths.indices) {
                     val pathExtend = ExtendPath()
                     pathExtend.path = paths[i]
-                    if (!shape.isNoBorder()) {
+                    if (!shape.isNoBorder) {
                         pathExtend.setLine(line)
                     }
-                    if (!shape.isNoFill()) {
+                    if (!shape.isNoFill) {
                         pathExtend.backgroundAndFill = converFill(shape, control)
                     }
                     arbitraryPolygonShape.appendPath(pathExtend)
@@ -842,21 +838,21 @@ open class ASheet
             }
         } else if (shape is HSSFAutoShape) {
             var autoShape: AutoShape? = null
-            if (!shape.isNoBorder() || !shape.isNoFill()) {
-                autoShape = AutoShape(shape.getShapeType())
+            if (!shape.isNoBorder || !shape.isNoFill) {
+                autoShape = AutoShape(shape.shapeType)
                 autoShape.setAuotShape07(false)
-                autoShape.setBounds(rect)
+                autoShape.bounds = rect
                 // border
-                if (!shape.isNoBorder()) {
-                    autoShape.setLine(shape.getLine())
+                if (!shape.isNoBorder) {
+                    autoShape.line = shape.line
                 }
-                if (!shape.isNoFill()) {
-                    autoShape.setBackgroundAndFill(converFill(shape, control))
+                if (!shape.isNoFill) {
+                    autoShape.backgroundAndFill = converFill(shape, control)
                 }
 
                 // adjust data
-                if (shape.getShapeType() != ShapeTypes.TextBox) {
-                    autoShape.setAdjustData(shape.getAdjustmentValue())
+                if (shape.shapeType != ShapeTypes.TextBox) {
+                    autoShape.adjustData = shape.adjustmentValue
                 }
 
                 processRotationAndFlip(shape, autoShape)
@@ -875,9 +871,9 @@ open class ASheet
                 val str = richTextString.getString()
                 if (str != null && str.length > 0) {
                     val tb = TextBox()
-                    tb.setElement(SectionElementFactory.getSectionElement(book, textbox, rect))
-                    tb.setWrapLine(textbox.isTextboxWrapLine())
-                    tb.setBounds(rect)
+                    tb.element = SectionElementFactory.getSectionElement(book, textbox, rect)
+                    tb.isWrapLine = textbox.isTextboxWrapLine
+                    tb.bounds = rect
                     processRotationAndFlip(shape, tb)
 
                     if (parent == null) {

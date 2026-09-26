@@ -72,7 +72,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     }
 
     private inner class Session(val pkg: OoxmlPackage) {
-        val root = pkg.xml("word/document.xml").rootElement
+        val root: Element = pkg.xml("word/document.xml").rootElement!!
         val body = root.firstChild(W, "body") ?: fail(Reason.MAP_MISMATCH, "No document body")
         val runs = ArrayList<Element>()
         val paragraphs = ArrayList<Element>()
@@ -83,8 +83,8 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         val deletedSeparators = HashSet<Long>()
         val opaqueSpans = HashMap<Int, LongRange>()
         init {
-            body.elements().filterIsInstance<Element>().filter { it.namespaceURI == W.uri && it.name in setOf("p", "tbl", "sdt") }.forEach { child ->
-                walk(child) { if (it.namespaceURI == W.uri) when (it.name) { "r" -> runs.add(it); "p" -> paragraphs.add(it) } }
+            body.elements()!!.filterIsInstance<Element>().filter { it.namespaceURI == W.uRI && it.name in setOf("p", "tbl", "sdt") }.forEach { child ->
+                walk(child) { if (it.namespaceURI == W.uRI) when (it.name) { "r" -> runs.add(it); "p" -> paragraphs.add(it) } }
             }
         }
         fun affected(leaf: DocxSourceMap.Leaf) = ops.any { op -> op.type != "append" &&
@@ -96,7 +96,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 val rr = leaf.runIndices.map { runs.getOrNull(it) ?: fail(Reason.MAP_MISMATCH, "Missing run $it") }
                 if (affected(leaf)) {
                     val actual = if (leaf.kind == DocxSourceMap.Kind.OBJECT) {
-                        if (rr.size == 1 && rr[0].elements().filterIsInstance<Element>().any { it.name in setOf("drawing", "pict", "object", "AlternateContent") }) "1" else ""
+                        if (rr.size == 1 && rr[0].elements()!!.filterIsInstance<Element>().any { it.name in setOf("drawing", "pict", "object", "AlternateContent") }) "1" else ""
                     } else rr.joinToString("") { runText(it) }
                     if (actual != leaf.text || rr.isEmpty()) fail(Reason.MAP_MISMATCH, "Source text differs at ${leaf.start}")
                 }
@@ -153,7 +153,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         fun format(op: Op) {
             split(op.end); split(op.start)
             pieces.filter { it.start < op.end && it.end > op.start }.forEach { piece ->
-                val pr = piece.run.firstChild(W, "rPr") ?: newElement(W, "rPr").also { addBefore(piece.run, piece.run.elements().filterIsInstance<Element>().firstOrNull(), it) }
+                val pr = piece.run.firstChild(W, "rPr") ?: newElement(W, "rPr").also { addBefore(piece.run, piece.run.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
                 pr.childrenNamed(W, op.type).forEach { it.detach() }
                 if (op.type == "highlight") pr.childrenNamed(W, "shd").forEach { it.detach() }
                 if (op.type == "shd") pr.childrenNamed(W, "highlight").forEach { it.detach() }
@@ -172,7 +172,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             }
             insertionEnds[at]?.takeIf { it.parent != null }?.let { inserted ->
                 val parent = inserted.parent
-                val siblings = parent.elements().filterIsInstance<Element>()
+                val siblings = parent!!.elements()!!.filterIsInstance<Element>()
                 return Boundary(parent, siblings.getOrNull(siblings.indexOf(inserted) + 1), inserted.firstChild(W, "rPr")?.createCopy())
             }
             split(at)
@@ -180,13 +180,13 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             if (next != null) {
                 val parent = next.run.parent
                 val style = next.run.firstChild(W, "rPr")?.createCopy()
-                return if (parent.name == "fldSimple") Boundary(parent.parent, parent, style) else Boundary(parent, next.run, style)
+                return if (parent!!.name == "fldSimple") Boundary(parent.parent!!, parent, style) else Boundary(parent, next.run, style)
             }
             val previous = pieces.lastOrNull { it.end == at && it.run.parent != null }
             if (previous != null) {
-                val anchor = if (previous.run.parent.name == "fldSimple") previous.run.parent else previous.run
-                val parent = anchor.parent
-                val siblings = parent.elements().filterIsInstance<Element>()
+                val anchor = if (previous.run.parent!!.name == "fldSimple") previous.run.parent else previous.run
+                val parent = anchor!!.parent
+                val siblings = parent!!.elements()!!.filterIsInstance<Element>()
                 return Boundary(parent, siblings.getOrNull(siblings.indexOf(anchor) + 1), previous.run.firstChild(W, "rPr")?.createCopy())
             }
             val para = paras.firstOrNull { at >= it.start && at < it.end } ?: fail(Reason.INVALID_ARGUMENT, "No paragraph at offset")
@@ -200,11 +200,11 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 if (text.isEmpty()) return null
                 return textRun(text, b.style).also { addBefore(b.parent, b.before, it) }
             }
-            if (b.parent.name != "p" || b.parent.namespaceURI != W.uri) fail(Reason.INVALID_ARGUMENT, "Paragraph split inside a hyperlink/field is unsupported")
+            if (b.parent.name != "p" || b.parent.namespaceURI != W.uRI) fail(Reason.INVALID_ARGUMENT, "Paragraph split inside a hyperlink/field is unsupported")
             val para = b.parent
             val parent = para.parent ?: fail(Reason.INVALID_ARGUMENT, "Detached paragraph")
-            val after = parent.elements().filterIsInstance<Element>().let { it.getOrNull(it.indexOf(para) + 1) }
-            val tail = if (b.before == null) emptyList() else para.elements().filterIsInstance<Element>().let { it.drop(it.indexOf(b.before)) }
+            val after = parent.elements()!!.filterIsInstance<Element>().let { it.getOrNull(it.indexOf(para) + 1) }
+            val tail = if (b.before == null) emptyList() else para.elements()!!.filterIsInstance<Element>().let { it.drop(it.indexOf(b.before)) }
             if (parts[0].isNotEmpty()) addBefore(para, b.before, textRun(parts[0], b.style))
             var last = para
             var lastRun: Element? = null
@@ -229,10 +229,10 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 val p = paras.firstOrNull { leaf.start >= it.start && leaf.start < it.end } ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
                 val first = paragraphs[p.paraIndex]
                 val parent = first.parent ?: fail(Reason.INVALID_ARGUMENT, "Paragraph already deleted")
-                val siblings = parent.elements().filterIsInstance<Element>()
+                val siblings = parent.elements()!!.filterIsInstance<Element>()
                 val next = siblings.getOrNull(siblings.indexOf(first) + 1)
-                if (next == null || next.name != "p" || next.namespaceURI != W.uri) fail(Reason.INVALID_ARGUMENT, "Cannot delete final paragraph or cross table/cell boundaries")
-                next.elements().filterIsInstance<Element>().filter { it.name != "pPr" }.forEach { it.detach(); first.add(it) }
+                if (next == null || next.name != "p" || next.namespaceURI != W.uRI) fail(Reason.INVALID_ARGUMENT, "Cannot delete final paragraph or cross table/cell boundaries")
+                next.elements()!!.filterIsInstance<Element>().filter { it.name != "pPr" }.forEach { it.detach(); first.add(it) }
                 for (i in paragraphs.indices) if (paragraphs[i] === next) paragraphs[i] = first
                 next.detach()
                 deletedSeparators.add(leaf.start)
@@ -245,29 +245,29 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             val media = pkg.addMedia("word/media", op.image!!.readBytes(), op.image.extension)
             val rel = pkg.addRelationship("word/document.xml", REL_IMAGE, media.removePrefix("word/"))
             var maxId = 0L
-            walk(root) { if (it.name == "docPr" && it.namespaceURI == WP.uri) maxId = maxOf(maxId, it.attributeValue("id")?.toLongOrNull() ?: 0) }
+            walk(root) { if (it.name == "docPr" && it.namespaceURI == WP.uRI) maxId = maxOf(maxId, it.attributeValue("id")?.toLongOrNull() ?: 0) }
             val cx = pxToEmu(op.width).toString(); val cy = pxToEmu(op.height).toString()
             val run = newElement(W, "r")
-            val inline = run.addElement(QName("drawing", W)).addElement(QName("inline", WP))
-            inline.addElement(QName("extent", WP)).addAttribute("cx", cx).addAttribute("cy", cy)
-            inline.addElement(QName("docPr", WP)).addAttribute("id", (maxId + 1).toString()).addAttribute("name", "Edit image ${maxId + 1}")
-            val pic = inline.addElement(QName("graphic", A)).addElement(QName("graphicData", A)).addAttribute("uri", PIC.uri).addElement(QName("pic", PIC))
-            val nv = pic.addElement(QName("nvPicPr", PIC))
-            nv.addElement(QName("cNvPr", PIC)).addAttribute("id", "0").addAttribute("name", op.image.name)
-            nv.addElement(QName("cNvPicPr", PIC))
-            val fill = pic.addElement(QName("blipFill", PIC))
-            fill.addElement(QName("blip", A)).addAttribute(QName("embed", R), rel)
-            fill.addElement(QName("stretch", A)).addElement(QName("fillRect", A))
-            val sp = pic.addElement(QName("spPr", PIC))
-            val xfrm = sp.addElement(QName("xfrm", A))
-            xfrm.addElement(QName("off", A)).addAttribute("x", "0").addAttribute("y", "0")
-            xfrm.addElement(QName("ext", A)).addAttribute("cx", cx).addAttribute("cy", cy)
-            sp.addElement(QName("prstGeom", A)).addAttribute("prst", "rect").addElement(QName("avLst", A))
+            val inline = run.addElement(QName("drawing", W))!!.addElement(QName("inline", WP))
+            inline!!.addElement(QName("extent", WP))!!.addAttribute("cx", cx)!!.addAttribute("cy", cy)
+            inline!!.addElement(QName("docPr", WP))!!.addAttribute("id", (maxId + 1).toString())!!.addAttribute("name", "Edit image ${maxId + 1}")
+            val pic = inline!!.addElement(QName("graphic", A))!!.addElement(QName("graphicData", A))!!.addAttribute("uri", PIC.uRI)!!.addElement(QName("pic", PIC))
+            val nv = pic!!.addElement(QName("nvPicPr", PIC))
+            nv!!.addElement(QName("cNvPr", PIC))!!.addAttribute("id", "0")!!.addAttribute("name", op.image.name)
+            nv!!.addElement(QName("cNvPicPr", PIC))
+            val fill = pic!!.addElement(QName("blipFill", PIC))
+            fill!!.addElement(QName("blip", A))!!.addAttribute(QName("embed", R), rel)
+            fill!!.addElement(QName("stretch", A))!!.addElement(QName("fillRect", A))
+            val sp = pic!!.addElement(QName("spPr", PIC))
+            val xfrm = sp!!.addElement(QName("xfrm", A))
+            xfrm!!.addElement(QName("off", A))!!.addAttribute("x", "0")!!.addAttribute("y", "0")
+            xfrm!!.addElement(QName("ext", A))!!.addAttribute("cx", cx)!!.addAttribute("cy", cy)
+            sp!!.addElement(QName("prstGeom", A))!!.addAttribute("prst", "rect")!!.addElement(QName("avLst", A))
             return run
         }
     }
     companion object {
-        internal fun walk(root: Element, visit: (Element) -> Unit) { visit(root); root.elements().filterIsInstance<Element>().forEach { walk(it, visit) } }
+        internal fun walk(root: Element, visit: (Element) -> Unit) { visit(root); root.elements()!!.filterIsInstance<Element>().forEach { walk(it, visit) } }
         private fun childText(child: Element): String = when (child.name) {
             "t" -> child.text ?: ""
             "tab", "ptab" -> " "
@@ -276,7 +276,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             "noBreakHyphen" -> "-"
             else -> ""
         }
-        private fun rawRunText(run: Element) = run.elements().filterIsInstance<Element>().joinToString("") { childText(it) }
+        private fun rawRunText(run: Element) = run.elements()!!.filterIsInstance<Element>().joinToString("") { childText(it) }
         internal fun runText(run: Element): String {
             var text = rawRunText(run)
             if (text.length > 1) text = text.replace('\u000c', '\u000b')
@@ -284,24 +284,24 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
         private fun addBefore(parent: Element, before: Element?, child: Element) {
             if (before == null) parent.add(child)
-            else { val content = parent.content(); content.add(content.indexOf(before), child) }
+            else { val content = parent.content() as MutableList<Any?>; content.add(content.indexOf(before), child) }
         }
         private fun textRun(text: String, style: Element?): Element = newElement(W, "r").apply {
             style?.let { add(it.createCopy()) }
             val buffer = StringBuilder()
-            fun flush() { if (buffer.isNotEmpty()) { addElement(QName("t", W)).addAttribute(QName("space", Namespace.XML_NAMESPACE), "preserve").text = buffer.toString(); buffer.setLength(0) } }
+            fun flush() { if (buffer.isNotEmpty()) { addElement(QName("t", W))!!.addAttribute(QName("space", Namespace.XML_NAMESPACE), "preserve")!!.text = buffer.toString(); buffer.setLength(0) } }
             text.forEach { c -> when (c) {
-                '\t', '\u000b', '\u000c' -> { flush(); addElement(QName(if (c == '\t') "tab" else "br", W)).also { if (c == '\u000c') it.addAttribute(QName("type", W), "page") } }
+                '\t', '\u000b', '\u000c' -> { flush(); addElement(QName(if (c == '\t') "tab" else "br", W)).also { if (c == '\u000c') it!!.addAttribute(QName("type", W), "page") } }
                 else -> buffer.append(c)
             } }; flush()
         }
         private fun sliceRun(run: Element, start: Int, end: Int): Element {
-            val copy = run.createCopy()
-            copy.elements().filterIsInstance<Element>().filter { it.name != "rPr" }.forEach { it.detach() }
+            val copy = run.createCopy()!!
+            copy.elements()!!.filterIsInstance<Element>().filter { it.name != "rPr" }.forEach { it.detach() }
             var pos = 0
-            run.elements().filterIsInstance<Element>().filter { it.name != "rPr" }.forEach { child ->
+            run.elements()!!.filterIsInstance<Element>().filter { it.name != "rPr" }.forEach { child ->
                 val text = childText(child); val a = maxOf(start, pos); val b = minOf(end, pos + text.length)
-                if (b > a) copy.add(child.createCopy().apply { if (name == "t") {
+                if (b > a) copy.add(child.createCopy()!!.apply { if (name == "t") {
                     this.text = text.substring(a - pos, b - pos); addAttribute(QName("space", Namespace.XML_NAMESPACE), "preserve")
                 } })
                 else if (text.isEmpty()) failUnknownChild(child)

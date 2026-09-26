@@ -91,12 +91,12 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         /**
          * @throws Exception
          */
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onEnd(elementPath: ElementPath?) {
             if (abortReader) {
                 throw AbortReaderError("abort Reader")
             }
-            val elem = elementPath.getCurrent()
-            val name = elem.getName()
+            val elem = elementPath?.current
+            val name = elem!!.name
             try {
                 if (name == "sldMasterIdLst") {
                     // master part
@@ -112,7 +112,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                 e.printStackTrace()
             }
 
-            elem.detach()
+            elem!!.detach()
         }
     }
 
@@ -131,28 +131,28 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         /**
          * @throws Exception
          */
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onEnd(elementPath: ElementPath?) {
             if (abortReader) {
                 throw AbortReaderError("abort Reader")
             }
 
-            val elem = elementPath.getCurrent()
+            val elem = elementPath?.current
             try {
-                if (("bg") == elem.getName()) {
+                if (("bg") == elem!!.name) {
                     // 背景
                     processBackground(slidePart, pgMaster!!, pgLayout!!, pgSlide!!, elem)
-                } else if ("sld" == elem.getName()) {
-                    if (elem.attribute("showMasterSp") != null) {
-                        val `val` = elem.attributeValue("showMasterSp")
+                } else if ("sld" == elem!!.name) {
+                    if (elem!!.attribute("showMasterSp") != null) {
+                        val `val` = elem!!.attributeValue("showMasterSp")
                         if (`val` != null && `val`.length > 0 && !pptXmlBoolean(`val`, true)) {
                             showMasterSp = false
                         }
                     }
-                } else if ("par" == elem.getName()) {
+                } else if ("par" == elem!!.name) {
                     processSlideShow(pgSlide!!, elem)
-                } else if ("transition" == elem.getName()) {
+                } else if ("transition" == elem!!.name) {
                     //slide transition
-                    pgSlide!!.setTransition(elem.elements().size > 0)
+                    pgSlide!!.setTransition(elem!!.elements()!!.size > 0)
                 } else {
                     ShapeManage.instance().processShape(
                         control!!,
@@ -174,7 +174,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                 e.printStackTrace()
             }
 
-            elem.detach()
+            elem!!.detach()
         }
     }
 
@@ -193,16 +193,16 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         /**
          * @throws Exception
          */
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onEnd(elementPath: ElementPath?) {
             if (abortReader) {
                 throw AbortReaderError("abort Reader")
             }
 
-            val elem = elementPath.getCurrent()
-            if (("sldId") == elem.getName()) {
+            val elem = elementPath?.current
+            if (("sldId") == elem!!.name) {
                 note = false
                 val slidePart = zipPackage!!.getPart(
-                    packagePart!!.getRelationship(elem.attribute(1).getValue()).getTargetURI()
+                    packagePart!!.getRelationship(elem!!.attribute(1)!!.value).getTargetURI()
                 )
                 if (slidePart != null) {
                     val saxreader = SAXReader()
@@ -231,7 +231,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                             `in`.close()
                         }
                     } catch (e: StopReaderError) {
-                        elem.detach()
+                        elem!!.detach()
                         throw StopReaderError("stop")
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -241,7 +241,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                 }
             }
 
-            elem.detach()
+            elem!!.detach()
         }
     }
 
@@ -261,13 +261,13 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         /**
          * @throws Exception
          */
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onEnd(elementPath: ElementPath?) {
             if (abortReader) {
                 throw AbortReaderError("abort Reader")
             }
 
-            val elem = elementPath.getCurrent()
-            searchContentForText(elem, key!!)
+            val elem = elementPath?.current
+            searchContentForText(elem!!, key!!)
 
             elem.detach()
 
@@ -335,7 +335,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
             saxreader.addHandler("/presentation/sldIdLst/sldId", preSaxHandler)
 
             val poi = saxreader.read(`in`)
-            val root = poi.getRootElement()
+            val root = poi!!.rootElement
             if (root != null) {
                 if (root.attribute("firstSlideNum") != null) {
                     val `val` = root.attributeValue("firstSlideNum")
@@ -476,7 +476,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                 index = 1
             }
             val masterPart = zipPackage!!.getPart(
-                packagePart!!.getRelationship(masterId.attribute(index).getValue()).getTargetURI()
+                packagePart!!.getRelationship(masterId.attribute(index)!!.value).getTargetURI()
             )
             nameMaster!!.put(
                 masterPart.getPartName().getName(),
@@ -493,7 +493,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         if (sldIds == null) {
             sldIds = ArrayList<String?>()
         }
-        sldIds!!.add(slideId.attribute(1).getValue())
+        sldIds!!.add(slideId.attribute(1)!!.value)
     }
 
     /**
@@ -687,8 +687,8 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         var grpSpID: Int
         for (i in 0..<count) {
             val shape = pgSlide.getShape(i)
-            grpSpID = getGroupShapeID(shape!!.getShapeID(), grpShape)
-            shape!!.setGroupShapeID(grpSpID)
+            grpSpID = getGroupShapeID(shape!!.shapeID, grpShape)
+            shape!!.groupShapeID = grpSpID
         }
     }
 
@@ -786,10 +786,8 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         var pgx = 0f
         var pgy = 0f
         if (slideSize != null) {
-            pgx = slideSize.attributeValue("cx")
-                .toFloat() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-            pgy = slideSize.attributeValue("cy")
-                .toFloat() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            pgx = slideSize.attributeValue("cx")!!.toFloat() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            pgy = slideSize.attributeValue("cy")!!.toFloat() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
         }
         pgModel!!.setPageSize(Dimension(pgx.toInt(), pgy.toInt()))
     }
@@ -810,7 +808,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
             val `in` = notesPart.getInputStream()
             val poiNote = saxreader.read(`in`)
 
-            val root = poiNote.getRootElement()
+            val root = poiNote!!.rootElement
             if (root != null) {
                 val notes = ReaderKit.instance().getNotes(root)
                 if (notes != null) {
@@ -829,15 +827,15 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         try {
             //"/cTn/childTnLst/par/cTn/childTnLst//par"   
             val elements: MutableList<Element> =
-                elem.element("cTn").element("childTnLst").elements("par") as MutableList<Element>
+                elem.element("cTn")!!.element("childTnLst")!!.elements("par") as MutableList<Element>
             if (elements.size >= 1) {
                 //after previous
                 for (item in elements) {
                     val elementList: MutableList<Element> =
-                        item.element("cTn").element("childTnLst").elements("par") as MutableList<Element>
+                        item.element("cTn")!!.element("childTnLst")!!.elements("par") as MutableList<Element>
                     for (e in elementList) {
                         //cTn, with previous( when elementList.size() > 1)
-                        elem = e.element("cTn")
+                        elem = e.element("cTn")!!
                         processAnimation(pgSlide, elem)
                     }
                 }
@@ -849,13 +847,13 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
     private fun processAnimation(pgSlide: PGSlide, elem: Element) {
         var elem = elem
         val sType = elem.attributeValue("presetClass")
-        elem = elem.element("childTnLst")
+        elem = elem.element("childTnLst")!!
         if (elem.element("set") != null) {
-            elem = elem.element("set").element("cBhvr").element("tgtEl").element("spTgt")
+            elem = elem.element("set")!!.element("cBhvr")!!.element("tgtEl")!!.element("spTgt")!!
         } else {
             //emph
-            elem = (elem.elements().get(0) as com.wxiwei.office.fc.dom4j.Element?)!!
-            elem = elem.element("cBhvr").element("tgtEl").element("spTgt")
+            elem = (elem.elements()!!.get(0) as Element?)!!
+            elem = elem.element("cBhvr")!!.element("tgtEl")!!.element("spTgt")!!
         }
 
         val shapeID = elem.attributeValue("spid")
@@ -871,20 +869,20 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
             return
         }
 
-        if (elem.element("txEl") != null && elem.element("txEl").element("pRg") != null) {
-            elem = elem.element("txEl").element("pRg")
+        if (elem.element("txEl") != null && elem.element("txEl")!!.element("pRg") != null) {
+            elem = elem.element("txEl")!!.element("pRg")!!
             //paragraph range
             val s = elem.attributeValue("st")
             val e = elem.attributeValue("end")
 
             pgSlide.addShapeAnimation(
-                ShapeAnimation(shapeID.toInt(), nType, s.toInt(), e.toInt())
+                ShapeAnimation(shapeID!!.toInt(), nType, s!!.toInt(), e!!.toInt())
             )
         } else if (elem.element("bg") != null) {
             //background
             pgSlide.addShapeAnimation(
                 ShapeAnimation(
-                    shapeID.toInt(),
+                    shapeID!!.toInt(),
                     nType,
                     ShapeAnimation.Para_BG,
                     ShapeAnimation.Para_BG
@@ -892,7 +890,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
             )
         } else {
             pgSlide.addShapeAnimation(
-                ShapeAnimation(shapeID.toInt(), nType)
+                ShapeAnimation(shapeID!!.toInt(), nType)
             )
         }
     }
@@ -942,7 +940,7 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
      * @return
      */
     fun searchContentForText(elem: Element, key: String): Boolean {
-        val name = elem.getName()
+        val name = elem.name
         if (name == "sp") {
             val sb = StringBuilder()
             if (note && PGPlaceholderUtil.BODY != ReaderKit.instance().getPlaceholderType(elem)) {
@@ -971,9 +969,9 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
             }
         } else if (name == "grpSp") {
             val it = elem.elementIterator()
-            while (it.hasNext()) {
+            while (it!!.hasNext()) {
                 if (searchContentForText(
-                        (it.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
+                        (it!!.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
                         key
                     )
                 ) {

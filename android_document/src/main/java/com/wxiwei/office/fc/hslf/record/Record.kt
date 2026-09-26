@@ -111,7 +111,7 @@ abstract class Record {
             }
 
             if (toReturn is PositionDependentRecord) {
-                (toReturn as PositionDependentRecord).setLastOnDiskOffset(start)
+                (toReturn as PositionDependentRecord).lastOnDiskOffset = start
             }
             return toReturn
         }
@@ -142,7 +142,7 @@ abstract class Record {
             }
 
             if (toReturn is PositionDependentRecord) {
-                (toReturn as PositionDependentRecord).setLastOnDiskOffset(myLastOnDiskOffset)
+                (toReturn as PositionDependentRecord).lastOnDiskOffset = myLastOnDiskOffset
             }
             return toReturn
         }

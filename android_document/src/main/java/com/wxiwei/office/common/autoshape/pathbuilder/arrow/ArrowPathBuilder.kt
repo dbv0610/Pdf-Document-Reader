@@ -42,7 +42,7 @@ open class ArrowPathBuilder {
          * @return
          */
         fun getArrowPath(shape: AutoShape, rect: Rect): Any? {
-            if (shape.isAutoShape07()) {
+            if (shape.isAutoShape07) {
                 return LaterArrowPathBuilder.getArrowPath(shape, rect)
             } else {
                 return EarlyArrowPathBuilder.getArrowPath(shape, rect)

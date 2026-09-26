@@ -445,7 +445,7 @@ open class Workbook(before07: Boolean) {
         var index = 0
         while (iter.hasNext()) {
             index = iter.next()
-            if (pictures!![index]!!.getTempFilePath()!! == pic.getTempFilePath()) {
+            if (pictures!![index]!!.tempFilePath!! == pic.tempFilePath) {
                 //has exist
                 return index
             }

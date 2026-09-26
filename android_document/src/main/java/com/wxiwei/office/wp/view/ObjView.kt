@@ -68,9 +68,9 @@ class ObjView : LeafView {
         val picShape = picShape!!
 
         isInlineFlag = docAttr!!.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()
-                || (picShape.getWrap().toInt() != WPAutoShape.WRAP_TOP.toInt() && picShape.getWrap().toInt() != WPAutoShape.WRAP_BOTTOM.toInt())
+                || (picShape.wrap.toInt() != com.wxiwei.office.common.shape.WPAbstractShape.WRAP_TOP.toInt() && picShape.wrap.toInt() != com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM.toInt())
 
-        if (picShape.isWatermarkShape()) {
+        if (picShape.isWatermarkShape) {
             isInlineFlag = false
         } else if (WPViewKit.instance().getArea(start + 1) == WPModelConstant.HEADER
             || WPViewKit.instance().getArea(start + 1) == WPModelConstant.FOOTER
@@ -78,11 +78,11 @@ class ObjView : LeafView {
             isInlineFlag = true
         }
         var width = 0
-        val r = picShape.getBounds()
+        val r = requireNotNull(picShape.bounds)
         if (isInlineFlag) {
             width = r.width
             setSize(width, r.height)
-        } else if (!picShape.isWatermarkShape()) {
+        } else if (!picShape.isWatermarkShape) {
             PositionLayoutKit.instance().processShapePosition(this, picShape, pageAttr!!)
         }
         setEndOffset(start + 1)
@@ -102,10 +102,10 @@ class ObjView : LeafView {
      */
     override fun getTextWidth(): Float {
         val picShape = picShape!!
-        return if (picShape.isWatermarkShape()) {
-            picShape.getBounds().width.toFloat()
+        return if (picShape.isWatermarkShape) {
+            picShape.bounds!!.width.toFloat()
         } else {
-            (if (isInlineFlag) (picShape as WPPictureShape).getPictureShape().getBounds().getWidth().toInt() else 0).toFloat()
+            (if (isInlineFlag) (picShape as WPPictureShape).getPictureShape()!!.bounds!!.getWidth().toInt() else 0).toFloat()
         }
     }
 
@@ -121,11 +121,11 @@ class ObjView : LeafView {
 
             rect.set(left, top, right, bottom)
 
-            if (!picShape.isWatermarkShape()) {
-                BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), (picShape as WPPictureShape).getPictureShape(), rect, zoom)
+            if (!picShape.isWatermarkShape) {
+                BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), (picShape as WPPictureShape).getPictureShape()!!, rect, zoom)
 
-                PictureKit.instance().drawPicture(canvas, control, getPageNumber(), picShape.getPictureShape().getPicture(getControl()),
-                    left.toFloat(), top.toFloat(), zoom, getWidth() * zoom, getHeight() * zoom, picShape.getPictureShape().getPictureEffectInfor())
+                PictureKit.instance().drawPicture(canvas, control, getPageNumber(), picShape.getPictureShape()!!.getPicture(getControl()),
+                    left.toFloat(), top.toFloat(), zoom, getWidth() * zoom, getHeight() * zoom, picShape.getPictureShape()!!.pictureEffectInfor)
             }
         }
     }
@@ -133,7 +133,7 @@ class ObjView : LeafView {
     @Synchronized
     fun drawForWrap(canvas: Canvas, originX: Int, originY: Int, zoom: Float) {
         val picShape = picShape!!
-        val r = picShape.getBounds()
+        val r = requireNotNull(picShape.bounds)
         val control = getControl()
 
         var left = Math.round((x * zoom) + originX)
@@ -143,7 +143,7 @@ class ObjView : LeafView {
 
         rect.set(left, top, right, bottom)
 
-        if (picShape.isWatermarkShape()) {
+        if (picShape.isWatermarkShape) {
             val pageAttr = pageAttr!!
             val mainBodyWidth = pageAttr.pageWidth - pageAttr.leftMargin - pageAttr.rightMargin
             val mainBodyHeight = pageAttr.pageHeight - pageAttr.topMargin - pageAttr.bottomMargin
@@ -154,24 +154,24 @@ class ObjView : LeafView {
             left = Math.round(centerX - r.width * zoom / 2f)
             top = Math.round(centerY - r.height * zoom / 2f)
             PictureKit.instance().drawPicture(canvas, control, getPageNumber(),
-                PictureShape.getPicture(control, (picShape as WatermarkShape).getPictureIndex()),
+                PictureShape.getPicture(control, (picShape as WatermarkShape).pictureIndex),
                 left.toFloat(),
                 top.toFloat(),
                 zoom,
                 Math.round(r.getWidth() * zoom).toFloat(),
                 Math.round(r.getHeight() * zoom).toFloat(),
-                (picShape as WatermarkShape).getEffectInfor())
+                (picShape as WatermarkShape).effectInfor)
         } else {
-            BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), (picShape as WPPictureShape).getPictureShape(), rect, zoom)
+            BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), (picShape as WPPictureShape).getPictureShape()!!, rect, zoom)
 
             PictureKit.instance().drawPicture(canvas, control, getPageNumber(),
-                (picShape as WPPictureShape).getPictureShape().getPicture(getControl()),
+                (picShape as WPPictureShape).getPictureShape()!!.getPicture(getControl()),
                 left.toFloat(),
                 top.toFloat(),
                 zoom,
                 Math.round(r.getWidth() * zoom).toFloat(),
                 Math.round(r.getHeight() * zoom).toFloat(),
-                (picShape as WPPictureShape).getPictureShape().getPictureEffectInfor())
+                (picShape as WPPictureShape).getPictureShape()!!.pictureEffectInfor)
         }
     }
 
@@ -189,15 +189,15 @@ class ObjView : LeafView {
     }
 
     fun isBehindDoc(): Boolean {
-        return picShape!!.getWrap().toInt() == WPAutoShape.WRAP_BOTTOM.toInt()
+        return picShape!!.wrap.toInt() == com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM.toInt()
     }
 
     /**
      * 得到基线
      */
     override fun getBaseline(): Int {
-        if (!picShape!!.isWatermarkShape()) {
-            return if (isInlineFlag) (picShape as WPPictureShape).getPictureShape().getBounds().getHeight().toInt() else 0
+        if (!picShape!!.isWatermarkShape) {
+            return if (isInlineFlag) (picShape as WPPictureShape).getPictureShape()!!.bounds!!.getHeight().toInt() else 0
         }
 
         return 0

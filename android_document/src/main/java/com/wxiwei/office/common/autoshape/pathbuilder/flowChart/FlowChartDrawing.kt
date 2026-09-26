@@ -58,7 +58,7 @@ class FlowChartDrawing {
         rect: Rect,
         zoom: Float
     ) {
-        val type = shape.getShapeType()
+        val type = shape.shapeType
         when (type) {
             ShapeTypes.FlowChartProcess -> drawFlowChartProcess(
                 canvas,

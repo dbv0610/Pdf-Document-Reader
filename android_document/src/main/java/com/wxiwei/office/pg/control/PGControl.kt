@@ -93,7 +93,7 @@ class PGControl(mainControl: IControl, pgModel: PGModel, filePath: String?) : Ab
                 clip.text = view.getSelectedText()
             }
             EventConstant.APP_HYPERLINK -> {
-                val address = (obj as Hyperlink).getAddress()
+                val address = (obj as Hyperlink).address
                 if (address != null) try {
                     getMainFrame()!!.getActivity()!!.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(address)))
             } catch (e: Exception) {

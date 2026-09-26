@@ -78,8 +78,8 @@ class Highlight(word: IWord?) : IHighlight {
             if (word!!.getEditType() == MainConstant.APPLICATION_TYPE_PPT
                 && word!!.getTextBox() != null
             ) {
-                leafRect.x += word!!.getTextBox()!!.getBounds().x
-                leafRect.y += word!!.getTextBox()!!.getBounds().y
+                leafRect.x += word!!.getTextBox()!!.bounds!!.x
+                leafRect.y += word!!.getTextBox()!!.bounds!!.y
             }
             w -= (sRect.x - leafRect.x)
         }

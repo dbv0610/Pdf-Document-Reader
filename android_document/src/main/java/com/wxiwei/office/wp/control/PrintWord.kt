@@ -353,7 +353,7 @@ class PrintWord : FrameLayout, IPageListViewListener {
     override fun isChangePage(): Boolean = control!!.getMainFrame().isChangePage()
 
     override fun setDrawPictrue(isDrawPictrue: Boolean) {
-        PictureKit.instance().setDrawPictrue(isDrawPictrue)
+        PictureKit.instance().isDrawPictrue = isDrawPictrue
     }
 
     fun getCurrentPageView(): PageView? {

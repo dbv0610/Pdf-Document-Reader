@@ -172,14 +172,14 @@ class TableStyleReader {
         //cell style
         val cellStyleElement = tableStyleElement.element("tcStyle")
         //borders
-        val ele = cellStyleElement.element("tcBdr")
+        val ele = cellStyleElement!!.element("tcBdr")
         if (ele != null) {
             tableCellStyle.setTableCellBorders(getTableCellBorders(ele))
         }
 
 
         //fill
-        tableCellStyle.setTableCellBgFill(cellStyleElement.element("fill"))
+        tableCellStyle.setTableCellBgFill(cellStyleElement!!.element("fill"))
 
 
         return tableCellStyle
@@ -232,9 +232,9 @@ class TableStyleReader {
         /**
          * @throws Exception
          */
-        override fun onEnd(elementPath: ElementPath) {
-            val elem = elementPath.getCurrent()
-            val name = elem.getName()
+        override fun onEnd(elementPath: ElementPath?) {
+            val elem = elementPath?.current
+            val name = elem!!.name
             try {
                 if (name == "tblStyle") {
                     processTableStyle(elem)
@@ -243,7 +243,7 @@ class TableStyleReader {
                 e.printStackTrace()
             }
 
-            elem.detach()
+            elem!!.detach()
         }
     }
 

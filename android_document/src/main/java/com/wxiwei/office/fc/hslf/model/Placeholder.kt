@@ -1,0 +1,89 @@
+/* ====================================================================
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+==================================================================== */
+package com.wxiwei.office.fc.hslf.model
+
+import com.wxiwei.office.fc.ddf.EscherContainerRecord
+
+
+/**
+ * Represents a Placeholder in PowerPoint.
+ * 
+ * @author Yegor Kozlov
+ */
+class Placeholder : TextBox {
+    protected constructor(
+        escherRecord: EscherContainerRecord?,
+        parent: Shape?
+    ) : super(escherRecord, parent)
+
+    constructor(parent: Shape?) : super(parent)
+
+    constructor() : super()
+
+    /**
+     * Create a new Placeholder and initialize internal structures
+     * 
+     * @return the created `EscherContainerRecord` which holds shape data
+     */
+    override fun createSpContainer(isChild: Boolean): EscherContainerRecord? {
+        spContainer = super.createSpContainer(isChild)
+
+        /*EscherSpRecord spRecord = spContainer!!.getChildById(EscherSpRecord.RECORD_ID);
+        spRecord.setFlags(EscherSpRecord.FLAG_HAVEANCHOR | EscherSpRecord.FLAG_HAVEMASTER);
+
+        EscherClientDataRecord cldata = new EscherClientDataRecord();
+        cldata.setOptions((short)15);
+
+        EscherOptRecord opt = (EscherOptRecord)getEscherChild(spContainer,
+            EscherOptRecord.RECORD_ID);
+
+        //Placeholders can't be grouped
+        setEscherProperty(opt, EscherProperties.PROTECTION__LOCKAGAINSTGROUPING, 262144);
+
+        //OEPlaceholderAtom tells powerpoint that this shape is a placeholder
+        //
+        OEPlaceholderAtom oep = new OEPlaceholderAtom();
+        */
+        /**
+         * Extarct from MSDN:
+         * 
+         * There is a special case when the placeholder does not have a position in the layout.
+         * This occurs when the user has moved the placeholder from its original position.
+         * In this case the placeholder ID is -1.
+         */
+        /*
+        oep.setPlacementId(-1);
+
+        oep.setPlaceholderId(OEPlaceholderAtom.Body);
+
+        //convert hslf into ddf record
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try
+        {
+            oep.writeOut(out);
+        }
+        catch(Exception e)
+        {
+            throw new HSLFException(e);
+        }
+        cldata.setRemainingData(out.toByteArray());
+
+        //append placeholder container before EscherTextboxRecord
+        spContainer!!.addChildBefore(cldata, EscherTextboxRecord.RECORD_ID);*/
+        return spContainer
+    }
+}

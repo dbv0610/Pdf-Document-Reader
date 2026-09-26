@@ -168,48 +168,48 @@ class PageView(elem: IElement) : AbstractView() {
             val bs = getControl()!!.getSysKit().getBordersManage().getBorders(pageBorderIndex)
             val old = paint.color
             if (bs != null) {
-                val left = bs.getLeftBorder()
-                val top = bs.getTopBorder()
-                val right = bs.getRightBorder()
-                val bottom = bs.getBottomBorder()
+                val left = bs.leftBorder
+                val top = bs.topBorder
+                val right = bs.rightBorder
+                val bottom = bs.bottomBorder
                 var sX: Int
                 var sY: Int
                 var eX: Int
                 var eY: Int
                 // left
                 if (left != null) {
-                    paint.color = left.getColor()
-                    sX = (zoom * left.getSpace()).toInt() + dx
+                    paint.color = left.color
+                    sX = (zoom * left.space).toInt() + dx
                     eX = sX
-                    sY = (if (top == null) 0 else (top.getSpace() * zoom).toInt()) + dy
-                    eY = (if (bottom == null) h.toFloat() else (h - bottom.getSpace() * zoom)).toInt() + dy
+                    sY = (if (top == null) 0 else (top.space * zoom).toInt()) + dy
+                    eY = (if (bottom == null) h.toFloat() else (h - bottom.space * zoom)).toInt() + dy
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
                 // top
                 if (top != null) {
-                    paint.color = top.getColor()
-                    sY = (zoom * top.getSpace()).toInt() + dy
+                    paint.color = top.color
+                    sY = (zoom * top.space).toInt() + dy
                     eY = sY
-                    sX = (if (left == null) 0 else (left.getSpace() * zoom).toInt()) + dx - 1
-                    eX = (if (right == null) w.toFloat() else (w - right.getSpace() * zoom)).toInt() + dx + 1
+                    sX = (if (left == null) 0 else (left.space * zoom).toInt()) + dx - 1
+                    eX = (if (right == null) w.toFloat() else (w - right.space * zoom)).toInt() + dx + 1
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
                 // right
                 if (right != null) {
-                    paint.color = right.getColor()
-                    sX = (w - right.getSpace() * zoom).toInt() + dx
+                    paint.color = right.color
+                    sX = (w - right.space * zoom).toInt() + dx
                     eX = sX
-                    sY = (if (top == null) 0f else (top.getSpace() * zoom)).toInt() + dy
-                    eY = (if (bottom == null) h.toFloat() else (h - bottom.getSpace() * zoom)).toInt() + dy
+                    sY = (if (top == null) 0f else (top.space * zoom)).toInt() + dy
+                    eY = (if (bottom == null) h.toFloat() else (h - bottom.space * zoom)).toInt() + dy
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
                 // bottom
                 if (bottom != null) {
-                    paint.color = bottom.getColor()
-                    sY = (h - zoom * top!!.getSpace()).toInt() + dy
+                    paint.color = bottom.color
+                    sY = (h - zoom * top!!.space).toInt() + dy
                     eY = sY
-                    sX = (if (left == null) 0 else (left.getSpace() * zoom).toInt()) + dx - 1
-                    eX = (if (right == null) w.toFloat() else (w - right.getSpace() * zoom)).toInt() + dx + 1
+                    sX = (if (left == null) 0 else (left.space * zoom).toInt()) + dx - 1
+                    eX = (if (right == null) w.toFloat() else (w - right.space * zoom)).toInt() + dx + 1
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
             }

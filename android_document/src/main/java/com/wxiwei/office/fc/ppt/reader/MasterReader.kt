@@ -62,7 +62,7 @@ class MasterReader {
         val saxreader = SAXReader()
         val `in` = masterPart.getInputStream()
         val poiMaster = saxreader.read(`in`)
-        val master = poiMaster.getRootElement()
+        val master = poiMaster!!.rootElement
         var pgMaster: PGMaster? = null
         if (master != null) {
             pgMaster = PGMaster()
@@ -85,7 +85,7 @@ class MasterReader {
                     val pgSlide = PGSlide()
                     pgSlide.setSlideType(PGSlide.Slide_Master.toInt())
                     val it = spTree.elementIterator()
-                    while (it.hasNext()) {
+                    while (it!!.hasNext()) {
                         ShapeManage.instance().processShape(
                             control!!,
                             zipPackage,
@@ -96,7 +96,7 @@ class MasterReader {
                             null,
                             pgSlide,
                             PGSlide.Slide_Master,
-                            (it.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
+                            (it!!.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
                             null,
                             1.0f,
                             1.0f
@@ -134,12 +134,14 @@ class MasterReader {
                 val clrMap = master.element("clrMap")
                 if (clrMap != null) {
                     for (i in 0..<clrMap.attributeCount()) {
-                        val name = clrMap.attribute(i).getName()
+                        val name = clrMap.attribute(i)!!.name ?: continue
                         val value = clrMap.attributeValue(name)
-                        if (name != value) {
-                            pgMaster.addColor(value, themeColor.get(value)!!)
+                        if (value != null) {
+                            if (name != value) {
+                                pgMaster.addColor(value, themeColor.get(value)!!)
+                            }
+                            pgMaster.addColor(name, themeColor.get(value)!!)
                         }
-                        pgMaster.addColor(name, themeColor.get(value)!!)
                     }
                 }
             }
@@ -172,8 +174,8 @@ class MasterReader {
     @Throws(Exception::class)
     private fun processTextStyle(control: IControl?, pgMaster: PGMaster, spTree: Element) {
         val it = spTree.elementIterator()
-        while (it.hasNext()) {
-            val sp = it.next() as Element
+        while (it!!.hasNext()) {
+            val sp = it!!.next() as Element
             var type = ReaderKit.instance().getPlaceholderType(sp)
             type = PGPlaceholderUtil.instance().checkTypeName(type)
             val idx = ReaderKit.instance().getPlaceholderIdx(sp)

@@ -125,7 +125,7 @@ public class ChartReaderImplJava
         		{
         			//auto fill
         			fill = new BackgroundAndFill();
-                	fill.setFillType(BackgroundAndFill.FILL_SOLID);
+                	fill.fillType = BackgroundAndFill.FILL_SOLID;
                 	fill.setForegroundColor(0xFFFFFFFF);
         		}
         	}
@@ -138,25 +138,25 @@ public class ChartReaderImplJava
         	{
         		line = new Line();
             	BackgroundAndFill lineFill = new BackgroundAndFill();
-            	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+            	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
             	lineFill.setForegroundColor(0xFF747474);
     	       	line.setBackgroundAndFill(lineFill);
-    	       	line.setLineWidth(1);
+    	       	line.lineWidth = 1;
         	}
         }
         else
         {
         	//auto fill and line
         	fill = new BackgroundAndFill();
-        	fill.setFillType(BackgroundAndFill.FILL_SOLID);
+        	fill.fillType = BackgroundAndFill.FILL_SOLID;
         	fill.setForegroundColor(0xFFFFFFFF);
         	
         	line = new Line();
         	BackgroundAndFill lineFill = new BackgroundAndFill();
-        	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+        	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
         	lineFill.setForegroundColor(0xFF747474);
 	       	line.setBackgroundAndFill(lineFill);
-	       	line.setLineWidth(1);
+	       	line.lineWidth = 1;
         }
         
         //default text size
@@ -415,7 +415,7 @@ public class ChartReaderImplJava
             
             //Text Paragraphs            
             @ SuppressWarnings("unchecked")
-            Iterator<Element> iter = rich.elements("p").iterator();
+            Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) rich.elements("p").iterator();
             TextParagraph textParagraph;
             List<TextParagraph> paragraphs = new ArrayList<TextParagraph>();
             
@@ -600,8 +600,8 @@ public class ChartReaderImplJava
         List<TextParagraph> yLabel = null;
         {
             //scatter chart
-        	List<Element> valAxs = plotArea.elements("valAx");
-        	List<Element> catAxs = plotArea.elements("catAx");
+        	List<Element> valAxs = (List<Element>) (List<?>) plotArea.elements("valAx");
+        	List<Element> catAxs = (List<Element>) (List<?>) plotArea.elements("catAx");
         	
         	List<Element> eles = new ArrayList<Element>();
         	for(int i = 0; i < valAxs.size(); i++)
@@ -817,7 +817,7 @@ public class ChartReaderImplJava
         if(cache != null)
         {
         	@ SuppressWarnings("unchecked")
-            Iterator<Element> iter = cache.elements("pt").iterator();
+            Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) cache.elements("pt").iterator();
             Element pt;
             index = 1;
             while(iter.hasNext())
@@ -866,7 +866,7 @@ public class ChartReaderImplJava
                 Element numPoint;
                 double value;
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iter = number.elements("pt").iterator();
+                Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) number.elements("pt").iterator();
                 while(iter.hasNext())
                 {
                     numPoint = iter.next();
@@ -911,9 +911,9 @@ public class ChartReaderImplJava
                 double valueX;
                 double valueY;
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iterX = xNumber.elements("pt").iterator();
+                Iterator<Element> iterX = (Iterator<Element>) (Iterator<?>) xNumber.elements("pt").iterator();
                 @SuppressWarnings("unchecked")
-				Iterator<Element> iterY = yNumber.elements("pt").iterator();
+				Iterator<Element> iterY = (Iterator<Element>) (Iterator<?>) yNumber.elements("pt").iterator();
                 while(iterX.hasNext() && iterY.hasNext())
                 {
                 	xNumPoint = iterX.next();
@@ -931,7 +931,7 @@ public class ChartReaderImplJava
         		Element yNumPoint;
                 double valueY;
                 @SuppressWarnings("unchecked")
-				Iterator<Element> iterY = yNumber.elements("pt").iterator();
+				Iterator<Element> iterY = (Iterator<Element>) (Iterator<?>) yNumber.elements("pt").iterator();
                 while(iterY.hasNext())
                 {
                 	yNumPoint = iterY.next();
@@ -970,7 +970,7 @@ public class ChartReaderImplJava
     {
         XYMultipleSeriesDataset dataset = new XYMultipleSeriesDataset();
         @ SuppressWarnings("unchecked")
-        List<Element> seriesList= chart.elements("ser");  
+        List<Element> seriesList= (List<Element>) (List<?>) chart.elements("ser");  
         
         
         final int seriesCount = seriesList.size();        
@@ -1109,7 +1109,7 @@ public class ChartReaderImplJava
             if(series.element("cat") != null)
             {
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iter = series.element("cat").element("strRef").element("strCache").elements("pt").iterator();
+                Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) series.element("cat").element("strRef").element("strCache").elements("pt").iterator();
                 Element pt;
                 while(iter.hasNext())
                 {
@@ -1123,7 +1123,7 @@ public class ChartReaderImplJava
             if(series.element("val") != null)
             {
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iter = series.element("val").element("numRef").element("numCache").elements("pt").iterator();
+                Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) series.element("val").element("numRef").element("numCache").elements("pt").iterator();
                 Element pt;
                 while(iter.hasNext())
                 {

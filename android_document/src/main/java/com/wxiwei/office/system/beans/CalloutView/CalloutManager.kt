@@ -18,7 +18,7 @@ class CalloutManager(private var control: IControl?) {
     fun drawPath(canvas: Canvas, index: Int, zoom: Float) {
         canvas.scale(zoom, zoom)
         val pathList = mPathMap!![index]
-        val paint = PaintKit.instance().paint
+        val paint = PaintKit.instance().getPaint()
         if (pathList != null) {
             for (pathInfo in pathList) {
                 paint.strokeWidth = pathInfo.width.toFloat()

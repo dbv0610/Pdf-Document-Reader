@@ -1096,7 +1096,7 @@ class Application(activity: Activity, parent: ViewGroup?) {
         if (mainControl == null) {
             return null
         }
-        return mainControl!!.sysKit.pictureManage.picTempPath
+        return mainControl!!.sysKit.pictureManage.getPicTempPath()
     }
 
     /**

@@ -43,11 +43,11 @@ class SmartArtReader private constructor() {
         var input = dataPart.inputStream
         val dataDoc = saxReader.read(input)
         input.close()
-        var root = dataDoc.rootElement
-        val fill: BackgroundAndFill? = AutoShapeDataKit.processBackground(control, zipPackage, dataPart, root.element("bg"), schemeColor)
-        val line: Line? = LineKit.createLine(control, zipPackage, dataPart, root.element("whole")?.element("ln"), schemeColor)
+        var root = dataDoc!!.rootElement
+        val fill: BackgroundAndFill? = AutoShapeDataKit.processBackground(control, zipPackage, dataPart, root!!.element("bg"), schemeColor)
+        val line: Line? = LineKit.createLine(control, zipPackage, dataPart, root!!.element("whole")?.element("ln"), schemeColor)
         var drawingPart: PackagePart? = null
-        var element: Element? = root.element("extLst")?.element("ext")?.element("dataModelExt")
+        var element: Element? = root!!.element("extLst")?.element("ext")?.element("dataModelExt")
         val relId = element?.attributeValue("relId")
         if (relId != null) {
             drawingPart = zipPackage.getPart(slidePart.getRelationship(relId).targetURI)
@@ -57,13 +57,13 @@ class SmartArtReader private constructor() {
         val smartArtDoc = saxReader.read(input)
         input.close()
         val smartArt = SmartArt()
-        smartArt.setBackgroundAndFill(fill)
-        smartArt.setLine(line)
-        root = smartArtDoc.rootElement
-        val spTree = root.element("spTree")
-        val iterator = spTree.elementIterator("sp")
-        while (iterator.hasNext()) {
-            element = iterator.next() as Element
+        smartArt.backgroundAndFill = fill
+        smartArt.line = line
+        root = smartArtDoc!!.rootElement
+        val spTree = root!!.element("spTree")
+        val iterator = spTree!!.elementIterator("sp")
+        while (iterator!!.hasNext()) {
+            element = iterator!!.next() as Element
             val sp = element!!
             val spPr = sp.element("spPr")
             val rect = spPr?.let { ReaderKit.instance().getShapeAnchor(it.element("xfrm"), 1f, 1f) }
@@ -83,7 +83,7 @@ class SmartArtReader private constructor() {
         val textBox = TextBox()
         val section = SectionElement()
         section.setStartOffset(0)
-        textBox.setElement(section)
+        textBox.element = section
         val attr = section.getAttribute()
         AttrManage.instance().setPageWidth(attr, Math.round(rect!!.width * MainConstant.PIXEL_TO_TWIPS))
         AttrManage.instance().setPageHeight(attr, Math.round(rect.height * MainConstant.PIXEL_TO_TWIPS))
@@ -93,10 +93,10 @@ class SmartArtReader private constructor() {
         AttrManage.instance().setPageMarginBottom(attr, 0)
         val bodyPr = txXfrm?.element("bodyPr")
         SectionAttr.instance().setSectionAttribute(bodyPr, attr, null, null, false)
-        textBox.setWrapLine(bodyPr?.attributeValue("wrap")?.equals("square", true) != false)
+        textBox.isWrapLine = bodyPr?.attributeValue("wrap")?.equals("square", true) != false
         offset = processParagraph(control, section, txBody)
         section.setEndOffset(offset.toLong())
-        textBox.setBounds(rect!!)
+        textBox.bounds = rect!!
         val text = textBox.element?.getText(null)
         if (!text.isNullOrEmpty() && text != "\n") ReaderKit.instance().processRotation(textBox, sp.element("txXfrm"))
         return textBox
@@ -104,7 +104,7 @@ class SmartArtReader private constructor() {
 
     private fun processParagraph(control: IControl, section: SectionElement, txBody: Element): Int {
         offset = 0
-        for (rawP in txBody.elements("p")) {
+        for (rawP in (txBody.elements("p") ?: emptyList())) {
             val p = rawP as Element
             val paragraph = ParagraphElement()
             paragraph.setStartOffset(offset.toLong())
@@ -121,7 +121,7 @@ class SmartArtReader private constructor() {
                            attrLayout: IAttributeSet?): ParagraphElement {
         val runs = p.elements("r")
         var leaf: LeafElement? = null
-        if (runs.isEmpty()) {
+        if (runs!!.isEmpty()) {
             leaf = LeafElement("\n")
             val runProperties = p.element("pPr")?.element("rPr")
             if (runProperties != null) RunAttr.instance().setRunAttribute(sheet!!, runProperties, leaf.getAttribute(), attrLayout)
@@ -139,7 +139,7 @@ class SmartArtReader private constructor() {
                 leaf = LeafElement(text)
                 RunAttr.instance().setRunAttribute(sheet!!, run.element("rPr"), leaf.getAttribute(), attrLayout)
                 leaf.setStartOffset(offset.toLong())
-                offset += text.length
+                offset += text!!.length
                 leaf.setEndOffset(offset.toLong())
                 paragraph.appendLeaf(leaf)
             } else if (run.name.equals("br", true)) {

@@ -112,8 +112,7 @@ class BulletNumberManage {
                 return getText(lvl, convertedNumberFormat(temp.attributeValue("type")), startAt)
             } else if ((pPr.element("buBlip").also { temp = it }) != null) {
                 //bullet is picture, replace it by dot(用实心圆点代替)
-                if (temp!!.element("blip") != null && temp.element("blip")
-                        .attributeValue("embed") != null
+                if (temp!!.element("blip") != null && temp.element("blip")!!.attributeValue("embed") != null
                 ) {
                     var c = 'l'
                     c = converterNumberChar(c.code)

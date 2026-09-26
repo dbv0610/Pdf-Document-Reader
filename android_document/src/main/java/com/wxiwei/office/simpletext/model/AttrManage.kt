@@ -1403,9 +1403,9 @@ class AttrManage {
                 val listLevel: ListLevel? = listData.getLevel(paraAttr.listLevel.toInt())
                 if (listLevel != null) {
                     // 文本缩进
-                    paraAttr.listTextIndent = (listLevel.getTextIndent() * MainConstant.TWIPS_TO_PIXEL).toInt()
+                    paraAttr.listTextIndent = (listLevel.textIndent * MainConstant.TWIPS_TO_PIXEL).toInt()
                     // bn 对齐位置
-                    paraAttr.listAlignIndent = paraAttr.listTextIndent + (listLevel.getSpecialIndent() * MainConstant.TWIPS_TO_PIXEL).toInt()
+                    paraAttr.listAlignIndent = paraAttr.listTextIndent + (listLevel.specialIndent * MainConstant.TWIPS_TO_PIXEL).toInt()
                     // 段落没有左缩进
                     if (paraAttr.leftIndent - paraAttr.listTextIndent == 0
                         || paraAttr.leftIndent == 0
@@ -1494,15 +1494,49 @@ class AttrManage {
      * @param attr
      */
     fun fillTableAttr(tableAttr: TableAttr?, attr: IAttributeSet?) {
-        // 由于POI无法没有解析出表格上、下、左、右边距，故采用默认值
-        tableAttr!!.topMargin = 0 //(int)(AttrManage.instance().getTableTopMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
-        tableAttr.leftMargin = 7 //(int)(AttrManage.instance().getTableLeftMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
-        tableAttr.rightMargin = 7 //(int)(AttrManage.instance().getTableRightMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
-        tableAttr.bottomMargin = 0 //(int)(AttrManage.instance().getTableBottomMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
+        // Cell margins in twips when the reader set them (DOCX), else the old defaults (DOC, PPT)
+        tableAttr!!.topMargin = marginPixels(attr, AttrIDConstant.TABLE_TOP_MARGIN_ID, 0)
+        tableAttr.leftMargin = marginPixels(attr, AttrIDConstant.TABLE_LEFT_MARGIN_ID, 7)
+        tableAttr.rightMargin = marginPixels(attr, AttrIDConstant.TABLE_RIGHT_MARGIN_ID, 7)
+        tableAttr.bottomMargin = marginPixels(attr, AttrIDConstant.TABLE_BOTTOM_MARGIN_ID, 0)
         tableAttr.cellWidth = (getTableCellWidth(attr) * MainConstant.TWIPS_TO_PIXEL).toInt()
         tableAttr.cellVerticalAlign = getTableCellVerAlign(attr).toByte()
         tableAttr.cellBackground = getTableCellTableBackground(attr)
     }
+
+    /** Side 0..3 = top, bottom, left, right; see [AttrIDConstant.PARA_BORDER_TOP_ID]. */
+    fun setParaBorder(attr: IAttributeSet?, side: Int, eighths: Int, color: Int, space: Int) {
+        val base = AttrIDConstant.PARA_BORDER_TOP_ID + side * 3
+        attr!!.setAttribute(base.toShort(), eighths)
+        attr.setAttribute((base + 1).toShort(), color)
+        attr.setAttribute((base + 2).toShort(), space)
+    }
+
+    fun setParaShading(attr: IAttributeSet?, color: Int) {
+        attr!!.setAttribute(AttrIDConstant.PARA_SHADING_ID, color)
+    }
+
+    /** Shading and borders of a paragraph, or null when it has none (the common case). */
+    fun getParaDecoration(attr: IAttributeSet?): ParaDecoration? {
+        val shading = attr!!.getAttribute(AttrIDConstant.PARA_SHADING_ID)
+        val sides = Array(4) { side ->
+            val base = AttrIDConstant.PARA_BORDER_TOP_ID + side * 3
+            val eighths = attr.getAttribute(base.toShort())
+            if (eighths == Int.MIN_VALUE || eighths <= 0) null
+            else ParaDecoration.Side(eighths, attr.getAttribute((base + 1).toShort()), maxOf(0, attr.getAttribute((base + 2).toShort())))
+        }
+        if (shading == Int.MIN_VALUE && sides.all { it == null }) return null
+        return ParaDecoration(if (shading == Int.MIN_VALUE) null else shading, sides[0], sides[1], sides[2], sides[3])
+    }
+
+    private fun marginPixels(attr: IAttributeSet?, id: Short, default: Int): Int {
+        val twips = attr!!.getAttribute(id)
+        return if (twips == Int.MIN_VALUE) default else Math.round(twips * MainConstant.TWIPS_TO_PIXEL)
+    }
+
+    /** True when the reader resolved every border of the cell (DOCX); false keeps the legacy grid. */
+    fun hasTableCellBorders(attr: IAttributeSet?): Boolean =
+        attr!!.getAttribute(AttrIDConstant.TABLE_TOP_BORDER_ID) != Int.MIN_VALUE
 
     /**
      *

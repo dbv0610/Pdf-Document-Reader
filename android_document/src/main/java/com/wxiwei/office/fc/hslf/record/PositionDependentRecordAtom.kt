@@ -5,15 +5,13 @@ import java.util.Hashtable
 abstract class PositionDependentRecordAtom : RecordAtom(), PositionDependentRecord {
     protected var myLastOnDiskOffset: Int = 0
 
-    override fun getLastOnDiskOffset(): Int {
-        return myLastOnDiskOffset
-    }
+    override var lastOnDiskOffset: Int
+        get() = myLastOnDiskOffset
+        set(offset) {
+            myLastOnDiskOffset = offset
+        }
 
-    override fun setLastOnDiskOffset(offset: Int) {
-        myLastOnDiskOffset = offset
-    }
-
-    override abstract fun updateOtherRecordReferences(oldToNewReferencesLookup: Hashtable<Int, Int>?)
+    override abstract fun updateOtherRecordReferences(oldToNewReferencesLookup: Hashtable<Int?, Int?>?)
 
     override fun dispose() {
     }

@@ -59,9 +59,9 @@ class PGFind(private var presentation: Presentation?) : IFind {
         var i = if (shapeIndex >= 0) shapeIndex else slide.getShapeCountForFind() - 1
         while (i >= 0) {
             val shape = slide.getShapeForFind(i)
-            if (shape != null && shape.getType() == AbstractShape.SHAPE_TEXTBOX) {
+            if (shape != null && shape.type == AbstractShape.SHAPE_TEXTBOX) {
                 var offset = if (shapeIndex == i && p.getCurrentIndex() == slideIndex) startOffset else -1
-                val elem: SectionElement? = (shape as TextBox).getElement()
+                val elem: SectionElement? = (shape as TextBox).element
                 val q = query ?: return false
                 if (elem == null || (offset >= 0 && offset < q.length) || elem.getEndOffset() - elem.getStartOffset() == 0L) { i--; continue }
                 offset = if (offset >= 0) elem.getText(p.getRenderersDoc())!!.lastIndexOf(q, maxOf(startOffset - q.length, 0)) else elem.getText(p.getRenderersDoc())!!.lastIndexOf(q)
@@ -78,8 +78,8 @@ class PGFind(private var presentation: Presentation?) : IFind {
         val q = query ?: return false
         for (i in maxOf(0, shapeIndex) until slide.getShapeCountForFind()) {
             val shape = slide.getShapeForFind(i)
-            if (shape != null && shape.getType() == AbstractShape.SHAPE_TEXTBOX) {
-                val elem: SectionElement? = (shape as TextBox).getElement()
+            if (shape != null && shape.type == AbstractShape.SHAPE_TEXTBOX) {
+                val elem: SectionElement? = (shape as TextBox).element
                 if (elem == null || elem.getEndOffset() - elem.getStartOffset() == 0L) continue
                 val offset = if (shapeIndex == i && p.getCurrentIndex() == slideIndex) elem.getText(p.getRenderersDoc())!!.indexOf(q, startOffset + q.length) else elem.getText(p.getRenderersDoc())!!.indexOf(q)
                 if (offset >= 0) { startOffset = offset; shapeIndex = i; addHighlight(slideIndex, shape as TextBox); return true }
@@ -128,8 +128,8 @@ class PGFind(private var presentation: Presentation?) : IFind {
             for (sh in 0 until slide.getShapeCountForFind()) {
                 if (!isActive()) return all
                 val shape = slide.getShapeForFind(sh)
-                if (shape != null && shape.getType() == AbstractShape.SHAPE_TEXTBOX) {
-                    val elem = (shape as TextBox).getElement() ?: continue
+                if (shape != null && shape.type == AbstractShape.SHAPE_TEXTBOX) {
+                    val elem = (shape as TextBox).element ?: continue
                     // Folding keeps the length, so positions stay valid in the original text
                     val text = elem.getText(p.getRenderersDoc()) ?: continue
                     val folded = SearchText.fold(text)

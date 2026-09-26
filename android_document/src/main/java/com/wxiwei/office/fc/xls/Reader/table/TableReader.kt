@@ -23,9 +23,9 @@ class TableReader private constructor() {
             val tableDocument = saxreader.read(input)
             input.close()
             val table = SSTable()
-            val root = tableDocument.rootElement
-            val reference = root.attributeValue("ref")
-            val range = reference.split(":")
+            val root = tableDocument!!.rootElement
+            val reference = root!!.attributeValue("ref")
+            val range = reference!!.split(":")
             if (range.size == 2) {
                 table.setTableReference(
                     CellRangeAddress(
@@ -36,22 +36,22 @@ class TableReader private constructor() {
                     )
                 )
             }
-            root.attributeValue("totalsRowDxfId")?.let { table.setTotalsRowDxfId(it.toInt()) }
-            root.attributeValue("totalsRowBorderDxfId")?.let { table.setTotalsRowBorderDxfId(it.toInt()) }
-            root.attributeValue("headerRowDxfId")?.let { table.setHeaderRowDxfId(it.toInt()) }
-            root.attributeValue("headerRowBorderDxfId")?.let { table.setHeaderRowBorderDxfId(it.toInt()) }
-            root.attributeValue("tableBorderDxfId")?.let { table.setTableBorderDxfId(it.toInt()) }
+            root!!.attributeValue("totalsRowDxfId")?.let { table.setTotalsRowDxfId(it.toInt()) }
+            root!!.attributeValue("totalsRowBorderDxfId")?.let { table.setTotalsRowBorderDxfId(it.toInt()) }
+            root!!.attributeValue("headerRowDxfId")?.let { table.setHeaderRowDxfId(it.toInt()) }
+            root!!.attributeValue("headerRowBorderDxfId")?.let { table.setHeaderRowBorderDxfId(it.toInt()) }
+            root!!.attributeValue("tableBorderDxfId")?.let { table.setTableBorderDxfId(it.toInt()) }
 
-            if (root.attributeValue("headerRowCount").equals("0", ignoreCase = true)) {
+            if (root!!.attributeValue("headerRowCount").equals("0", ignoreCase = true)) {
                 table.setHeaderRowShown(false)
             }
-            val totalsRowCount = root.attributeValue("totalsRowCount") ?: "0"
-            val totalsRowShown = root.attributeValue("totalsRowShown")
+            val totalsRowCount = root!!.attributeValue("totalsRowCount") ?: "0"
+            val totalsRowShown = root!!.attributeValue("totalsRowShown")
             if (!totalsRowShown.equals("0", ignoreCase = true) && totalsRowCount.equals("1", ignoreCase = true)) {
                 table.setTotalRowShown(true)
             }
 
-            val styleInfo = root.element("tableStyleInfo")
+            val styleInfo = root!!.element("tableStyleInfo")
             if (styleInfo != null) {
                 table.setName(styleInfo.attributeValue("name"))
                 table.setShowFirstColumn(!styleInfo.attributeValue("showFirstColumn").equals("0", ignoreCase = true))

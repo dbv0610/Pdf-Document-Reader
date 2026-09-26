@@ -80,9 +80,9 @@ open class ARow
         }
 
         val book = sheet!!.getWorkbook()!!
-        return (Workbook.isValidateStyle(book.getCellStyle(cval.getXFIndex().toInt()))
+        return (Workbook.isValidateStyle(book.getCellStyle(cval.xFIndex.toInt()))
                 || Workbook.isValidateStyle(book.getCellStyle(getRowStyle()))
-                || Workbook.isValidateStyle(book.getCellStyle(sheet!!.getColumnStyle(cval.getColumn().toInt()))))
+                || Workbook.isValidateStyle(book.getCellStyle(sheet!!.getColumnStyle(cval.column.toInt()))))
     }
 
     /**
@@ -96,14 +96,14 @@ open class ARow
         // NOTE: the original Java looked the cell up with a boxed Short key
         // (cells.get(cellRec.getColumn())) in a Hashtable<Integer, Cell>, which never matches;
         // the lookup is kept identical here to preserve behavior.
-        val cell = (cells as Map<Any?, Cell?>)[cellRec.getColumn()]
+        val cell = (cells as Map<Any?, Cell?>)[cellRec.column]
         if (cell != null) {
             return cell as ACell
         }
 
         if (isValidateCell(cellRec)) {
             val acell = ACell(sheet, cellRec)
-            val colIx = cellRec.getColumn().toInt()
+            val colIx = cellRec.column.toInt()
             if (colIx < firstCol) {
                 firstCol = colIx
             } else if (colIx > lastCol) {

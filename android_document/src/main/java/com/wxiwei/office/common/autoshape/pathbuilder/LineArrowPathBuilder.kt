@@ -172,7 +172,7 @@ object LineArrowPathBuilder {
                 endY,
                 width * zoom,
                 length * zoom,
-                arrow.getType()
+                arrow.type
             )
         arrowPathAndTail.setArrowTailCenter(startX, startY)
         return arrowPathAndTail
@@ -244,7 +244,7 @@ object LineArrowPathBuilder {
                 endY,
                 width,
                 length,
-                arrow.getType()
+                arrow.type
             )
         arrowPathAndTail.setArrowTailCenter(end.x, end.y)
         return arrowPathAndTail
@@ -322,7 +322,7 @@ object LineArrowPathBuilder {
                 endY,
                 width.toFloat(),
                 length.toFloat(),
-                arrow.getType()
+                arrow.type
             )
         arrowPathAndTail.setArrowTailCenter(end.x, end.y)
         return arrowPathAndTail
@@ -663,9 +663,9 @@ object LineArrowPathBuilder {
     @JvmStatic
     fun getReferencedPosition(head: Element, tail: PointF, arrowType: Byte): PointF {
         var x =
-            head.attributeValue("x").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            head.attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
         var y =
-            head.attributeValue("y").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            head.attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
         when (arrowType) {
             Arrow.Arrow_Triangle -> {

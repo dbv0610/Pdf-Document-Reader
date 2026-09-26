@@ -86,8 +86,7 @@ class TableReader {
             val gridCols: MutableList<Element> = tblGrid.elements("gridCol") as MutableList<Element>
             val colWidths = IntArray(gridCols.size)
             for (gridCol in gridCols) {
-                val colWidth = (gridCol.attributeValue("w")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH).toInt()
+                val colWidth = (gridCol.attributeValue("w")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH).toInt()
                 if (colWidth > 0) {
                     colWidths[t++] = colWidth
                 } else {
@@ -101,8 +100,7 @@ class TableReader {
             val trs: MutableList<Element> = tbl.elements("tr") as MutableList<Element>
             val rowHeights = IntArray(trs.size)
             for (tr in trs) {
-                val rowHeight = (tr.attributeValue("h")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH).toInt()
+                val rowHeight = (tr.attributeValue("h")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH).toInt()
                 if (rowHeight > 0) {
                     rowHeights[t++] = rowHeight
                 } else {
@@ -113,20 +111,20 @@ class TableReader {
             table = TableShape(rowHeights.size, colWidths.size)
 
             val tblPr = tbl.element("tblPr")
-            val tableStyleId = tblPr.element("tableStyleId")
+            val tableStyleId = tblPr!!.element("tableStyleId")
 
             var tableStyle: TableStyle? = null
             if (tableStyleId != null) {
                 tableStyle = pgModel.getTableStyle(tableStyleId.getText())
 
-                table.setFirstRow("1".equals(tblPr.attributeValue("firstRow"), ignoreCase = true))
-                table.setLastRow("1".equals(tblPr.attributeValue("lastRow"), ignoreCase = true))
+                table.isFirstRow = "1".equals(tblPr!!.attributeValue("firstRow"), ignoreCase = true)
+                table.isLastRow = "1".equals(tblPr!!.attributeValue("lastRow"), ignoreCase = true)
 
-                table.setFirstCol("1".equals(tblPr.attributeValue("firstCol"), ignoreCase = true))
-                table.setLastCol("1".equals(tblPr.attributeValue("lastCol"), ignoreCase = true))
+                table.isFirstCol = "1".equals(tblPr!!.attributeValue("firstCol"), ignoreCase = true)
+                table.isLastCol = "1".equals(tblPr!!.attributeValue("lastCol"), ignoreCase = true)
 
-                table.setBandRow("1".equals(tblPr.attributeValue("bandRow"), ignoreCase = true))
-                table.setBandCol("1".equals(tblPr.attributeValue("bandCol"), ignoreCase = true))
+                table.isBandRow = "1".equals(tblPr!!.attributeValue("bandRow"), ignoreCase = true)
+                table.isBandCol = "1".equals(tblPr!!.attributeValue("bandCol"), ignoreCase = true)
             }
 
             processTable(
@@ -155,8 +153,7 @@ class TableReader {
                 //line width
                 if (ln.attributeValue("w") != null) {
                     lineWidth = Math.round(
-                        ln.attributeValue("w")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                        ln.attributeValue("w")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
                     )
                 }
 
@@ -173,13 +170,13 @@ class TableReader {
                     .processBackground(control!!, zipPackage!!, packagePart!!, master, ln)
             } else {
                 lineFill = BackgroundAndFill()
-                lineFill.setForegroundColor(styleColor)
+                lineFill.foregroundColor = styleColor
             }
 
             val line = Line()
-            line.setBackgroundAndFill(lineFill)
-            line.setLineWidth(lineWidth)
-            line.setDash(dash)
+            line.backgroundAndFill = lineFill
+            line.lineWidth = lineWidth
+            line.isDash = dash
 
             return line
         } catch (e: Exception) {
@@ -216,20 +213,20 @@ class TableReader {
                     var w = colWidths[j]
                     var h = rowHeights[i]
                     if (tc.attribute("rowSpan") != null) {
-                        val rowSpan = tc.attributeValue("rowSpan").toInt()
+                        val rowSpan = tc.attributeValue("rowSpan")!!.toInt()
                         for (t in 1..<rowSpan) {
                             h += rowHeights[i + t]
                         }
                     }
                     if (tc.attribute("gridSpan") != null) {
-                        val gridSpan = tc.attributeValue("gridSpan").toInt()
+                        val gridSpan = tc.attributeValue("gridSpan")!!.toInt()
                         for (t in 1..<gridSpan) {
                             w += colWidths[j + t]
                         }
                     }
                     anchor.width = w.toFloat()
                     anchor.height = h.toFloat()
-                    cell.setBounds(anchor)
+                    cell.bounds = anchor
 
                     var cellStyle = getTableCellBorders(tableStyle, i, j, table)
 
@@ -238,7 +235,7 @@ class TableReader {
                     val tcPr = tc.element("tcPr")
                     if (tcPr != null) {
                         var temp = tcPr.element("lnL")
-                        cell.setLeftLine(
+                        cell.leftLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, temp,
                                 getTableCellLeftBorderColor(
@@ -249,10 +246,10 @@ class TableReader {
                                     cellStyle!!
                                 )
                             )
-                        )
+
 
                         temp = tcPr.element("lnR")
-                        cell.setRightLine(
+                        cell.rightLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, temp,
                                 getTableCellRightBorderColor(
@@ -263,10 +260,10 @@ class TableReader {
                                     cellStyle
                                 )
                             )
-                        )
+
 
                         temp = tcPr.element("lnT")
-                        cell.setTopLine(
+                        cell.topLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, temp,
                                 getTableCellTopBorderColor(
@@ -277,10 +274,10 @@ class TableReader {
                                     cellStyle
                                 )
                             )
-                        )
+
 
                         temp = tcPr.element("lnB")
-                        cell.setBottomLine(
+                        cell.bottomLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, temp,
                                 getTableCellBottomBorderColor(
@@ -291,9 +288,9 @@ class TableReader {
                                     cellStyle
                                 )
                             )
-                        )
+
                     } else if (cellStyle != null) {
-                        cell.setLeftLine(
+                        cell.leftLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, null,
                                 getTableCellLeftBorderColor(
@@ -304,9 +301,9 @@ class TableReader {
                                     cellStyle
                                 )
                             )
-                        )
 
-                        cell.setRightLine(
+
+                        cell.rightLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, null,
                                 getTableCellRightBorderColor(
@@ -317,9 +314,9 @@ class TableReader {
                                     cellStyle
                                 )
                             )
-                        )
 
-                        cell.setTopLine(
+
+                        cell.topLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, null,
                                 getTableCellTopBorderColor(
@@ -330,9 +327,9 @@ class TableReader {
                                     cellStyle
                                 )
                             )
-                        )
 
-                        cell.setBottomLine(
+
+                        cell.bottomLine =
                             processLine(
                                 control, zipPackage, packagePart, master, tableStyle, null,
                                 getTableCellBottomBorderColor(
@@ -343,7 +340,7 @@ class TableReader {
                                     cellStyle
                                 )
                             )
-                        )
+
                     } else {
                         val line = processLine(
                             control,
@@ -354,10 +351,10 @@ class TableReader {
                             null,
                             -0x1000000
                         )
-                        cell.setLeftLine(line)
-                        cell.setRightLine(line)
-                        cell.setTopLine(line)
-                        cell.setBottomLine(line)
+                        cell.leftLine = line
+                        cell.rightLine = line
+                        cell.topLine = line
+                        cell.bottomLine = line
                     }
 
                     var fill: BackgroundAndFill? = BackgroundReader.Companion.instance()
@@ -372,7 +369,7 @@ class TableReader {
                             cellStyle
                         )
                     }
-                    cell.setBackgroundAndFill(fill)
+                    cell.backgroundAndFill = fill
 
 
                     // text
@@ -383,12 +380,12 @@ class TableReader {
                         anchor.width.toInt(),
                         anchor.height.toInt()
                     )
-                    textBox.setBounds(r)
+                    textBox.bounds = r
                     if (tableStyle != null && (cellStyle == null || cellStyle.getFontAttributeSet() == null)) {
                         cellStyle = tableStyle.getWholeTable()
                     }
                     processCellSection(control, master, textBox, r, tc, cellStyle)
-                    cell.setText(textBox)
+                    cell.text = textBox
 
                     table.addCell(i * colWidths.size + j, cell)
                 }
@@ -523,13 +520,13 @@ class TableReader {
             return null
         }
 
-        if (table.isFirstRow() && table.isFirstCol()) {
+        if (table.isFirstRow && table.isFirstCol) {
             cellStyle = getTableCellBorders_FirstRowFirstColumn(tableStyle, row, col, table)
-        } else if (table.isFirstRow() && !table.isFirstCol()) {
+        } else if (table.isFirstRow && !table.isFirstCol) {
             cellStyle = getTableCellBorders_FirstRow(tableStyle, row, col, table)
-        } else if (!table.isFirstRow() && table.isFirstCol()) {
+        } else if (!table.isFirstRow && table.isFirstCol) {
             cellStyle = getTableCellBorders_FirstColumn(tableStyle, row, col, table)
-        } else if (!table.isFirstRow() && !table.isFirstCol()) {
+        } else if (!table.isFirstRow && !table.isFirstCol) {
             cellStyle = getTableCellBorders_NotFirstRowFirstColumn(tableStyle, row, col, table)
         }
 
@@ -553,19 +550,19 @@ class TableReader {
         var cellStyle: TableCellStyle? = null
         if (row == 0) {
             cellStyle = tableStyle.getFirstRow()
-        } else if (table.isLastRow() && row == table.getRowCount() - 1) {
+        } else if (table.isLastRow && row == table.rowCount - 1) {
             cellStyle = tableStyle.getLastRow()
         } else if (col == 0) {
             cellStyle = tableStyle.getFirstCol()
-        } else if (table.isLastCol() && col == table.getColumnCount() - 1) {
+        } else if (table.isLastCol && col == table.columnCount - 1) {
             cellStyle = tableStyle.getLastCol()
-        } else if (table.isBandRow()) {
+        } else if (table.isBandRow) {
             if (row % 2 != 0) {
                 cellStyle = tableStyle.getBand1H()
-            } else if (table.isBandCol() && col % 2 != 0) {
+            } else if (table.isBandCol && col % 2 != 0) {
                 cellStyle = tableStyle.getBand1V()
             }
-        } else if (table.isBandCol() && col % 2 != 0) {
+        } else if (table.isBandCol && col % 2 != 0) {
             cellStyle = tableStyle.getBand1V()
         }
 
@@ -593,17 +590,17 @@ class TableReader {
         var cellStyle: TableCellStyle? = null
         if (row == 0) {
             cellStyle = tableStyle.getFirstRow()
-        } else if (table.isLastRow() && row == table.getRowCount() - 1) {
+        } else if (table.isLastRow && row == table.rowCount - 1) {
             cellStyle = tableStyle.getLastRow()
-        } else if (table.isLastCol() && col == table.getColumnCount() - 1) {
+        } else if (table.isLastCol && col == table.columnCount - 1) {
             cellStyle = tableStyle.getLastCol()
-        } else if (table.isBandRow()) {
+        } else if (table.isBandRow) {
             if (row % 2 != 0) {
                 cellStyle = tableStyle.getBand1H()
-            } else if (table.isBandCol() && col % 2 == 0) {
+            } else if (table.isBandCol && col % 2 == 0) {
                 cellStyle = tableStyle.getBand1V()
             }
-        } else if (table.isBandCol() && col % 2 == 0) {
+        } else if (table.isBandCol && col % 2 == 0) {
             cellStyle = tableStyle.getBand1V()
         }
 
@@ -629,19 +626,19 @@ class TableReader {
         table: TableShape
     ): TableCellStyle? {
         var cellStyle: TableCellStyle? = null
-        if (table.isLastRow() && row == table.getRowCount() - 1) {
+        if (table.isLastRow && row == table.rowCount - 1) {
             cellStyle = tableStyle.getLastRow()
         } else if (col == 0) {
             cellStyle = tableStyle.getFirstCol()
-        } else if (table.isLastCol() && col == table.getColumnCount() - 1) {
+        } else if (table.isLastCol && col == table.columnCount - 1) {
             cellStyle = tableStyle.getLastCol()
-        } else if (table.isBandRow()) {
+        } else if (table.isBandRow) {
             if (row % 2 == 0) {
                 cellStyle = tableStyle.getBand1H()
-            } else if (table.isBandCol() && col % 2 != 0) {
+            } else if (table.isBandCol && col % 2 != 0) {
                 cellStyle = tableStyle.getBand1V()
             }
-        } else if (table.isBandCol() && col % 2 != 0) {
+        } else if (table.isBandCol && col % 2 != 0) {
             cellStyle = tableStyle.getBand1V()
         }
 
@@ -667,17 +664,17 @@ class TableReader {
         table: TableShape
     ): TableCellStyle? {
         var cellStyle: TableCellStyle? = null
-        if (table.isLastRow() && row == table.getRowCount() - 1) {
+        if (table.isLastRow && row == table.rowCount - 1) {
             cellStyle = tableStyle.getLastRow()
-        } else if (table.isLastCol() && col == table.getColumnCount() - 1) {
+        } else if (table.isLastCol && col == table.columnCount - 1) {
             cellStyle = tableStyle.getLastCol()
-        } else if (table.isBandRow()) {
+        } else if (table.isBandRow) {
             if (row % 2 == 0) {
                 cellStyle = tableStyle.getBand1H()
-            } else if (table.isBandCol() && col % 2 == 0) {
+            } else if (table.isBandCol && col % 2 == 0) {
                 cellStyle = tableStyle.getBand1V()
             }
-        } else if (table.isBandCol() && col % 2 == 0) {
+        } else if (table.isBandCol && col % 2 == 0) {
             cellStyle = tableStyle.getBand1V()
         }
 
@@ -706,7 +703,7 @@ class TableReader {
         val secElem = SectionElement()
         // 开始Offset
         secElem.setStartOffset(0)
-        tb.setElement(secElem)
+        tb.element = secElem
         // 属性
         val attr = secElem.getAttribute()
         // 宽度
@@ -733,23 +730,19 @@ class TableReader {
             if (tcPr != null) {
                 //left margin
                 if (tcPr.attributeValue("marL") != null) {
-                    leftMargin = (tcPr.attributeValue("marL")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
+                    leftMargin = (tcPr.attributeValue("marL")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
                 }
                 //top margin
                 if (tcPr.attributeValue("marT") != null) {
-                    topMargin = (tcPr.attributeValue("marT")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
+                    topMargin = (tcPr.attributeValue("marT")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
                 }
                 //right margin
                 if (tcPr.attributeValue("marR") != null) {
-                    rightMargin = (tcPr.attributeValue("marR")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
+                    rightMargin = (tcPr.attributeValue("marR")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
                 }
                 //bottom margin
                 if (tcPr.attributeValue("marB") != null) {
-                    bottomMargin = (tcPr.attributeValue("marB")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
+                    bottomMargin = (tcPr.attributeValue("marB")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH * MainConstant.PIXEL_TO_TWIPS).toInt()
                 }
 
 
@@ -795,7 +788,7 @@ class TableReader {
             if (wrap != null) {
                 // 文本框内自动换行
                 val value = wrap.attributeValue("wrap")
-                tb.setWrapLine(value == null || "square".equals(value, ignoreCase = true))
+                tb.isWrapLine = value == null || "square".equals(value, ignoreCase = true)
             }
 
             val offset = processParagraph(control, master, secElem, temp, cellStyle)

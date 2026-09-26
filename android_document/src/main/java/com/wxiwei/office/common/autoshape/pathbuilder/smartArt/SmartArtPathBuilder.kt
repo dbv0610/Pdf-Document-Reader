@@ -59,7 +59,7 @@ object SmartArtPathBuilder {
     @JvmStatic
     fun getStarPath(shape: AutoShape, rect: Rect): Path? {
         path.reset()
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.Funnel -> return getFunnelPath(shape, rect)
             ShapeTypes.Gear6 -> return getGear6Path(shape, rect)
 
@@ -199,9 +199,9 @@ object SmartArtPathBuilder {
     }
 
     private fun getLeftCircularArrowPath(shape: AutoShape, rect: Rect): Path {
-        shape.setFlipVertical(true)
+        shape.flipVertical = true
 
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0

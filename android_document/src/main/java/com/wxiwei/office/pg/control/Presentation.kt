@@ -308,7 +308,7 @@ open class Presentation(activity: Activity, pgModel: PGModel?, control: IControl
      */
     fun createPicture() {
         val otp = control!!.getOfficeToPicture()
-        if (otp != null && otp.getModeType() == IOfficeToPicture.VIEW_CHANGE_END) {
+        if (otp != null && otp.modeType == IOfficeToPicture.VIEW_CHANGE_END) {
             try {
                 toPicture(otp)
             } catch (e: Exception) {
@@ -324,8 +324,8 @@ open class Presentation(activity: Activity, pgModel: PGModel?, control: IControl
             val item = pgPrintMode.getListView()!!.getCurrentPageView() as PGPageListItem
             item.addRepaintImageView(null)
         } else if (slideView!!.animationStoped()) {
-            val b = PictureKit.instance().isDrawPictrue()
-            PictureKit.instance().setDrawPictrue(true)
+            val b = PictureKit.instance().isDrawPictrue
+            PictureKit.instance().isDrawPictrue = true
             //
             val paintZoom = if (slideshow) fitZoom else zoom
             val d = getPageSize()!!
@@ -342,7 +342,7 @@ open class Presentation(activity: Activity, pgModel: PGModel?, control: IControl
             slideView!!.drawSlideForToPicture(picCanvas, paintZoom, originBitmapW, originbitmapH)
             control!!.getSysKit().getCalloutManager().drawPath(picCanvas, getCurrentIndex(), paintZoom)
             otp.callBack(bitmap)
-            PictureKit.instance().setDrawPictrue(b)
+            PictureKit.instance().isDrawPictrue = b
         }
     }
 
@@ -891,7 +891,7 @@ open class Presentation(activity: Activity, pgModel: PGModel?, control: IControl
         synchronized(this) {
             if (slideshow &&
                 (slideIndex_SlideShow >= 1            //has previous slide
-                    || !slideView!!.gotopreviousSlide())  //has previous action
+                    || !slideView!!.previousSlide())  //has previous action
             ) {
                 return true
             }
@@ -933,7 +933,7 @@ open class Presentation(activity: Activity, pgModel: PGModel?, control: IControl
                 }
                 when (type) {
                     ISlideShow.SlideShow_PreviousStep -> if (hasPreviousAction_Slideshow()) {
-                        if (slideView!!.gotopreviousSlide()) {
+                        if (slideView!!.previousSlide()) {
                             val slide = pgModel!!.getSlide(--slideIndex_SlideShow)
                             if (slide != null) {
                                 slideView!!.initSlideShow(slide, true)

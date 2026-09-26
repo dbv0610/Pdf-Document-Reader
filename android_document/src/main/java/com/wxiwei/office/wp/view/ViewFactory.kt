@@ -43,11 +43,11 @@ object ViewFactory {
                 if (AttrManage.instance().hasAttribute(elem!!.getAttribute(), AttrIDConstant.FONT_SHAPE_ID)) {
                     val shape = control.getSysKit().getWPShapeManage().getShape(AttrManage.instance().getShapeID(elem.getAttribute()))
                     if (shape != null) {
-                        if (shape.getType().toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()
-                            || shape.getType().toInt() == AbstractShape.SHAPE_CHART.toInt()
+                        if (shape.type.toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()
+                            || shape.type.toInt() == AbstractShape.SHAPE_CHART.toInt()
                         ) {
                             view = ShapeView(paraElem!!, elem, shape as AutoShape)
-                        } else if (shape.getType().toInt() == AbstractShape.SHAPE_PICTURE.toInt()) {
+                        } else if (shape.type.toInt() == AbstractShape.SHAPE_PICTURE.toInt()) {
                             view = ObjView(paraElem!!, elem, shape as WPAutoShape)
                         }
                     } else {

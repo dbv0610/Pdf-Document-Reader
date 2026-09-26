@@ -59,7 +59,7 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         val found = ArrayList<IShape>()
         fun visit(shapes: Array<IShape>) {
             for (shape in shapes) {
-                if (shape.getShapeID() == id) found.add(shape)
+                if (shape.shapeID == id) found.add(shape)
                 if (shape is GroupShape) visit(shape.getShapes())
             }
         }
@@ -106,17 +106,17 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     }
 
     private fun setText(box: TextBox, text: String, paraAttr: IAttributeSet?, leafAttr: IAttributeSet?, sectionAttr: IAttributeSet?) {
-        box.getRootView()?.dispose()
-        box.setRootView(null) // SlideDrawKit lays out a new root on the next draw
-        box.setElement(buildSection(box.getBounds(), text, paraAttr, leafAttr, sectionAttr))
+        box.rootView?.dispose()
+        box.rootView = null // SlideDrawKit lays out a new root on the next draw
+        box.element = buildSection(requireNotNull(box.bounds), text, paraAttr, leafAttr, sectionAttr)
     }
 
     override fun addTextBox(slideIndex: Int, id: Int, rectEmu: Rect, text: String, sizePt: Float, rgbHex: String, bold: Boolean): Boolean {
         val slide = slide(slideIndex) ?: return false
         val box = TextBox()
-        box.setBounds(rectangle(rectEmu))
-        box.setShapeID(id)
-        box.setWrapLine(true)
+        box.bounds = rectangle(rectEmu)
+        box.shapeID = id
+        box.isWrapLine = true
         val leafAttr = com.wxiwei.office.simpletext.model.AttributeSetImpl()
         AttrManage.instance().setFontSize(leafAttr, Math.round(sizePt))
         AttrManage.instance().setFontColor(leafAttr, Color.parseColor("#" + rgbHex.removePrefix("#")))
@@ -130,12 +130,12 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     override fun addImage(slideIndex: Int, id: Int, rectEmu: Rect, imageFile: File): Boolean {
         val slide = slide(slideIndex) ?: return false
         val picture = Picture()
-        picture.setData(imageFile.readBytes())
+        picture.data = imageFile.readBytes()
         picture.setPictureType(imageFile.extension.lowercase().let { if (it == "jpg") "jpeg" else it })
         val shape = PictureShape()
-        shape.setPictureIndex(control.getSysKit().getPictureManage().addPicture(picture))
-        shape.setBounds(rectangle(rectEmu))
-        shape.setShapeID(id)
+        shape.pictureIndex = control.getSysKit().getPictureManage().addPicture(picture)
+        shape.bounds = rectangle(rectEmu)
+        shape.shapeID = id
         slide.appendShapes(shape)
         repaint()
         return true
@@ -144,7 +144,7 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     override fun shapeText(slideIndex: Int, id: Int): String? {
         val slide = slide(slideIndex) ?: return null
         val box = find(slide, id).filterIsInstance<TextBox>().firstOrNull() ?: return null
-        return box.getElement()?.getText(null)?.removeSuffix("\n")
+        return box.element?.getText(null)?.removeSuffix("\n")
     }
 
     override fun setShapeText(slideIndex: Int, id: Int, text: String): Boolean {
@@ -155,14 +155,14 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
             // A shape without a text body in the model: add one over its bounds
             val owner = shapes.firstOrNull() ?: return false
             val created = TextBox()
-            created.setBounds(owner.getBounds())
-            created.setShapeID(id)
-            created.setWrapLine(true)
+            created.bounds = owner.bounds
+            created.shapeID = id
+            created.isWrapLine = true
             setText(created, text, null, null, null)
             slide.appendShapes(created)
         } else {
             // Keep the look of the first run and paragraph, which already hold the inherited styles
-            val section = box.getElement()
+            val section = box.element
             val para = section?.getElement(0) as? ParagraphElement
             val leaf = para?.getLeaf(0)
             setText(box, text, para?.getAttribute()?.clone(), leaf?.getAttribute()?.clone(), section?.getAttribute()?.clone())
@@ -173,7 +173,7 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
 
     override fun shapeRect(slideIndex: Int, id: Int): Rect? {
         val slide = slide(slideIndex) ?: return null
-        val b = find(slide, id).firstOrNull()?.getBounds() ?: return null
+        val b = find(slide, id).firstOrNull()?.bounds ?: return null
         return Rect(emu(b.x), emu(b.y), emu(b.width), emu(b.height))
     }
 
@@ -183,17 +183,17 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         if (shapes.isEmpty()) return false
         val target = rectangle(rectEmu)
         for (shape in shapes) {
-            val old = shape.getBounds()
+            val old = shape.bounds
             if (shape is GroupShape && old != null && old.width > 0 && old.height > 0) moveGroupChildren(shape, old, target)
-            shape.setBounds(Rectangle(target.x, target.y, target.width, target.height))
+            shape.bounds = Rectangle(target.x, target.y, target.width, target.height)
             if (shape is TextBox) {
-                val section = shape.getElement()
+                val section = shape.element
                 if (section != null) {
                     AttrManage.instance().setPageWidth(section.getAttribute(), (target.width * MainConstant.PIXEL_TO_TWIPS).toInt())
                     AttrManage.instance().setPageHeight(section.getAttribute(), (target.height * MainConstant.PIXEL_TO_TWIPS).toInt())
                 }
-                shape.getRootView()?.dispose()
-                shape.setRootView(null)
+                shape.rootView?.dispose()
+                shape.rootView = null
             }
         }
         repaint()
@@ -203,13 +203,14 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     private fun moveGroupChildren(group: GroupShape, from: Rectangle, to: Rectangle) {
         val sx = to.width.toDouble() / from.width; val sy = to.height.toDouble() / from.height
         for (child in group.getShapes()) {
-            val b = child.getBounds() ?: continue
+            val b = child.bounds ?: continue
             val moved = Rectangle(
                 (to.x + (b.x - from.x) * sx).toInt(), (to.y + (b.y - from.y) * sy).toInt(),
                 maxOf(1, (b.width * sx).toInt()), maxOf(1, (b.height * sy).toInt()))
             if (child is GroupShape) moveGroupChildren(child, b, moved)
-            child.setBounds(moved)
-            if (child is TextBox) { child.getRootView()?.dispose(); child.setRootView(null) }
+            child.bounds = moved
+            if (child is TextBox) { child.rootView?.dispose(); child.rootView = null
+            }
         }
     }
 
@@ -218,7 +219,7 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     override fun removeShape(slideIndex: Int, id: Int): Any? {
         val slide = slide(slideIndex) ?: return null
         // Only top-level shapes can be removed from the model; a group child needs a reopen
-        val entries = slide.getShapes().filter { it.getShapeID() == id }.map { shape -> slide.removeShape(shape) to shape }
+        val entries = slide.getShapes().filter { it.shapeID == id }.map { shape -> slide.removeShape(shape) to shape }
         if (entries.isEmpty()) return null
         repaint()
         return Removed(entries)

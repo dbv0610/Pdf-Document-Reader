@@ -321,28 +321,29 @@ class SheetReader private constructor() {
     private fun getSheetHyperlink(sheet: Sheet, targets: Map<String, String>, hyperlinks: Element?) {
         if (hyperlinks == null) return
         val iterator = hyperlinks.elementIterator()
-        while (iterator.hasNext()) {
-            val element = iterator.next() as Element
-            val row = sheet.getRow(ReferenceUtil.instance().getRowIndex(element.attributeValue("ref")))
-            val cell = row?.getCell(ReferenceUtil.instance().getColumnIndex(element.attributeValue("ref"))) ?: continue
+        while (iterator!!.hasNext()) {
+            val element = iterator!!.next() as Element
+            val ref = element.attributeValue("ref") ?: continue
+            val row = sheet.getRow(ReferenceUtil.instance().getRowIndex(ref))
+            val cell = row?.getCell(ReferenceUtil.instance().getColumnIndex(ref)) ?: continue
             val hyperlink = Hyperlink()
             val target = targets[element.attributeValue("id")]
             val address: String?
             if (target == null) {
-                hyperlink.setLinkType(Hyperlink.LINK_DOCUMENT)
+                hyperlink.linkType = Hyperlink.LINK_DOCUMENT
                 address = element.attributeValue("location")
             } else {
-                hyperlink.setLinkType(if (target.contains("mailto")) Hyperlink.LINK_EMAIL else if (target.contains("http")) Hyperlink.LINK_URL else Hyperlink.LINK_FILE)
+                hyperlink.linkType = if (target.contains("mailto")) Hyperlink.LINK_EMAIL else if (target.contains("http")) Hyperlink.LINK_URL else Hyperlink.LINK_FILE
                 address = target
             }
-            hyperlink.setAddress(address)
+            hyperlink.address = address
             cell.setHyperLink(hyperlink)
         }
     }
 
     private fun setColumnProperty(col: Element) {
-        val min = col.attributeValue("min").toInt() - 1
-        val max = col.attributeValue("max").toInt() - 1
+        val min = col.attributeValue("min")!!.toInt() - 1
+        val max = col.attributeValue("max")!!.toInt() - 1
         val width = col.attributeValue("width")?.toDouble()?.let { it * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL } ?: 0.0
         // Missing hidden means visible.  `null != 0` was evaluating to true,
         // which hid every column in normal XLSX files.
@@ -352,7 +353,8 @@ class SheetReader private constructor() {
     }
 
     private fun getSheetMergerdCells(mergedCell: Element) {
-        val range = getCellRangeAddress(mergedCell.attributeValue("ref"))
+        val ref = mergedCell.attributeValue("ref") ?: return
+        val range = getCellRangeAddress(ref)
         if (range.getLastRow() - range.getFirstRow() == Workbook.MAXROW_07 - 1 || range.getLastColumn() - range.getFirstColumn() == Workbook.MAXCOLUMN_07 - 1) return
         val currentSheet = sheet!!
         val index = currentSheet.addMergeRange(range) - 1
@@ -435,24 +437,24 @@ class SheetReader private constructor() {
     }
 
     private inner class XLSXSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {}
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {}
+        override fun onEnd(elementPath: ElementPath?) {
             if (iReader?.isAborted() == true) throw AbortReaderError("abort Reader")
-            val elem = elementPath.current
-            when (elem.name) {
+            val elem = elementPath?.current
+            when (elem!!.name) {
                 "sheetFormatPr" -> {
-                    elem.attributeValue("defaultRowHeight")?.let { defaultRowHeight = (it.toDouble() * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultRowHeight(defaultRowHeight) }
-                    elem.attributeValue("defaultColWidth")?.let { defaultColWidth = (it.toDouble() * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultColWidth(defaultColWidth) }
+                    elem!!.attributeValue("defaultRowHeight")?.let { defaultRowHeight = (it.toDouble() * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultRowHeight(defaultRowHeight) }
+                    elem!!.attributeValue("defaultColWidth")?.let { defaultColWidth = (it.toDouble() * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultColWidth(defaultColWidth) }
                 }
                 "col" -> setColumnProperty(elem)
                 "row" -> {
-                    val rowIndex = elem.attributeValue("r").toInt() - 1
+                    val rowIndex = elem!!.attributeValue("r")!!.toInt() - 1
                     val currentSheet = sheet!!
                     val old = currentSheet.getRow(rowIndex)
                     if (old == null) currentSheet.addRow(createRow(elem, defaultRowHeight)) else modifyRow(old, elem, defaultRowHeight)
                 }
                 "c" -> {
-                    val ref = elem.attributeValue("r")
+                    val ref = elem!!.attributeValue("r") ?: return
                     val rowIndex = ReferenceUtil.instance().getRowIndex(ref)
                     val colIndex = ReferenceUtil.instance().getColumnIndex(ref)
                     val currentSheet = sheet!!
@@ -464,7 +466,7 @@ class SheetReader private constructor() {
                 }
                 "mergeCell" -> getSheetMergerdCells(elem)
             }
-            elem.detach()
+            elem!!.detach()
         }
     }
 
@@ -476,7 +478,7 @@ class SheetReader private constructor() {
 
     private fun createRow(rowElement: Element, defaultRowHeight: Int): Row? {
         if (!isValidateRow(rowElement)) return null
-        val rowIndex = rowElement.attributeValue("r").toInt() - 1
+        val rowIndex = rowElement.attributeValue("r")!!.toInt() - 1
         val height = rowElement.attributeValue("ht")?.let { it.toFloat() * MainConstant.POINT_TO_PIXEL } ?: defaultRowHeight.toFloat()
         // The attribute is optional; only an explicit hidden="1" hides a row.
         val hidden = rowElement.attributeValue("hidden")?.toIntOrNull() == 1
@@ -506,12 +508,12 @@ class SheetReader private constructor() {
     }
 
     private inner class XLSXSearchSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {}
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {}
+        override fun onEnd(elementPath: ElementPath?) {
             if (iReader?.isAborted() == true) throw AbortReaderError("abort Reader")
-            val elem = elementPath.current
-            if (elem.name == "c" && CellReader.instance().searchContent(elem, key ?: "")) searched = true
-            elem.detach()
+            val elem = elementPath?.current
+            if (elem!!.name == "c" && CellReader.instance().searchContent(elem, key ?: "")) searched = true
+            elem!!.detach()
             if (searched) throw StopReaderError("stop")
         }
     }
@@ -530,7 +532,7 @@ class SheetReader private constructor() {
     private val sharedFormulas = java.util.WeakHashMap<Sheet, MutableMap<String, Master>>()
     fun resolveFormula(sheet: Sheet, cell: Cell, element: Element?): String? {
         if (element == null) return null
-        return resolveFormula(sheet, cell, element.text, element.attributeValue("si"))
+        return resolveFormula(sheet, cell, element.text ?: "", element.attributeValue("si"))
     }
     private fun resolveFormula(sheet: Sheet, cell: Cell, text: String, si: String?): String {
         if (si == null) return text

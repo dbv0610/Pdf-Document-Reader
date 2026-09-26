@@ -366,7 +366,7 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
                 }
             } else {
                 val otp = control!!.getOfficeToPicture()
-                if (otp != null && otp.getModeType() == IOfficeToPicture.VIEW_CHANGING) {
+                if (otp != null && otp.modeType == IOfficeToPicture.VIEW_CHANGING) {
                     toPicture(otp)
                 }
             }
@@ -388,7 +388,7 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
      */
     fun createPicture() {
         val otp = control!!.getOfficeToPicture()
-        if (otp != null && otp.getModeType() == IOfficeToPicture.VIEW_CHANGE_END) {
+        if (otp != null && otp.modeType == IOfficeToPicture.VIEW_CHANGE_END) {
             try {
                 toPicture(otp)
             } catch (e: Exception) {
@@ -401,8 +401,8 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
      */
     private fun toPicture(otp: IOfficeToPicture) {
         val sheetview = this.sheetview!!
-        val b = PictureKit.instance().isDrawPictrue()
-        PictureKit.instance().setDrawPictrue(true)
+        val b = PictureKit.instance().isDrawPictrue
+        PictureKit.instance().isDrawPictrue = true
         //
         val bitmap = otp.getBitmap(width, height)
         if (bitmap == null) {
@@ -421,7 +421,7 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
         otp.callBack(bitmap)
         sheetview.setZoom(oldPaintZoom, true)
         //
-        PictureKit.instance().setDrawPictrue(b)
+        PictureKit.instance().isDrawPictrue = b
     }
 
     /**

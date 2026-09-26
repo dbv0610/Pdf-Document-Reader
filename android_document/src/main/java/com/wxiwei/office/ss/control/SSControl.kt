@@ -83,8 +83,8 @@ class SSControl(mainControl: IControl?, book: Workbook?, filepath: String?) : Ab
                 val hyperlink = sheet.getActiveCellHyperlink()
                 if (hyperlink != null) {
                     try {
-                        if (hyperlink.getLinkType() == Hyperlink.LINK_DOCUMENT) {
-                            val addr = hyperlink.getAddress()
+                        if (hyperlink.linkType == Hyperlink.LINK_DOCUMENT) {
+                            val addr = hyperlink.address ?: return
                             val index = addr.indexOf("!")
                             val sheetName = addr.substring(0, index).replace("'", "")
                             val ref = addr.substring(index + 1)
@@ -98,8 +98,8 @@ class SSControl(mainControl: IControl?, book: Workbook?, filepath: String?) : Ab
                             sheet.getSheetView()!!.goToCell(if (rowIndex >= 0) rowIndex else 0, if (columnIndex >= 0) columnIndex else 0)
                             mainFrame!!.doActionEvent(EventConstant.SYS_UPDATE_TOOLSBAR_BUTTON_STATUS, null)
                             sheet.postInvalidate()
-                        } else if (hyperlink.getLinkType() == Hyperlink.LINK_EMAIL || hyperlink.getLinkType() == Hyperlink.LINK_URL) {
-                            mainFrame!!.activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hyperlink.getAddress())))
+                        } else if (hyperlink.linkType == Hyperlink.LINK_EMAIL || hyperlink.linkType == Hyperlink.LINK_URL) {
+                            mainFrame!!.activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hyperlink.address)))
                         } else {
                             mainControl!!.actionEvent(EventConstant.SYS_SHOW_TOOLTIP, "not supported hyperlink!")
                         }

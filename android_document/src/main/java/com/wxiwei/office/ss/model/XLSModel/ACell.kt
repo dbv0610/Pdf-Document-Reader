@@ -42,9 +42,9 @@ open class ACell : Cell {
         record = cval
         cellType = determineType(cval).toShort()
         this.sheet = sheet
-        this.rowNumber = cval.getRow()
-        this.colNumber = cval.getColumn().toInt()
-        this.styleIndex = cval.getXFIndex().toInt()
+        this.rowNumber = cval.row
+        this.colNumber = cval.column.toInt()
+        this.styleIndex = cval.xFIndex.toInt()
         when (cellType) {
             CELL_TYPE_NUMERIC -> value = getNumericCellValue()
 
@@ -112,12 +112,12 @@ open class ACell : Cell {
      * @param cval
      */
     private fun procellFormulaCellValue(cval: FormulaRecordAggregate) {
-        val strRec = cval.getStringRecord()
+        val strRec = cval.stringRecord
         if (strRec != null) {
             cellType = Cell.CELL_TYPE_STRING
             value = sheet!!.getWorkbook()!!.addSharedString(strRec.getString())
         } else {
-            val formulaRec = cval.getFormulaRecord()
+            val formulaRec = cval.formulaRecord
             cellType = formulaRec.getCachedResultType().toShort()
             when (cellType) {
                 CELL_TYPE_NUMERIC -> value = formulaRec.getValue()
@@ -137,19 +137,19 @@ open class ACell : Cell {
      *
      * @param ptgs
      */
-    fun setCellFormula(ptgs: Array<Ptg>?) {
-        val row = record!!.getRow()
-        val col = record!!.getColumn()
-        val styleIndex = record!!.getXFIndex()
+    fun setCellFormula(ptgs: Array<Ptg?>?) {
+        val row = record!!.row
+        val col = record!!.column
+        val styleIndex = record!!.xFIndex
         setCellType(CELL_TYPE_FORMULA.toInt(), false, row, col, styleIndex)
         val agg = record as FormulaRecordAggregate
-        val frec = agg.getFormulaRecord()
+        val frec = agg.formulaRecord
         frec.setOptions(2.toShort())
         frec.setValue(0.0)
 
         //only set to default if there is no extended format index already set
-        if (agg.getXFIndex() == 0.toShort()) {
-            agg.setXFIndex(0x0f.toShort())
+        if (agg.xFIndex == 0.toShort()) {
+            agg.xFIndex = 0x0f.toShort()
         }
         agg.setParsedExpression(ptgs)
     }
@@ -173,8 +173,8 @@ open class ACell : Cell {
             else -> throw typeMismatch(CELL_TYPE_STRING.toInt(), cellType.toInt(), false)
         }
         val fra = (record as FormulaRecordAggregate)
-        checkFormulaCachedValueType(CELL_TYPE_STRING.toInt(), fra.getFormulaRecord())
-        val strVal = fra.getStringValue()
+        checkFormulaCachedValueType(CELL_TYPE_STRING.toInt(), fra.formulaRecord)
+        val strVal = fra.stringValue
         return strVal
     }
 
@@ -197,7 +197,7 @@ open class ACell : Cell {
 
             else -> throw typeMismatch(CELL_TYPE_NUMERIC.toInt(), cellType.toInt(), false)
         }
-        val fr = (record as FormulaRecordAggregate).getFormulaRecord()
+        val fr = (record as FormulaRecordAggregate).formulaRecord
         checkFormulaCachedValueType(CELL_TYPE_NUMERIC.toInt(), fr)
         return fr.getValue()
     }
@@ -210,14 +210,14 @@ open class ACell : Cell {
         when (cellType) {
             CELL_TYPE_BLANK -> return false
 
-            CELL_TYPE_BOOLEAN -> return (record as BoolErrRecord).getBooleanValue()
+            CELL_TYPE_BOOLEAN -> return (record as BoolErrRecord).booleanValue
 
             CELL_TYPE_FORMULA -> {
             }
 
             else -> throw typeMismatch(CELL_TYPE_BOOLEAN.toInt(), cellType.toInt(), false)
         }
-        val fr = (record as FormulaRecordAggregate).getFormulaRecord()
+        val fr = (record as FormulaRecordAggregate).formulaRecord
         checkFormulaCachedValueType(CELL_TYPE_BOOLEAN.toInt(), fr)
         return fr.getCachedBooleanValue()
     }
@@ -228,14 +228,14 @@ open class ACell : Cell {
      */
     fun getErrorCellValue(): Byte {
         when (cellType) {
-            CELL_TYPE_ERROR -> return (record as BoolErrRecord).getErrorValue()
+            CELL_TYPE_ERROR -> return (record as BoolErrRecord).errorValue
 
             CELL_TYPE_FORMULA -> {
             }
 
             else -> throw typeMismatch(CELL_TYPE_ERROR.toInt(), cellType.toInt(), false)
         }
-        val fr = (record as FormulaRecordAggregate).getFormulaRecord()
+        val fr = (record as FormulaRecordAggregate).formulaRecord
         checkFormulaCachedValueType(CELL_TYPE_ERROR.toInt(), fr)
         return fr.getCachedErrorValue().toByte()
     }
@@ -250,7 +250,7 @@ open class ACell : Cell {
      * @return
      */
     fun getFormulaCachedValueType(): Int {
-        return (record as FormulaRecordAggregate).getFormulaRecord().getCachedResultType()
+        return (record as FormulaRecordAggregate).formulaRecord.getCachedResultType()
     }
 
     /**
@@ -272,9 +272,9 @@ open class ACell : Cell {
      * @see CELL_TYPE_ERROR
      */
     fun setCellType(cellType: Int, setValue: Boolean) {
-        val row = record!!.getRow()
-        val col = record!!.getColumn()
-        val styleIndex = record!!.getXFIndex()
+        val row = record!!.row
+        val col = record!!.column
+        val styleIndex = record!!.xFIndex
         setCellType(cellType, setValue, row, col, styleIndex)
     }
 
@@ -294,13 +294,13 @@ open class ACell : Cell {
             CELL_TYPE_FORMULA.toInt() -> {
                 val frec: FormulaRecordAggregate
                 if (this.cellType.toInt() != cellType) {
-                    frec = (sheet as ASheet).getInternalSheet()!!.getRowsAggregate().createFormula(row, col.toInt())
+                    frec = (sheet as ASheet).getInternalSheet()!!.rowsAggregate!!.createFormula(row, col.toInt())
                 } else {
                     frec = record as FormulaRecordAggregate
-                    frec.setRow(row)
-                    frec.setColumn(col)
+                    frec.row = row
+                    frec.column = col
                 }
-                frec.setXFIndex(styleIndex)
+                frec.xFIndex = styleIndex
                 record = frec
             }
 
@@ -311,9 +311,9 @@ open class ACell : Cell {
                 } else {
                     nrec = record as NumberRecord
                 }
-                nrec.setColumn(col)
-                nrec.setXFIndex(styleIndex)
-                nrec.setRow(row)
+                nrec.column = col
+                nrec.xFIndex = styleIndex
+                nrec.row = row
                 record = nrec
             }
 
@@ -323,9 +323,9 @@ open class ACell : Cell {
                     lrec = this.record as LabelSSTRecord
                 } else {
                     lrec = LabelSSTRecord()
-                    lrec.setColumn(col)
-                    lrec.setRow(row)
-                    lrec.setXFIndex(styleIndex)
+                    lrec.column = col
+                    lrec.row = row
+                    lrec.xFIndex = styleIndex
                 }
                 record = lrec
             }
@@ -337,11 +337,11 @@ open class ACell : Cell {
                 } else {
                     brec = record as BlankRecord
                 }
-                brec.setColumn(col)
+                brec.column = col
 
                 // During construction the cellStyle may be null for a Blank cell.
-                brec.setXFIndex(styleIndex)
-                brec.setRow(row)
+                brec.xFIndex = styleIndex
+                brec.row = row
                 record = brec
             }
 
@@ -352,9 +352,9 @@ open class ACell : Cell {
                 } else {
                     boolRec = record as BoolErrRecord
                 }
-                boolRec.setColumn(col)
-                boolRec.setXFIndex(styleIndex)
-                boolRec.setRow(row)
+                boolRec.column = col
+                boolRec.xFIndex = styleIndex
+                boolRec.row = row
                 record = boolRec
             }
 
@@ -365,9 +365,9 @@ open class ACell : Cell {
                 } else {
                     errRec = record as BoolErrRecord
                 }
-                errRec.setColumn(col)
-                errRec.setXFIndex(styleIndex)
-                errRec.setRow(row)
+                errRec.column = col
+                errRec.xFIndex = styleIndex
+                errRec.row = row
                 record = errRec
             }
         }
@@ -429,9 +429,9 @@ open class ACell : Cell {
      */
     fun setCellValue(value: String?) {
         val richString = if (value == null) null else HSSFRichTextString(value)
-        val row = record!!.getRow()
-        val col = record!!.getColumn()
-        val styleIndex = record!!.getXFIndex()
+        val row = record!!.row
+        val col = record!!.column
+        val styleIndex = record!!.xFIndex
         if (richString == null) {
             setCellType(CELL_TYPE_BLANK.toInt(), false, row, col, styleIndex)
             return
@@ -443,7 +443,7 @@ open class ACell : Cell {
 
         var index = 0
 
-        val str = richString.getUnicodeString()
+        val str = richString.unicodeString
         index = (sheet!!.getWorkbook() as AWorkbook).getInternalWorkbook()!!.addSSTString(str)
         (record as LabelSSTRecord).setSSTIndex(index)
         this.value = index
@@ -520,7 +520,7 @@ open class ACell : Cell {
                 LabelSSTRecord.sid, LabelRecord.sid -> return CELL_TYPE_STRING.toInt()
                 BoolErrRecord.sid -> {
                     val boolErrRecord = record as BoolErrRecord
-                    return if (boolErrRecord.isBoolean()) CELL_TYPE_BOOLEAN.toInt() else CELL_TYPE_ERROR.toInt()
+                    return if (boolErrRecord.isBoolean) CELL_TYPE_BOOLEAN.toInt() else CELL_TYPE_ERROR.toInt()
                 }
             }
             throw RuntimeException("Bad cell value rec (" + cval.javaClass.name + ")")

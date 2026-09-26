@@ -168,7 +168,7 @@ object LineArrowPathBuilder {
             endY,
             width * zoom,
             length * zoom,
-            arrow.getType()
+            arrow.type
         )
     }
 
@@ -230,7 +230,7 @@ object LineArrowPathBuilder {
         }
 
 
-        return buildArrowPath(end.x, end.y, endX, endY, width, length, arrow.getType())
+        return buildArrowPath(end.x, end.y, endX, endY, width, length, arrow.type)
     }
 
     @JvmStatic
@@ -303,7 +303,7 @@ object LineArrowPathBuilder {
             endY,
             width.toFloat(),
             length.toFloat(),
-            arrow.getType()
+            arrow.type
         )
     }
 
