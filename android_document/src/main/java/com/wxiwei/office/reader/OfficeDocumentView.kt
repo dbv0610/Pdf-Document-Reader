@@ -88,6 +88,11 @@ class OfficeDocumentView @JvmOverloads constructor(
             reader?.onDocumentGesture = value
         }
 
+    /** Redraws the thumbnail of [pageNumber] (1-based) after an edit changed that page. */
+    fun invalidateThumbnail(pageNumber: Int) {
+        reader?.invalidateThumbnail(pageNumber)
+    }
+
     /** Action hook; return true to consume the action. May be called off the main thread. */
     var onAction: ((actionID: Int, obj: Any?) -> Boolean)? = null
         set(value) {

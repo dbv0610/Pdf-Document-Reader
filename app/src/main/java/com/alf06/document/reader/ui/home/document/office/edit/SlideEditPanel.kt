@@ -56,8 +56,8 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("Slide ↑") { slideOp("di chuyển") { slide() > 0 && session.moveSlide(slide(), slide() - 1) } },
             button("Slide ↓") { slideOp("di chuyển") { slide() < session.slideCount() - 1 && session.moveSlide(slide(), slide() + 1) } },
             button("Xóa slide", color = 0xFFC00000.toInt()) { slideOp("xóa") { session.deleteSlide(slide()) } },
-            button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") },
-            button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") },
+            button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") else afterUndo() },
+            button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") else afterUndo() },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
         ))
     }
@@ -88,6 +88,16 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     override fun close() {
         reader.onDocumentGesture = null
         reader.removeView(overlay)
+    }
+
+    /** Undo/redo may move the selected shape: re-read its frame and redraw the thumbnail. */
+    private fun afterUndo() {
+        reader.invalidateThumbnail(slide() + 1)
+        if (shapeId < 0) return
+        val s = session.listShapes(slide()).firstOrNull { it.id == shapeId }
+        rect = s?.rectEmu
+        overlay.selection = rect
+        if (s == null) select(null)
     }
 
     private fun describe(s: PptxShapeInfo): String {
@@ -182,6 +192,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     /** Some edits (shapes inside groups) are saved but not shown until the file is reopened. */
     private fun reopenHint() {
+        reader.invalidateThumbnail(slide() + 1)
         if (session.needsReopen) toast("Thay đổi sẽ hiện đầy đủ sau khi lưu và mở lại")
     }
 

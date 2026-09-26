@@ -228,6 +228,12 @@ class OfficeReader(
         _state.update { it.copy(pageCount = count, thumbnailCount = thumbnailCount) }
     }
 
+    /** Redraws the thumbnail of [pageNumber] (1-based) after the page content was edited. */
+    fun invalidateThumbnail(pageNumber: Int) {
+        thumbnails?.invalidate(pageNumber) ?: return
+        _thumbnailInvalidated.tryEmit(pageNumber)
+    }
+
     private fun canDrawPages(): Boolean = when (val view = observedView) {
         is Word -> view.getCurrentRootType() != WPViewConstant.NORMAL_ROOT.toInt()
         is Presentation -> true
