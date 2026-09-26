@@ -172,9 +172,50 @@ class TableLayoutKit {
                 want /= 2
             }
             tableView.setX(tableView.getX() + want)
+            shiftFloatingShapes(tableView, want)
         }
         breakRowView = rowView
         return breakType
+    }
+
+    /**
+     * Centered/right tables move after their rows are laid out; floating shapes anchored in their
+     * cells were positioned against the cell before that, so they move by the same amount.
+     */
+    private fun shiftFloatingShapes(tableView: TableView, dx: Int) {
+        if (dx == 0) return
+        var row = tableView.getChildView()
+        while (row != null) {
+            var cell = row.getChildView()
+            while (cell != null) {
+                var para = cell.getChildView()
+                while (para != null) {
+                    var line = para.getChildView()
+                    while (line != null) {
+                        var leaf = line.getChildView()
+                        while (leaf != null) {
+                            val shape = when (leaf) {
+                                is ShapeView -> if (leaf.isInline()) null else leaf.getShape()
+                                is ObjView -> if (leaf.isInline()) null else leaf.getShape()
+                                else -> null
+                            }
+                            val h = shape?.horizontalRelativeTo?.toInt()
+                            if (h == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_COLUMN.toInt()
+                                || h == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PARAGRAPH.toInt()
+                                || h == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_CHARACTER.toInt()
+                            ) {
+                                leaf.setX(leaf.getX() + dx)
+                            }
+                            leaf = leaf.getNextView()
+                        }
+                        line = line.getNextView()
+                    }
+                    para = para.getNextView()
+                }
+                cell = cell.getNextView()
+            }
+            row = row.getNextView()
+        }
     }
 
     /** Rows marked tblHeader at the top of the table (only the leading run repeats, like Word). */
