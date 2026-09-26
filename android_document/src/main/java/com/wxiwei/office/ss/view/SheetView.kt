@@ -363,6 +363,78 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
         canvas.restore()
     }
 
+    /**
+     * Draws the frozen rows (at scroll y 0), frozen columns (at scroll x 0) and their corner over
+     * the scrolled area. The scrolled area shows sheet position scroll + screen offset everywhere,
+     * so the part hidden under a band is exactly what Excel scrolls away behind the frozen rows.
+     */
+    private fun drawFrozenPanes(canvas: Canvas, rightPos: Int, bottomPos: Int) {
+        val sheet = this.sheet ?: return
+        val pane = sheet.getFrozenPane() ?: return
+        val rows = pane.getHorizontalSplitTopRow().toInt()
+        val cols = pane.getVerticalSplitLeftColumn().toInt()
+        var frozenH = 0f
+        for (r in 0 until rows) {
+            val row = sheet.getRow(r)
+            frozenH += when {
+                row == null -> sheet.getDefaultRowHeight().toFloat()
+                row.isZeroHeight() -> 0f
+                else -> row.getRowPixelHeight()
+            }
+        }
+        var frozenW = 0f
+        for (c in 0 until cols) {
+            if (!sheet.isColumnHidden(c)) frozenW += sheet.getColumnPixelWidth(c)
+        }
+        val left = getRowHeaderWidth().toFloat()
+        val top = getColumnHeaderHeight().toFloat()
+        val bandBottom = top + frozenH * zoom
+        val bandRight = left + frozenW * zoom
+        // nothing frozen is visible unless the sheet is scrolled past it
+        val sx = scrollX
+        val sy = scrollY
+        if (frozenH > 0 && sy > 0) {
+            drawPaneBand(canvas, sx, 0f, 0f, top, rightPos.toFloat(), minOf(bandBottom, bottomPos.toFloat()))
+        }
+        if (frozenW > 0 && sx > 0) {
+            drawPaneBand(canvas, 0f, sy, left, 0f, minOf(bandRight, rightPos.toFloat()), bottomPos.toFloat())
+        }
+        if (frozenH > 0 && frozenW > 0 && (sx > 0 || sy > 0)) {
+            drawPaneBand(canvas, 0f, 0f, left, top, minOf(bandRight, rightPos.toFloat()), minOf(bandBottom, bottomPos.toFloat()))
+        }
+        // Excel's thin line under/right of the frozen panes
+        val paint = PaintKit.instance().getPaint()
+        val oldColor = paint.color
+        paint.color = SSConstant.HEADER_GRIDLINE_COLOR
+        if (frozenH > 0) canvas.drawRect(left, bandBottom - 1, rightPos.toFloat(), bandBottom, paint)
+        if (frozenW > 0) canvas.drawRect(bandRight - 1, top, bandRight, bottomPos.toFloat(), paint)
+        paint.color = oldColor
+    }
+
+    /** Draws headers and cells as if scrolled to ([x], [y]), clipped to the given screen rect. */
+    private fun drawPaneBand(canvas: Canvas, x: Float, y: Float, l: Float, t: Float, r: Float, b: Float) {
+        if (r <= l || b <= t) return
+        val sheet = this.sheet!!
+        val oldX = scrollX
+        val oldY = scrollY
+        val oldClip = clipRect
+        val save = canvas.save()
+        try {
+            canvas.clipRect(l, t, r, b)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            scrollX = x
+            scrollY = y
+            updateScroller(sheet, Math.round(x), Math.round(y), true)
+            drawThumbnail(canvas)
+        } finally {
+            canvas.restoreToCount(save)
+            scrollX = oldX
+            scrollY = oldY
+            clipRect = oldClip
+            updateScroller(sheet, Math.round(oldX), Math.round(oldY), true)
+        }
+    }
+
     fun getMaxScrollY(): Int {
         return Math.round(maxDataScrollY(sheet!!) * zoom)
     }
@@ -587,6 +659,9 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
 
             //draw active cell border
             drawActiveCellBorder(canvas)
+
+            // frozen rows/columns stay in place over the scrolled cells
+            drawFrozenPanes(canvas, rightPos, bottomPos)
 
             //if(!moving)
             run {

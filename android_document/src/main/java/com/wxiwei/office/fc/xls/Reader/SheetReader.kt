@@ -169,6 +169,8 @@ class SheetReader private constructor() {
                             val pane = PaneInformation()
                             parser.attr("xSplit")?.toIntOrNull()?.let { pane.setVerticalSplitLeftColumn(it.toShort()) }
                             parser.attr("ySplit")?.toIntOrNull()?.let { pane.setHorizontalSplitTopRow(it.toShort()) }
+                            // only frozen panes stay put; a plain split scrolls like the rest
+                            pane.setFreePane(parser.attr("state").let { it == "frozen" || it == "frozenSplit" })
                             target.setPaneInformation(pane)
                         }
                         "row" -> {

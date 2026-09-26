@@ -475,6 +475,14 @@ open class Sheet {
         this.paneInformation = paneInformation
     }
 
+    /**
+     * The frozen pane, if any. [getPaneInformation] stays null on purpose: the scroller would
+     * skip the frozen rows; SheetView draws them over the scrolled area instead.
+     */
+    fun getFrozenPane(): PaneInformation? = paneInformation?.takeIf {
+        it.isFreezePane() && (it.getHorizontalSplitTopRow() > 0 || it.getVerticalSplitLeftColumn() > 0)
+    }
+
     // sheetView@showGridLines
     private var showGridLines = true
 
