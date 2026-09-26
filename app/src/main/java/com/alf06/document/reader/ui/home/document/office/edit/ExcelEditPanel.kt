@@ -52,6 +52,10 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("Xuống dòng") { toggleWrap() },
             button("0.00") { format(CellFormat(numberFormat = "0.00")) },
             button("%") { format(CellFormat(numberFormat = "0%")) },
+            button("+ Dòng trên") { structural { session.insertRows(sheet, row, 1) } },
+            button("− Dòng") { structural { session.deleteRows(sheet, row, 1) } },
+            button("+ Cột trái") { structural { session.insertColumns(sheet, col, 1) } },
+            button("− Cột") { structural { session.deleteColumns(sheet, col, 1) } },
             button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") else refresh(true) },
             button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") else refresh(true) },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
@@ -92,6 +96,15 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         }
         session.warnings.firstOrNull()?.let { toast(it) }
         refresh(true)
+    }
+
+    private fun structural(action: () -> Boolean) {
+        if (sheet < 0) return
+        if (!action()) toast(session.lastError?.message ?: "Không thực hiện được")
+        else {
+            session.warnings.firstOrNull()?.let { toast(it) }
+            refresh(true)
+        }
     }
 
     private fun format(f: CellFormat) {
