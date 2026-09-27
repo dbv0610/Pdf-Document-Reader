@@ -7,6 +7,8 @@ import com.wxiwei.office.ss.control.ExcelView
 import com.wxiwei.office.ss.control.Spreadsheet
 import com.wxiwei.office.ss.model.baseModel.Cell
 import com.wxiwei.office.ss.model.baseModel.Row
+import com.wxiwei.office.constant.MainConstant
+import com.wxiwei.office.constant.SSConstant
 import com.wxiwei.office.ss.model.baseModel.Sheet
 import com.wxiwei.office.ss.model.baseModel.Workbook
 import com.wxiwei.office.common.bg.BackgroundAndFill
@@ -68,9 +70,66 @@ class SheetEditSession internal constructor(
 
     fun canUndo() = undoStack.isNotEmpty()
     fun canRedo() = redoStack.isNotEmpty()
-    fun hasChanges() = undoStack.isNotEmpty() || dirty.isNotEmpty() || formats.values.any { it.isNotEmpty() } || structure.isNotEmpty()
+    fun hasChanges() = undoStack.isNotEmpty() || sizes.isNotEmpty() || dirty.isNotEmpty() || formats.values.any { it.isNotEmpty() } || structure.isNotEmpty()
 
     // ---- rows and columns ---------------------------------------------------------------
+
+    // column widths / row heights set, each with the number of row/column changes made before it
+    private val sizes = ArrayList<Pair<SizeWrite, Int>>()
+
+    /** Width of a column in characters (Excel's unit). */
+    fun columnWidth(sheetIndex: Int, col: Int): Double =
+        (book.getSheet(sheetIndex)?.getColumnPixelWidth(col) ?: 0f) / (SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toDouble()
+
+    /** Height of a row in points. */
+    fun rowHeight(sheetIndex: Int, row: Int): Double {
+        val sheet = book.getSheet(sheetIndex) ?: return 15.0
+        val px = sheet.getRow(row)?.getRowPixelHeight() ?: sheet.getDefaultRowHeight().toFloat()
+        return px / MainConstant.POINT_TO_PIXEL.toDouble()
+    }
+
+    /** Sets the width of column [col] to [chars] characters (0.5..255). */
+    fun setColumnWidth(sheetIndex: Int, col: Int, chars: Double): Boolean = setSize(sheetIndex, false, col, chars)
+
+    /** Sets the height of row [row] to [points] (1..409). */
+    fun setRowHeight(sheetIndex: Int, row: Int, points: Double): Boolean = setSize(sheetIndex, true, row, points)
+
+    private fun setSize(sheetIndex: Int, rows: Boolean, index: Int, size: Double): Boolean {
+        val sheet = book.getSheet(sheetIndex) ?: return fail(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
+        if (index < 0 || !size.isFinite() || size < (if (rows) 1.0 else 0.5) || size > (if (rows) 409.0 else 255.0))
+            return fail(Reason.INVALID_ARGUMENT, "Bad size")
+        val before = if (rows) rowHeight(sheetIndex, index) else columnWidth(sheetIndex, index)
+        fun show(v: Double) {
+            if (rows) {
+                val row = sheet.getRow(index) ?: Row(1).also {
+                    it.setRowNumber(index); it.setSheet(sheet); it.completed(); sheet.addRow(it)
+                }
+                row.setRowPixelHeight((v * MainConstant.POINT_TO_PIXEL).toFloat())
+            } else sheet.setColumnPixelWidth(index, Math.round(v * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt())
+        }
+        val entry = SizeWrite(sheetIndex, rows, index, size) to structure.size
+        val apply = { show(size); sizes.add(entry); Unit }
+        val revert = { show(before); sizes.removeAll { it === entry }; Unit }
+        apply()
+        undoStack.add(Step.Structure(apply, revert)); redoStack.clear()
+        repaint()
+        return true
+    }
+
+    /** [w] moved by the row/column changes made after it; null when they deleted it. */
+    private fun finalSize(w: SizeWrite, after: Int): SizeWrite? {
+        var v = w.index
+        for (c in structure.drop(after)) {
+            if (c.sheetIndex != w.sheetIndex || c.rows != w.rows) continue
+            v = when {
+                c.count > 0 -> if (v >= c.at) v + c.count else v
+                v < c.at -> v
+                v >= c.at - c.count -> v + c.count
+                else -> return null
+            }
+        }
+        return w.copy(index = v)
+    }
 
     fun insertRows(sheetIndex: Int, at: Int, count: Int = 1) = structural(sheetIndex, true, at, count)
     fun deleteRows(sheetIndex: Int, at: Int, count: Int = 1) = structural(sheetIndex, true, at, -count)
@@ -405,7 +464,8 @@ class SheetEditSession internal constructor(
         }
         val styles = formats.filterValues { it.isNotEmpty() }
             .map { (k, list) -> StyleWrite(k.sheet, k.row, k.col, list.reduce { a, b -> a + b }) }
-        val result = XlsxWriter(source) { s, r, c -> book.getSheet(s)?.getRow(r)?.getCell(c)?.formula }.save(target, writes, styles, structure)
+        val result = XlsxWriter(source) { s, r, c -> book.getSheet(s)?.getRow(r)?.getCell(c)?.formula }
+            .save(target, writes, styles, structure, sizes.mapNotNull { (w, after) -> finalSize(w, after) })
         return if (result is EditResult.Ok) result.copy(warnings = warnings) else result
     }
 

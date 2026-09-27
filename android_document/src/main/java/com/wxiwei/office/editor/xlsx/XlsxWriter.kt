@@ -27,6 +27,9 @@ sealed class CellWrite {
 /** Rows ([rows]) or columns inserted ([count] > 0) or deleted at [at] of a sheet. */
 data class StructureWrite(val sheetIndex: Int, val rows: Boolean, val at: Int, val count: Int)
 
+/** A column width in characters (Excel's unit) or a row height in points, at final coordinates. */
+data class SizeWrite(val sheetIndex: Int, val rows: Boolean, val index: Int, val size: Double)
+
 /** A format change for one cell, relative to the cell's format in the original file. */
 data class StyleWrite(val sheetIndex: Int, val row: Int, val col: Int, val format: CellFormat)
 
@@ -39,7 +42,7 @@ data class StyleWrite(val sheetIndex: Int, val row: Int, val col: Int, val forma
 class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: Int, row: Int, col: Int) -> String? = { _, _, _ -> null }) {
 
     fun save(target: File, writes: Collection<CellWrite>, styles: Collection<StyleWrite> = emptyList(),
-             structure: List<StructureWrite> = emptyList()): EditResult {
+             structure: List<StructureWrite> = emptyList(), sizes: List<SizeWrite> = emptyList()): EditResult {
         if (!source.extension.equals("xlsx", true) && !source.extension.equals("xlsm", true))
             return EditResult.Error(Reason.UNSUPPORTED_FORMAT, "Only .xlsx/.xlsm can be saved")
         if (source.canonicalFile == target.canonicalFile)
@@ -49,6 +52,14 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             val parts = sheetParts(pkg)
             // rows/columns first: the cell writes use the coordinates after them
             if (structure.isNotEmpty()) XlsxStructure(pkg, parts).apply(structure)
+            for (w in sizes) {
+                val part = parts.getOrNull(w.sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet ${w.sheetIndex} not found")
+                val root = pkg.xml(part).rootElement!!
+                if (w.rows) {
+                    val data = root.firstChild(SS, "sheetData") ?: error("Missing sheetData in $part")
+                    rowElement(data, w.index).addAttribute("ht", sizeText(w.size))!!.addAttribute("customHeight", "1")
+                } else columnWidth(root, w.index, w.size)
+            }
             for ((sheetIndex, cells) in writes.groupBy { it.sheetIndex }) {
                 val part = parts.getOrNull(sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
                 writeSheet(pkg, part, sheetIndex, cells)
@@ -201,6 +212,38 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             fill(c, w)
         }
         updateDimension(root, cells)
+    }
+
+    private fun sizeText(v: Double) = if (v % 1.0 == 0.0) v.toLong().toString() else "%.2f".format(java.util.Locale.ROOT, v)
+
+    /** Sets the width of column [col] (0-based) in <cols>, splitting a <col> range that covers it. */
+    private fun columnWidth(root: Element, col: Int, width: Double) {
+        val n = col + 1
+        val cols = root.firstChild(SS, "cols") ?: com.wxiwei.office.editor.ooxml.newElement(SS, "cols").also { cols ->
+            // CT_Worksheet: ... sheetFormatPr, cols, sheetData
+            val content = root.content() as MutableList<Any?>
+            content.add(content.indexOf(root.firstChild(SS, "sheetData") ?: error("Missing sheetData")), cols)
+        }
+        val content = cols.content() as MutableList<Any?>
+        fun Element.num(k: String) = attributeValue(k)?.toIntOrNull() ?: 0
+        val covering = cols.childrenNamed(SS, "col").firstOrNull { it.num("min") <= n && it.num("max") >= n }
+        val target = if (covering != null) {
+            val min = covering.num("min"); val max = covering.num("max")
+            var at = content.indexOf(covering)
+            if (min < n) content.add(at++, covering.createCopy()!!.apply { addAttribute("max", (n - 1).toString()) })
+            val one = covering.createCopy()!!.apply { addAttribute("min", n.toString()); addAttribute("max", n.toString()) }
+            content.add(at++, one)
+            if (max > n) content.add(at, covering.createCopy()!!.apply { addAttribute("min", (n + 1).toString()) })
+            cols.remove(covering)
+            one
+        } else {
+            val one = com.wxiwei.office.editor.ooxml.newElement(SS, "col").apply { addAttribute("min", n.toString()); addAttribute("max", n.toString()) }
+            val next = cols.childrenNamed(SS, "col").firstOrNull { it.num("min") > n }
+            if (next == null) content.add(one) else content.add(content.indexOf(next), one)
+            one
+        }
+        target.addAttribute("width", sizeText(width))
+        target.addAttribute("customWidth", "1")
     }
 
     private fun rowElement(data: Element, row: Int): Element {

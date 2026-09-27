@@ -48,9 +48,68 @@ internal abstract class OfficeEditPanel(
         val result = saveOver(file) { target -> writeTo(target) }
         report(result, "Đã lưu " + file.name)
         if (result !is EditResult.Ok) return false
+        // other apps and the file list see the new size and date
+        com.alf06.document.reader.utils.AppUtils.notifyMediaScanner(context, file.absolutePath)
         EditDrafts.delete(context, file)
         onSaved()
         return true
+    }
+
+    /**
+     * Writes the document with every edit to a place the user picks (Downloads, Drive...), keeping
+     * the open file as it is.
+     */
+    fun saveCopy() {
+        val mime = when (file.extension.lowercase()) {
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            else -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+        var launcher: androidx.activity.result.ActivityResultLauncher<String>? = null
+        launcher = activity.activityResultRegistry.register("office-save-copy-" + System.nanoTime(),
+            androidx.activity.result.contract.ActivityResultContracts.CreateDocument(mime)) { uri ->
+            launcher?.unregister()
+            if (uri == null) return@register
+            val tmp = File(context.cacheDir, "save-copy." + file.extension).apply { delete() }
+            val result = try { writeTo(tmp) } catch (e: Exception) { EditResult.Error(com.wxiwei.office.editor.Reason.IO, e.message ?: "Save failed", e) }
+            if (result is EditResult.Ok) {
+                try {
+                    context.contentResolver.openOutputStream(uri, "wt")!!.use { out -> tmp.inputStream().use { it.copyTo(out) } }
+                    toast("Đã lưu bản sao")
+                } catch (e: Exception) {
+                    toast("Không lưu được: " + (e.message ?: ""))
+                }
+            } else report(result, "")
+            tmp.delete()
+        }
+        launcher.launch(file.nameWithoutExtension + " (bản sao)." + file.extension)
+    }
+
+    /** Asks for a color from a palette; [none] adds a "no color" choice (null). */
+    protected fun pickColor(title: String, none: String? = null, onPick: (String?) -> Unit) {
+        val colors = listOf("000000", "404040", "7F7F7F", "BFBFBF", "FFFFFF", "C00000", "FF0000", "FFC000", "FFFF00",
+            "92D050", "00B050", "00B0F0", "0070C0", "002060", "7030A0", "FF66CC", "F4B183", "FFF2CC", "DDEBF7", "E2EFDA")
+        val grid = android.widget.GridLayout(context).apply { columnCount = 5; setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        var dialog: androidx.appcompat.app.AlertDialog? = null
+        for (c in colors) grid.addView(View(context).apply {
+            background = GradientDrawable().apply {
+                cornerRadius = dp(6).toFloat(); setColor(0xFF000000.toInt() or c.toInt(16)); setStroke(dp(1), 0xFFBBBBBB.toInt())
+            }
+            layoutParams = android.widget.GridLayout.LayoutParams().apply { width = dp(44); height = dp(44); setMargins(dp(5), dp(5), dp(5), dp(5)) }
+            contentDescription = c
+            setOnClickListener { dialog?.dismiss(); onPick(c) }
+        })
+        val builder = androidx.appcompat.app.AlertDialog.Builder(context).setTitle(title).setView(grid).setNegativeButton("Hủy", null)
+        if (none != null) builder.setNeutralButton(none) { _, _ -> onPick(null) }
+        dialog = builder.show()
+    }
+
+    /** Asks for a font size in points. */
+    protected fun pickSize(onPick: (Float) -> Unit) {
+        val sizes = floatArrayOf(8f, 9f, 10f, 11f, 12f, 14f, 16f, 18f, 20f, 24f, 28f, 32f, 36f, 40f, 48f, 60f, 72f)
+        androidx.appcompat.app.AlertDialog.Builder(context).setTitle("Cỡ chữ")
+            .setItems(sizes.map { (if (it % 1f == 0f) it.toInt().toString() else it.toString()) + " pt" }.toTypedArray()) { _, i -> onPick(sizes[i]) }
+            .setNegativeButton("Hủy", null).show()
     }
 
     /** Keeps the unsaved edits in a draft (the app may be killed in the background). */
