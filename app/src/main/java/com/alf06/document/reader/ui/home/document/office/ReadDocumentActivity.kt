@@ -207,7 +207,14 @@ class ReadDocumentActivity :
             val editable = File(document.path).extension.lowercase() in EDITABLE_EXTENSIONS
             icEditApp.isVisible = ready && editable
             if (!ready) closeEditPanel()
-            if (ready && editable) offerDraft(File(document.path))
+            if (ready && editable) {
+                if (intent.getBooleanExtra(ARG_START_EDITING, false)) {
+                    intent.removeExtra(ARG_START_EDITING)
+                    toggleEditPanel()
+                } else {
+                    offerDraft(File(document.path))
+                }
+            }
         }
     }
 
@@ -581,6 +588,7 @@ class ReadDocumentActivity :
 
     companion object {
         const val ARG_DOCUMENT = "arg_document"
+        const val ARG_START_EDITING = "arg_start_editing"
         private const val TAG = "ReadDocumentActivity"
         private const val STATE_DOCUMENT = "state_document"
         private const val DISABLED_ALPHA = 0.3f

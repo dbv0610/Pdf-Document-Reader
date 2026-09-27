@@ -467,8 +467,8 @@ class LiveDocxSessionTest {
                     val docEnd = onMain { (reader.control!!.getView() as Word).getDocument().getAreaEnd(0) }
                     if (rnd.nextInt(6) == 0) caret = rnd.nextInt(docEnd.toInt() - 2).toLong() // jump elsewhere
                     caret = caret.coerceIn(1, docEnd - 2)
-                    val k = rnd.nextInt(12)
-                    kind = listOf("ins", "ins", "ins", "ins", "ins", "bs", "bs", "enter", "del", "bold", "repl", "paste")[k]
+                    val k = rnd.nextInt(14)
+                    kind = listOf("ins", "ins", "ins", "ins", "ins", "bs", "bs", "enter", "del", "bold", "repl", "paste", "undo", "redo")[k]
                     val ok = when (k) {
                         in 0..4 -> { val t = listOf("a", "ễ", " ", "xin ", "Đ").let { it[rnd.nextInt(it.size)] }; onMain { session.insertText(caret, t) }.also { if (it) caret += t.length } }
                         5, 6 -> onMain { session.deleteText(caret - 1, caret) }.also { if (it) caret -= 1 }
@@ -476,6 +476,8 @@ class LiveDocxSessionTest {
                         8 -> { val n = 1 + rnd.nextInt(5); onMain { session.deleteText(caret, caret + n) } }
                         9 -> onMain { session.setBold(caret - 1, caret + 2, rnd.nextBoolean()) }
                         10 -> { val n = 1 + rnd.nextInt(4); onMain { session.replaceText(caret - n, caret, "zz") }.also { if (it) caret += 2 - n } }
+                        12 -> onMain { session.undo() }
+                        13 -> onMain { session.redo() }
                         else -> onMain { session.insertText(caret, "dòng một\ndòng hai ") }.also { if (it) caret += 18 }
                     }
                     ops.append("$step@$caret:$kind:${if (ok) "ok" else session.lastError?.message}${if (!wasReopen && session.needsReopen) " REOPEN" else ""} ")

@@ -103,6 +103,21 @@ object AppUtils {
         MediaScannerConnection.scanFile(context.applicationContext, paths, null, null)
     }
 
+    /** Scan before opening so recents and the file list use the same stable media ID. */
+    suspend fun registerCreatedDocument(context: Context, file: File): RecentDocument = withContext(Dispatchers.IO) {
+        val uri = runCatching { scanPaths(context, listOf(file.absolutePath))[file.absolutePath] }.getOrNull()
+        val id = uri?.lastPathSegment?.toLongOrNull()
+            ?: runCatching { queryMediaId(context, file.absolutePath) }.getOrNull()
+            ?: fallbackId(file.absolutePath)
+        RecentDocument(
+            mediaId = id,
+            path = file.absolutePath,
+            lastModified = file.lastModified(),
+            size = file.length(),
+            type = requireNotNull(documentTypeOf(file)),
+        )
+    }
+
     private suspend fun scanPaths(context: Context, paths: List<String>): Map<String, Uri?> {
         if (paths.isEmpty()) return emptyMap()
         val results = mutableMapOf<String, Uri?>()
