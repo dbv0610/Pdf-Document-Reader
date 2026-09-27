@@ -11,6 +11,7 @@ import kotlin.math.roundToInt
 
 private const val REL_NUMBERING = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"
 private val BULLETS = listOf("\u25CF", "\u25CB", "\u25A0")
+private val RUN_FORMATS = setOf("b", "i", "u", "color", "sz", "highlight", "shd")
 private val NUMBER_FORMATS = listOf("decimal", "lowerLetter", "lowerRoman")
 
 /** Queued operations use ORIGINAL UTF-16 model offsets, with exclusive ends.
@@ -19,7 +20,13 @@ private val NUMBER_FORMATS = listOf("decimal", "lowerLetter", "lowerRoman")
  */
 class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     private data class Op(val start: Long, val end: Long, val type: String, val value: String = "",
-                          val image: File? = null, val width: Int = 0, val height: Int = 0)
+                          val image: File? = null, val width: Int = 0, val height: Int = 0) {
+        /** Run formatting on parts of an insert's text (chars [from, to) of [value]). */
+        val spans = ArrayList<Span>()
+    }
+    private data class Span(val from: Int, val to: Int, val type: String, val value: String)
+    // while set, run formatting goes to this insert's text instead of the original text
+    private var formatInto: Op? = null
     private val ops = ArrayList<Op>()
     var lastError: EditResult.Error? = null; private set
     private fun queue(op: Op): Boolean {
@@ -30,7 +37,33 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             else -> null
         }
         if (lastError != null) return false
+        formatInto?.let { target ->
+            if (op.type !in RUN_FORMATS || op.end > target.value.length) return invalid("Only run formatting applies to inserted text")
+            target.spans.add(Span(op.start.toInt(), op.end.toInt(), op.type, op.value))
+            return true
+        }
         ops.add(op); return true
+    }
+
+    /** Handle of the last queued operation, for [formatInserted]. */
+    fun lastOp(): Any? = ops.lastOrNull()
+
+    /**
+     * Runs [format] (calls like setBold(from, to, on)) on the text of the insert [handle]: its
+     * offsets count characters of that inserted text. Saved as runs split at the formatted parts.
+     */
+    fun formatInserted(handle: Any, format: () -> Boolean): Boolean {
+        val target = ops.firstOrNull { it === handle && it.type == "insert" } ?: return invalid("Inserted text not found")
+        formatInto = target
+        return try { format() } finally { formatInto = null }
+    }
+
+    /** Takes back the last [formatInserted] on [handle] (undo). */
+    fun unformatInserted(handle: Any): Boolean {
+        val target = ops.firstOrNull { it === handle } ?: return false
+        if (target.spans.isEmpty()) return false
+        target.spans.removeAt(target.spans.lastIndex)
+        return true
     }
     private fun invalid(message: String): Boolean { lastError = EditResult.Error(Reason.INVALID_ARGUMENT, message); return false }
     fun highlight(start: Long, end: Long, color: String = "yellow"): Boolean {
@@ -214,7 +247,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 if (op.type == "append") { append(op.value); continue }
                 checkRange(op)
                 when (op.type) {
-                    "insert" -> insert(boundary(op.start), op.value)?.let { insertionEnds[op.start] = it }
+                    "insert" -> (if (op.spans.isEmpty()) insert(boundary(op.start), op.value) else insertSpans(boundary(op.start), op))?.let { insertionEnds[op.start] = it }
                     "image" -> { val b = boundary(op.start); val run = image(op); addBefore(b.parent, b.before, run); insertionEnds[op.start] = run }
                     "delete", "replace" -> {
                         // Capture insertion anchor before removing original characters.
@@ -298,17 +331,33 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
         fun format(op: Op) {
             split(op.end); split(op.start)
-            pieces.filter { it.start < op.end && it.end > op.start }.forEach { piece ->
-                val pr = piece.run.firstChild(W, "rPr") ?: newElement(W, "rPr").also { addBefore(piece.run, piece.run.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
-                pr.childrenNamed(W, op.type).forEach { it.detach() }
-                if (op.type == "highlight") pr.childrenNamed(W, "shd").forEach { it.detach() }
-                if (op.type == "shd") pr.childrenNamed(W, "highlight").forEach { it.detach() }
-                pr.add(newElement(W, op.type).apply {
-                    addAttribute(QName(if (op.type == "shd") "fill" else "val", W), op.value)
-                    if (op.type == "shd") addAttribute(QName("val", W), "clear")
-                })
-                if (op.type == "sz") { pr.childrenNamed(W, "szCs").forEach { it.detach() }; pr.add(newElement(W, "szCs").apply { addAttribute(QName("val", W), op.value) }) }
+            pieces.filter { it.start < op.end && it.end > op.start }.forEach { piece -> runProp(piece.run, op.type, op.value) }
+        }
+        fun runProp(run: Element, type: String, value: String) {
+            val pr = run.firstChild(W, "rPr") ?: newElement(W, "rPr").also { addBefore(run, run.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
+            pr.childrenNamed(W, type).forEach { it.detach() }
+            if (type == "highlight") pr.childrenNamed(W, "shd").forEach { it.detach() }
+            if (type == "shd") pr.childrenNamed(W, "highlight").forEach { it.detach() }
+            pr.add(newElement(W, type).apply {
+                addAttribute(QName(if (type == "shd") "fill" else "val", W), value)
+                if (type == "shd") addAttribute(QName("val", W), "clear")
+            })
+            if (type == "sz") { pr.childrenNamed(W, "szCs").forEach { it.detach() }; pr.add(newElement(W, "szCs").apply { addAttribute(QName("val", W), value) }) }
+        }
+        /** Inserted text with formatted parts: one run per part. Single line only. */
+        fun insertSpans(b: Boundary, op: Op): Element? {
+            val text = op.value
+            if (text.contains('\n')) return insert(b, text)
+            val cuts = (listOf(0, text.length) + op.spans.flatMap { listOf(it.from, it.to) }).filter { it in 0..text.length }.distinct().sorted()
+            var last: Element? = null
+            for ((a, z) in cuts.zipWithNext()) {
+                if (a == z) continue
+                val run = textRun(text.substring(a, z), b.style)
+                addBefore(b.parent, b.before, run)
+                op.spans.filter { it.from <= a && it.to >= z }.forEach { runProp(run, it.type, it.value) }
+                last = run
             }
+            return last
         }
         fun boundary(at: Long): Boundary {
             if (opaqueSpans.values.any { at > it.first && at < it.last })

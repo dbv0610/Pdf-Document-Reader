@@ -21,8 +21,8 @@ import java.io.File
  *
  * Offsets are CURRENT model offsets (after the live text changes), end exclusive; the session
  * maps them to the file's original offsets for [DocxEditor]. Changes the view cannot show live
- * (a paragraph break, a range across paragraphs) are still saved: [needsReopen]. Formatting text
- * typed in this session is refused until saved ([lastError]). Main thread only.
+ * (a paragraph break, a range across paragraphs) are still saved: [needsReopen]. Text typed in
+ * this session is formatted through its queued insert (DocxEditor.formatInserted). Main thread only.
  */
 class LiveDocxSession(control: IControl, private val source: File) {
     private val word = control.getView() as? Word ?: error("Open a Word document first")
@@ -249,6 +249,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 last.text += text
                 last.edit.length = last.text.length.toLong()
                 editor.insertText(last.original, last.text)
+                last.handle = editor.lastOp()
                 redoStack.clear()
                 word.relayoutContent(offset)
                 return true
@@ -268,7 +269,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             }
             val edit = Edit.Insert(offset, text.length.toLong())
             edits.add(edit)
-            undoStack.add(TypingStep(offset, original, text, edit)); redoStack.clear()
+            undoStack.add(TypingStep(offset, original, text, edit).also { it.handle = editor.lastOp() }); redoStack.clear()
             word.relayoutContent(offset)
             return true
         }
@@ -423,6 +424,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             last.text = updated
             last.edit.length = updated.length.toLong()
             editor.insertText(last.original, updated)
+            last.handle = editor.lastOp()
         }
         redoStack.clear()
         word.relayoutContent(start)
@@ -433,6 +435,9 @@ class LiveDocxSession(control: IControl, private val source: File) {
     private inner class TypingStep(val at: Long, val original: Long, var text: String, val edit: Edit.Insert) : Step(
         undo = { false }, redo = { false },
     ) {
+        /** The queued insert of [text] (DocxEditor.lastOp), to format parts of it. */
+        var handle: Any? = null
+
         override fun runUndo(): Boolean {
             val doc = word.getDocument() as? WPDocument ?: return false
             if (!editor.undoLast()) return false
@@ -445,6 +450,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         override fun runRedo(): Boolean {
             val doc = word.getDocument() as? WPDocument ?: return false
             if (!editor.insertText(original, text) || !doc.insertMainText(at, text)) return false
+            handle = editor.lastOp()
             edits.add(edit)
             word.relayoutContent(at)
             return true
@@ -488,10 +494,33 @@ class LiveDocxSession(control: IControl, private val source: File) {
         synchronized(layoutLock) {
             ownError = null
             if (end <= start) return refuse("Empty range")
-            if (touchesTyped(start, end)) return refuse("Save first to format text typed in this session")
-            val os = toOriginal(start)
-            val oe = toOriginal(end)
-            if (!fileOp(editor, os, oe)) return false
+            // original text and text typed in this session take different file operations
+            val parts = ArrayList<Triple<Long, Long, Pair<TypingStep, Int>?>>()
+            var i = start
+            while (i < end) {
+                val typed = typedAt(i)
+                var j = i + 1
+                while (j < end && typedAt(j)?.first === typed?.first) j++
+                if (typed == null && touchesTyped(i, j)) return refuse("Save first to format this text")
+                parts.add(Triple(i, j, typed))
+                i = j
+            }
+            val fileOps = parts.map { (s, e, typed) ->
+                if (typed == null) {
+                    val os = toOriginal(s); val oe = toOriginal(e)
+                    ({ fileOp(editor, os, oe) } to { editor.undoLast() })
+                } else {
+                    val (step, from) = typed
+                    val to = from + (e - s)
+                    ({ step.handle?.let { h -> editor.formatInserted(h) { fileOp(editor, from.toLong(), to) } } == true } to
+                        { step.handle?.let { editor.unformatInserted(it) } == true })
+                }
+            }
+            fun redoFile(): Boolean {
+                for ((k, op) in fileOps.withIndex()) if (!op.first()) { for (u in fileOps.take(k).asReversed()) u.second(); return false }
+                return true
+            }
+            if (!redoFile()) return false
             val targets = leaves(start, end)
             val before = targets.map { it.getAttribute().clone() }
             targets.forEach { apply(it.getAttribute()) }
@@ -502,11 +531,28 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 word.relayoutContent(start)
             }
             undoStack.add(Step(
-                undo = { editor.undoLast().also { if (it) restore(before) } },
-                redo = { fileOp(editor, os, oe).also { if (it) restore(after) } },
+                undo = { fileOps.asReversed().all { it.second() }.also { restore(before) } },
+                redo = { redoFile().also { if (it) restore(after) } },
             ))
             redoStack.clear()
             return true
         }
+    }
+
+    /** The typing step whose text holds the character at [pos], and its index there. */
+    private fun typedAt(pos: Long): Pair<TypingStep, Int>? {
+        var x = pos
+        for (edit in edits.asReversed()) when (edit) {
+            is Edit.Insert -> {
+                val a = edit.at
+                if (x >= a && x < a + edit.length) {
+                    val step = undoStack.firstOrNull { it is TypingStep && it.edit === edit } as? TypingStep ?: return null
+                    return step to (x - a).toInt()
+                }
+                if (x >= a + edit.length) x -= edit.length
+            }
+            is Edit.Delete -> if (x >= edit.at) x += edit.length
+        }
+        return null
     }
 }

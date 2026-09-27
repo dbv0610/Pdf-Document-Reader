@@ -119,12 +119,12 @@ class LiveDocxSessionTest {
             // format original text after the edits: offsets are mapped for the file
             val mNow = cNow + "Ánh xạ ".length
             assertTrue(session.lastError?.toString(), onMain { session.setBold(mNow, mNow + 3, true) })
-            // formatting typed text is refused until saved
-            assertTrue(!onMain { session.setBold(a, a + 3, true) })
-            // undo the bold and the replace, redo them
-            assertTrue(onMain { session.undo() }); assertTrue(onMain { session.undo() })
+            // typed text can be formatted too
+            assertTrue(session.lastError?.toString(), onMain { session.setBold(a, a + 3, true) })
+            // undo both bolds and the replace, redo them
+            repeat(3) { assertTrue(onMain { session.undo() }) }
             assertEquals("Map mỗi", modelText(reader, cNow, 7))
-            assertTrue(onMain { session.redo() }); assertTrue(onMain { session.redo() })
+            repeat(3) { assertTrue(onMain { session.redo() }) }
             assertEquals("Ánh xạ mỗi", modelText(reader, cNow, 10))
             assertTrue(!session.needsReopen)
             val result = onMain { session.save(saved) }
@@ -392,6 +392,48 @@ class LiveDocxSessionTest {
             assertEquals("bullet list id saved", bulletId, onMain { session.listAt(offsetOf(saved.absolutePath, "Paragraph 2")) })
             assertTrue(onMain { session.hasNumbering(offsetOf(saved.absolutePath, "Paragraph 4")) })
             assertEquals("level saved", 1, onMain { session.listLevelAt(offsetOf(saved.absolutePath, "Paragraph 4")) })
+        }
+    }
+
+    @Test
+    fun formatTypedText() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_fmt_typed.docx")
+        val saved = OpenDocument.output("live_docx_fmt_typed_saved.docx")
+        var liveItalicBan = false
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val at = offsetOf(source.absolutePath, "Luồng từ file .mid")
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(onMain { session.insertText(at, "Xin chào ") })
+            // bold "chào" (typed only)
+            assertTrue(session.lastError?.toString(), onMain { session.setBold(at + 4, at + 8, true) })
+            assertTrue(bold(reader, at + 5))
+            assertFalse(bold(reader, at + 1))
+            // italic "ào Luồng": typed + original text in one step
+            assertTrue(session.lastError?.toString(), onMain { session.setItalic(at + 6, at + 14, true) })
+            assertTrue(onMain { session.undo() })
+            assertTrue(onMain { session.redo() })
+            // more typing after formatting starts a new insert
+            assertTrue(onMain { session.insertText(at + 9, "bạn ") })
+            liveItalicBan = onMain {
+                val doc = (reader.control!!.getView() as Word).getDocument()
+                AttrManage.instance().getFontItalic(doc.getParagraph(at + 10)!!.getAttribute(), doc.getLeaf(at + 10)!!.getAttribute())
+            }
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val at = offsetOf(saved.absolutePath, "Xin chào bạn Luồng từ file .mid")
+            assertTrue("text saved", at >= 0)
+            assertFalse("Xin not bold", bold(reader, at + 1))
+            assertTrue("chào bold", bold(reader, at + 5))
+            val italic = { o: Long -> onMain {
+                val doc = (reader.control!!.getView() as Word).getDocument()
+                AttrManage.instance().getFontItalic(doc.getParagraph(o)!!.getAttribute(), doc.getLeaf(o)!!.getAttribute())
+            } }
+            assertTrue("ào italic", italic(at + 7))
+            assertEquals("bạn saved as shown", liveItalicBan, italic(at + 10))
+            assertTrue("Luồng italic", italic(at + 13 + 1))
+            assertFalse("từ not italic", italic(at + 13 + 7))
         }
     }
 
