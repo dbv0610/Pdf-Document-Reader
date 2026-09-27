@@ -5,6 +5,7 @@ import com.wxiwei.office.editor.OpenDocument.onMain
 import com.wxiwei.office.editor.docx.DocxEditor
 import com.wxiwei.office.editor.docx.DocxSourceMap
 import com.wxiwei.office.wp.control.Word
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,6 +66,72 @@ class DocxEditorTest {
         val at = xml.indexOf("Trang")
         val runStart = Regex("<w:r[ >]").findAll(xml.substring(0, at)).last().range.first
         assertTrue(xml.substring(runStart, at), xml.substring(runStart, at).contains("<w:b w:val=\"1\""))
+    }
+
+    /** sample.docx with a first-page header (titlePg) and an even-page header (evenAndOddHeaders). */
+    private fun firstAndEvenHeaders(name: String): java.io.File {
+        val source = OpenDocument.copySample("sample.docx", "$name.src.docx")
+        val out = OpenDocument.output("$name.docx")
+        val ns = "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
+        fun header(text: String) = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:hdr $ns><w:p><w:r><w:t>$text</w:t></w:r></w:p></w:hdr>"
+        java.util.zip.ZipFile(source).use { zip ->
+            java.util.zip.ZipOutputStream(out.outputStream()).use { zos ->
+                fun put(name: String, bytes: ByteArray) { zos.putNextEntry(java.util.zip.ZipEntry(name)); zos.write(bytes); zos.closeEntry() }
+                for (entry in zip.entries()) {
+                    var text = zip.getInputStream(entry).readBytes().toString(Charsets.UTF_8)
+                    when (entry.name) {
+                        "word/document.xml" -> text = text
+                            .replace("<w:headerReference r:id=\"rId3\" w:type=\"default\"/>",
+                                "<w:headerReference r:id=\"rId3\" w:type=\"default\"/><w:headerReference r:id=\"rId90\" w:type=\"first\"/><w:headerReference r:id=\"rId91\" w:type=\"even\"/>")
+                            .replace("<w:docGrid ", "<w:titlePg/><w:docGrid ")
+                        "word/_rels/document.xml.rels" -> text = text.replace("</Relationships>",
+                            "<Relationship Id=\"rId90\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header2.xml\"/>" +
+                            "<Relationship Id=\"rId91\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header3.xml\"/></Relationships>")
+                        "[Content_Types].xml" -> text = text.replace("</Types>",
+                            "<Override PartName=\"/word/header2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>" +
+                            "<Override PartName=\"/word/header3.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/></Types>")
+                        "word/settings.xml" -> text = Regex("<w:settings[^>]*>").replace(text) { it.value + "<w:evenAndOddHeaders/>" }
+                    }
+                    put(entry.name, text.toByteArray())
+                }
+                put("word/header2.xml", header("TRANG ĐẦU").toByteArray())
+                put("word/header3.xml", header("TRANG CHẴN").toByteArray())
+            }
+        }
+        return out
+    }
+
+    /** Page 1 shows the first-page header, page 2 the even one, page 3 the default; the first-page one is edited and saved to header2.xml. */
+    @Test
+    fun firstAndEvenPageHeaders() {
+        val file = firstAndEvenHeaders("docx_first_even")
+        val saved = OpenDocument.output("docx_first_even_saved.docx")
+        OpenDocument.open(file, { it.layout != null && it.pageCount >= 3 }) { reader ->
+            kotlinx.coroutines.delay(1000)
+            val (headers, footers) = onMain {
+                val word = reader.control!!.getView() as Word
+                val root = if (word.getCurrentRootType() == com.wxiwei.office.constant.wp.WPViewConstant.PRINT_ROOT.toInt())
+                    word.getPrintWord().getListView().model as com.wxiwei.office.wp.view.PageRoot
+                else word.getRoot(com.wxiwei.office.constant.wp.WPViewConstant.PAGE_ROOT.toInt()) as com.wxiwei.office.wp.view.PageRoot
+                val pages = (0 until 3).map { root.getPageView(it)!! }
+                pages.map { p -> p.getHeader()?.getElement()?.let { e -> word.getDocument().getText(e.getStartOffset(), e.getEndOffset()).trim() } } to pages.map { it.getFooter() != null }
+            }
+            assertEquals(listOf("TRANG ĐẦU", "TRANG CHẴN"), headers.take(2))
+            assertTrue(headers[2].toString(), headers[2]!!.startsWith("PianoLearn"))
+            // no first-page or even footer in the file: only page 3 has one
+            assertEquals(listOf(false, false, true), footers)
+            val (base, text) = story(file.absolutePath, com.wxiwei.office.constant.wp.WPModelConstant.HEADER).let { (b, t) -> b to t }
+            val at = base + text.indexOf("TRANG ĐẦU")
+            val editor = DocxEditor(file, DocxSourceMap.get(file.absolutePath)!!)
+            assertTrue(editor.lastError?.toString(), editor.replaceText(at, at + "TRANG ĐẦU".length, "BÌA"))
+            assertTrue(editor.save(saved) is EditResult.Ok)
+        }
+        java.util.zip.ZipFile(saved).use { z ->
+            fun part(n: String) = z.getInputStream(z.getEntry(n)).readBytes().toString(Charsets.UTF_8)
+            assertTrue(part("word/header2.xml").contains("BÌA"))
+            assertTrue(part("word/header3.xml").contains("TRANG CHẴN"))
+            assertTrue(part("word/header1.xml").contains("PianoLearn"))
+        }
     }
 
     @Test

@@ -21,14 +21,17 @@ class DocxSourceMap {
     private var paraStarts = LongArray(32)
     private var paraEnds = LongArray(32)
     var paragraphCount = 0; private set
-    // XML part of each editable area (offset & AREA_MASK): the body, the shown header and footer
-    private val parts = HashMap<Long, String>().apply { put(0L, "word/document.xml") }
+    /** An XML part and the model offsets [start, end) read from it. */
+    data class Part(val start: Long, val end: Long, val name: String)
+    // the body, then each header and footer read (default, first page, even pages)
+    private val parts = arrayListOf(Part(0L, 0x1000000000000000L, "word/document.xml"))
 
-    /** Leaves and paragraphs of [area] (offset & AREA_MASK) come from [part]; their run and paragraph
-     *  indices count from 0 in that part. */
-    @Synchronized fun setPart(area: Long, part: String) { parts[area] = part }
-    @Synchronized fun part(area: Long): String? = parts[area]
-    @Synchronized fun areas(): Map<Long, String> = HashMap(parts)
+    /** Leaves and paragraphs in [start, end) come from [part]; their run and paragraph indices count
+     *  from 0 in that part. */
+    @Synchronized fun setPart(start: Long, end: Long, part: String) { parts.add(Part(start, maxOf(end, start + 1), part)) }
+    /** The part the model offset [offset] was read from, or null (text boxes, notes...). */
+    @Synchronized fun partAt(offset: Long): Part? = parts.firstOrNull { offset >= it.start && offset < it.end }
+    @Synchronized fun parts(): List<Part> = ArrayList(parts)
 
     @Synchronized fun addLeaf(start: Long, end: Long, runIndices: IntArray, text: String, kind: Kind) {
         require(start >= 0 && end >= start && end - start == text.length.toLong())

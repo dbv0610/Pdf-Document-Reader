@@ -57,7 +57,34 @@ class WPDocument : STDocument() {
         getRootCollection(offset)?.addElement(elem)
     }
 
-    override fun getHFElement(offset: Long, type: Byte): IElement? = getRootCollection(offset)?.getElement(offset)
+    /** Header or footer ([offset] gives the area) of [type] (HF_FIRST, HF_ODD, HF_EVEN), or null. */
+    override fun getHFElement(offset: Long, type: Byte): IElement? {
+        val c = getRootCollection(offset) ?: return null
+        for (i in 0 until c.size()) {
+            val e = c.getElementForIndex(i) as? HFElement ?: continue
+            if (e.getHFType() == type) return e
+        }
+        return null
+    }
+
+    /** Word's titlePg: the first page has its own header and footer (none when it has no "first" one). */
+    var titlePage = false
+        private set
+    /** settings evenAndOddHeaders: even pages have their own header and footer. */
+    var evenAndOddHeaders = false
+        private set
+
+    fun setHeaderPages(titlePage: Boolean, evenAndOdd: Boolean) {
+        this.titlePage = titlePage
+        this.evenAndOddHeaders = evenAndOdd
+    }
+
+    /** Which header/footer a page shows (page numbers from 1). */
+    fun hfTypeForPage(pageNumber: Int): Byte = when {
+        titlePage && pageNumber == 1 -> WPModelConstant.HF_FIRST
+        evenAndOddHeaders && pageNumber % 2 == 0 -> WPModelConstant.HF_EVEN
+        else -> WPModelConstant.HF_ODD
+    }
 
     override fun getFEElement(offset: Long): IElement? = null
 

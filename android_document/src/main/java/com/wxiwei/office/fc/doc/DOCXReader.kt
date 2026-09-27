@@ -119,6 +119,8 @@ internal fun String?.toFloatSafe(default: Float = 0f): Float = this?.trim()?.toF
  * "FF0000" / "#FF0000" / "#80FF0000" -> màu ARGB. Giá trị lạ ("auto", rỗng...) -> default.
  * Nhanh hơn Color.parseColor("#" + v) (không nối chuỗi) và không ném exception.
  */
+private const val SETTINGS_PART = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
+
 internal fun parseHexColor(value: String?, default: Int): Int {
     if (value.isNullOrEmpty()) return default
     val hex = if (value[0] == '#') value.substring(1) else value
@@ -608,13 +610,25 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
      * reader
      */
     @Throws(Exception::class)
-    private fun processHeaderAndFooter(hfRel: PackageRelationship?, isHeader: Boolean) {
+    /** w:evenAndOddHeaders in settings.xml: even pages have their own header and footer. */
+    private fun evenAndOddHeaders(): Boolean = try {
+        val rel = mainPart.getRelationshipsByType(SETTINGS_PART).getRelationship(0)
+        val part = rel?.let { zip.getPart(it.targetURI) }
+        part?.inputStream?.use { input -> SAXReader().read(input)?.rootElement?.element("evenAndOddHeaders")?.let { isOnOff(it) } } == true
+    } catch (e: Exception) { false }
+
+    // next free offsets of the header and footer stories: several headers (first, odd, even) follow each other
+    private var headerNext = WPModelConstant.HEADER
+    private var footerNext = WPModelConstant.FOOTER
+
+    private fun processHeaderAndFooter(hfRel: PackageRelationship?, isHeader: Boolean, hfType: Byte = WPModelConstant.HF_ODD) {
         if (hfRel != null) {
             val part = zip.getPart(hfRel.targetURI)
             hfPart = part
             if (part != null) {
                 isProcessHF = true
-                offset = if (isHeader) WPModelConstant.HEADER else WPModelConstant.FOOTER
+                offset = if (isHeader) headerNext else footerNext
+                val hfStart = offset
                 val saxreader = SAXReader()
                 val input: InputStream = part.inputStream
                 val doc = saxreader.read(input)
@@ -623,7 +637,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 
                 val hfElem = HFElement(
                     if (isHeader) WPModelConstant.HEADER_ELEMENT else WPModelConstant.FOOTER_ELEMENT,
-                    WPModelConstant.HF_ODD
+                    hfType
                 )
                 hfElem.setStartOffset(offset)
 
@@ -644,7 +658,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     while (children!!.hasNext()) index(children.next() as Element)
                 }
                 paras.filter { it.name == "p" || it.name == "tbl" || it.name == "sdt" }.forEach { index(it) }
-                editMap.setPart(offset, part.partName.name.removePrefix("/"))
+                val partName = part.partName.name.removePrefix("/")
 
                 processParagraphs(paras)
                 editRuns.clear(); editParas.clear()
@@ -652,6 +666,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 
                 hfElem.setEndOffset(offset)
                 document.appendElement(hfElem, offset)
+                editMap.setPart(hfStart, offset, partName)
+                if (isHeader) headerNext = offset else footerNext = offset
 
                 input.close()
                 isProcessHF = false
@@ -792,59 +808,28 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 }
             }
         }
-        // header
+        // header and footer: the default one, and the first-page (titlePg) and even-page
+        // (settings evenAndOddHeaders) ones when the document uses them
         val a = offset
-        //
-        val headers = sectPr.childElements("headerReference")
-        if (headers.isNotEmpty()) {
-            var id: String? = ""
-            if (headers.size == 1) {
-                id = headers[0].attributeValue("id")
-            } else {
-                for (header in headers) {
-                    if ("default" == header.attributeValue("type")) {
-                        id = header.attributeValue("id")
-                        break
-                    }
+        val titlePage = sectPr.element("titlePg")?.let { isOnOff(it) } == true
+        val evenAndOdd = evenAndOddHeaders()
+        wpdoc?.setHeaderPages(titlePage, evenAndOdd)
+        for (isHeader in listOf(true, false)) {
+            val refs = sectPr.childElements(if (isHeader) "headerReference" else "footerReference")
+            for (ref in refs) {
+                val type = when (ref.attributeValue("type")) {
+                    "first" -> if (titlePage) WPModelConstant.HF_FIRST else continue
+                    "even" -> if (evenAndOdd) WPModelConstant.HF_EVEN else continue
+                    "default", null -> WPModelConstant.HF_ODD
+                    else -> continue
                 }
-            }
-            if (!id.isNullOrEmpty()) {
+                val id = ref.attributeValue("id")
+                if (id.isNullOrEmpty()) continue
                 try {
-                    val hfRel = mainPart.getRelationshipsByType(PackageRelationshipTypes.HEADER_PART)
+                    val hfRel = mainPart.getRelationshipsByType(if (isHeader) PackageRelationshipTypes.HEADER_PART else PackageRelationshipTypes.FOOTER_PART)
                         .getRelationshipByID(id)
-                    if (hfRel != null) {
-                        processHeaderAndFooter(hfRel, true)
-                    }
+                    if (hfRel != null) processHeaderAndFooter(hfRel, isHeader, type)
                 } catch (e: Exception) {
-                    logD("writerLog " + "1")
-                    control!!.getSysKit().getErrorKit().writerLog(e, true)
-                }
-            }
-        }
-
-        // footer
-        val footers = sectPr.childElements("footerReference")
-        if (footers.isNotEmpty()) {
-            var id: String? = ""
-            if (footers.size == 1) {
-                id = footers[0].attributeValue("id")
-            } else {
-                for (footer in footers) {
-                    if ("default" == footer.attributeValue("type")) {
-                        id = footer.attributeValue("id")
-                        break
-                    }
-                }
-            }
-            if (!id.isNullOrEmpty()) {
-                try {
-                    val hfRel = mainPart.getRelationshipsByType(PackageRelationshipTypes.FOOTER_PART)
-                        .getRelationshipByID(id)
-                    if (hfRel != null) {
-                        processHeaderAndFooter(hfRel, false)
-                    }
-                } catch (e: Exception) {
-                    logD("writerLog " + "2")
                     control!!.getSysKit().getErrorKit().writerLog(e, true)
                 }
             }

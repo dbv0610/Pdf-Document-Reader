@@ -57,11 +57,11 @@ class WPLayouter(root: PageRoot) {
     // 段落分页
     private var breakPara: ParagraphView? = null
 
-    // header
-    private var header: TitleView? = null
+    // header of each kind of page (HF_FIRST, HF_ODD, HF_EVEN), laid out on first use
+    private val headers = HashMap<Byte, Optional>()
 
-    // footer
-    private var footer: TitleView? = null
+    // footer of each kind of page
+    private val footers = HashMap<Byte, Optional>()
 
     //
     private var tableLayout: TableLayoutKit? = null
@@ -303,49 +303,61 @@ class WPLayouter(root: PageRoot) {
 
     private fun layoutHeaderAndFooter(pageView: PageView) {
         val pageAttr = pageAttr!!
-        if (header == null) {
-            header = layoutHFParagraph(pageView, true)
+        // first page, even pages and the others may each have their own header and footer
+        val type = (doc as? WPDocument)?.hfTypeForPage(pageView.getPageNumber()) ?: WPModelConstant.HF_ODD
+        // laid out once per kind of page (its shapes are collected then); later pages add them again
+        val cachedHeader = headers[type]
+        val header: TitleView?
+        if (cachedHeader == null) {
+            header = layoutHFParagraph(pageView, true, type)
+            headers[type] = Optional(header)
             if (header != null) {
-                val h = header!!.getLayoutSpan(WPViewConstant.Y_AXIS)
-                if (pageAttr.headerMargin + h > pageAttr.topMargin) {
-                    pageAttr.topMargin = pageAttr.headerMargin + h
-                }
-                header!!.setParentView(pageView)
+                val height = header.getLayoutSpan(WPViewConstant.Y_AXIS)
+                if (pageAttr.headerMargin + height > pageAttr.topMargin) pageAttr.topMargin = pageAttr.headerMargin + height
+                header.setParentView(pageView)
             }
         } else {
-            for (sv in shapeViews) {
-                if (WPViewKit.instance().getArea(sv.getStartOffset(null)) == WPModelConstant.HEADER) {
-                    pageView.addShapeView(sv)
-                }
-            }
+            header = cachedHeader.view
+            if (header != null) addHFShapes(pageView, header)
         }
         pageView.setHeader(header)
-        if (footer == null) {
-            footer = layoutHFParagraph(pageView, false)
+        val cachedFooter = footers[type]
+        val footer: TitleView?
+        if (cachedFooter == null) {
+            footer = layoutHFParagraph(pageView, false, type)
+            footers[type] = Optional(footer)
             if (footer != null) {
-                if (footer!!.getY() < pageAttr.pageHeight - pageAttr.bottomMargin) {
-                    pageAttr.bottomMargin = pageAttr.pageHeight - footer!!.getY()
-                }
-                footer!!.setParentView(pageView)
+                if (footer.getY() < pageAttr.pageHeight - pageAttr.bottomMargin) pageAttr.bottomMargin = pageAttr.pageHeight - footer.getY()
+                footer.setParentView(pageView)
             }
         } else {
-            for (sv in shapeViews) {
-                if (WPViewKit.instance().getArea(sv.getStartOffset(null)) == WPModelConstant.FOOTER) {
-                    pageView.addShapeView(sv)
-                }
-            }
+            footer = cachedFooter.view
+            if (footer != null) addHFShapes(pageView, footer)
         }
-
         pageView.setFooter(footer)
     }
 
-    private fun layoutHFParagraph(pageView: PageView, isHeader: Boolean): TitleView? {
+    /** A laid-out header/footer, or none for that kind of page. */
+    private class Optional(val view: TitleView?)
+
+    /** The shapes anchored in [title] (laid out for an earlier page) also go on [pageView]. */
+    private fun addHFShapes(pageView: PageView, title: TitleView) {
+        val elem = title.getElement() ?: return
+        for (sv in shapeViews) {
+            val o = sv.getStartOffset(null)
+            if (o >= elem.getStartOffset() && o < elem.getEndOffset()) pageView.addShapeView(sv)
+        }
+    }
+
+    private fun layoutHFParagraph(pageView: PageView, isHeader: Boolean, type: Byte): TitleView? {
         val doc = doc!!
         val pageAttr = pageAttr!!
         val root = root!!
-        var offset = if (isHeader) WPModelConstant.HEADER else WPModelConstant.FOOTER
+        val hfElem = doc.getHFElement(if (isHeader) WPModelConstant.HEADER else WPModelConstant.FOOTER, type) ?: return null
+        // an empty header part: nothing to show
+        if (hfElem.getEndOffset() <= hfElem.getStartOffset()) return null
+        var offset = hfElem.getStartOffset()
         var breakType = WPViewConstant.BREAK_NO.toInt()
-        val hfElem = doc.getHFElement(offset, WPModelConstant.HF_ODD) ?: return null
 
         //ignore line pitch for header and footer layout
         val oldLinePitch = pageAttr.pageLinePitch
@@ -557,8 +569,8 @@ class WPLayouter(root: PageRoot) {
         root = null
         doc = null
         breakPara = null
-        header = null
-        footer = null
+        headers.clear()
+        footers.clear()
         tableLayout = null
         hfTableLayout = null
         shapeViews.clear()
