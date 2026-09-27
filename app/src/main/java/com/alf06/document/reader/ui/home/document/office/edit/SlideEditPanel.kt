@@ -24,6 +24,10 @@ import java.io.File
 internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumentView, file: File) :
     OfficeEditPanel(activity, reader, file) {
 
+    // the file the view and the session work on: the original, or a working copy in the cache after
+    // edits that needed a reopen (slides added, moved...); Save writes it over the original
+    private var working = file
+    private var workingChanged = false
     private var session = LivePptxSession(reader.control!!, file)
     private var shapeId = -1
     // position of the selected shape including moves not saved yet (listShapes reads the file)
@@ -33,16 +37,14 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     override val view: View = column().apply {
         addView(line(button("Danh sách", bold = true) { pickShape() }, selected, weights = floatArrayOf(0f, 1f)))
-        addView(line(text, button("Đổi chữ") { setText() }, button("+ Text box") { addTextBox() }, weights = floatArrayOf(1f, 0f, 0f)))
+        addView(line(text, button("Đổi chữ") { setText() }, button("+ Text box") { addTextBox() }, button("+ Ảnh") { pickImage() },
+            weights = floatArrayOf(1f, 0f, 0f, 0f)))
         addView(toolRow(
             button("B", bold = true) { toggle { TextFormat(bold = it.bold != true) } },
             button("I") { toggle { TextFormat(italic = it.italic != true) } },
             button("U") { toggle { TextFormat(underline = it.underline != true) } },
-            button("Chữ đỏ") { format(TextFormat(rgbHex = "C00000")) },
-            button("Chữ đen") { format(TextFormat(rgbHex = "000000")) },
-            button("Cỡ 18") { format(TextFormat(sizePt = 18f)) },
-            button("Cỡ 28") { format(TextFormat(sizePt = 28f)) },
-            button("Cỡ 40") { format(TextFormat(sizePt = 40f)) },
+            button("Màu chữ") { pickColor("Màu chữ") { c -> c?.let { format(TextFormat(rgbHex = it)) } } },
+            button("Cỡ chữ") { pickSize { format(TextFormat(sizePt = it)) } },
             button("⇤") { format(TextFormat(align = "l")) },
             button("↔") { format(TextFormat(align = "ctr")) },
             button("⇥") { format(TextFormat(align = "r")) },
@@ -54,14 +56,15 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("↓") { move(0, 1) },
             button("⟳ 90°") { if (shapeId < 0) toast("Chọn shape trước") else rotate((this@SlideEditPanel.overlay.shapeRotation + 90f) % 360f) },
             button("Xóa", color = 0xFFC00000.toInt()) { delete() },
-            button("+ Slide trống") { slideOp("thêm") { session.addBlankSlide(slide()) } },
-            button("⧉ Nhân bản slide") { slideOp("nhân bản") { session.duplicateSlide(slide()) } },
-            button("Slide ↑") { slideOp("di chuyển") { slide() > 0 && session.moveSlide(slide(), slide() - 1) } },
-            button("Slide ↓") { slideOp("di chuyển") { slide() < session.slideCount() - 1 && session.moveSlide(slide(), slide() + 1) } },
-            button("Xóa slide", color = 0xFFC00000.toInt()) { slideOp("xóa") { session.deleteSlide(slide()) } },
+            button("+ Slide trống") { slideOp("thêm", { it + 1 }) { session.addBlankSlide(slide()) } },
+            button("⧉ Nhân bản slide") { slideOp("nhân bản", { it + 1 }) { session.duplicateSlide(slide()) } },
+            button("Slide ↑") { slideOp("di chuyển", { it - 1 }) { slide() > 0 && session.moveSlide(slide(), slide() - 1) } },
+            button("Slide ↓") { slideOp("di chuyển", { it + 1 }) { slide() < session.slideCount() - 1 && session.moveSlide(slide(), slide() + 1) } },
+            button("Xóa slide", color = 0xFFC00000.toInt()) { slideOp("xóa", { it - 1 }) { session.deleteSlide(slide()) } },
             button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") else afterUndo() },
             button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") else afterUndo() },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
+            button("Lưu bản sao") { stopInline(commit = true); saveCopy() },
         ))
     }
 
@@ -313,6 +316,46 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         }
     }
 
+    /** Picks a picture from the device and puts it in the middle of the slide, half its width at most. */
+    private fun pickImage() {
+        var launcher: androidx.activity.result.ActivityResultLauncher<String>? = null
+        launcher = activity.activityResultRegistry.register("slide-image-" + System.nanoTime(),
+            androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+            launcher?.unregister()
+            if (uri != null) addImage(uri)
+        }
+        launcher.launch("image/*")
+    }
+
+    private fun addImage(uri: android.net.Uri) {
+        val type = context.contentResolver.getType(uri) ?: "image/jpeg"
+        val ext = when { type.contains("png") -> "png"; type.contains("gif") -> "gif"; type.contains("bmp") -> "bmp"; else -> "jpeg" }
+        val image = File(context.cacheDir, "slide-image-" + System.nanoTime() + "." + ext)
+        try {
+            context.contentResolver.openInputStream(uri)!!.use { input -> image.outputStream().use { input.copyTo(it) } }
+        } catch (e: Exception) {
+            return toast("Không đọc được ảnh")
+        }
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(image.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return toast("Không đọc được ảnh")
+        val size = session.slideSizeEmu()
+        // half the slide width, or less so it fits the height
+        var w = size.width / 2
+        var h = w * bounds.outHeight / bounds.outWidth
+        if (h > size.height * 4 / 5) { h = size.height * 4 / 5; w = h * bounds.outWidth / bounds.outHeight }
+        val rect = Rect((size.width - w) / 2, (size.height - h) / 2, w, h)
+        val id = session.addImage(slide(), rect, image)
+        if (id < 0) return toast(session.lastError?.message ?: "Không thêm được ảnh")
+        shapeId = id
+        this.rect = rect
+        overlay.keepAspect = true
+        overlay.slideIndex = slide()
+        overlay.selection = rect
+        selected.text = "#$id ảnh"
+        reopenHint()
+    }
+
     private fun addTextBox() {
         val content = text.text.toString().ifBlank { "Text box" }
         val size = session.slideSizeEmu()
@@ -328,34 +371,57 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         }
     }
 
-    private fun slideOp(what: String, op: () -> Boolean) {
-        if (!op()) toast(session.lastError?.message ?: "Không $what được slide")
-        else toast("Đã $what slide, sẽ hiện sau khi Lưu")
+    /** A slide change, shown at once by reopening a working copy; [show] is the slide to go to. */
+    private fun slideOp(what: String, show: (Int) -> Int = { it }, op: () -> Boolean) {
+        stopInline(commit = true)
+        val at = slide()
+        if (!op()) return toast(session.lastError?.message ?: "Không $what được slide")
+        reloadWorking(show(at).coerceIn(0, maxOf(0, session.slideCount() - 1)))
     }
 
-    /** Some edits (shapes inside groups) are saved but not shown until the file is reopened. */
+    /**
+     * Writes every edit to a new working copy in the cache and shows it: the original file is only
+     * written by Save.
+     */
+    private fun reloadWorking(slideIndex: Int) {
+        select(null)
+        val next = workingCopy()
+        val result = session.save(next)
+        if (result !is EditResult.Ok) return report(result, "")
+        val previous = working
+        working = next
+        workingChanged = true
+        reopen(next) {
+            session = LivePptxSession(reader.control!!, next)
+            if (previous != file) previous.delete()
+            (reader.control?.getView() as? Presentation)?.showSlide(slideIndex, false)
+            reader.invalidateThumbnail(slideIndex + 1)
+        }
+    }
+
+    /** Edits the view cannot show at once (shapes inside groups) are shown by reopening a working copy. */
     private fun reopenHint() {
         reader.invalidateThumbnail(slide() + 1)
-        if (session.needsReopen) toast("Thay đổi sẽ hiện đầy đủ sau khi lưu và mở lại")
+        if (session.needsReopen) reloadWorking(slide())
     }
-
-    private var reopenAfterSave = false
-
 
     override fun hasChanges(): Boolean {
         stopInline(commit = true)
-        return session.hasChanges()
+        return session.hasChanges() || workingChanged
     }
 
     override fun writeTo(target: File): EditResult {
-        reopenAfterSave = session.needsReopen
-        return session.save(target)
+        if (session.hasChanges()) return session.save(target)
+        working.copyTo(target, overwrite = true)
+        return EditResult.Ok(target)
     }
 
     override fun onSaved() {
         select(null)
-        // slide changes and some shape edits only show after reading the file again
-        if (reopenAfterSave) reader.open(file.absolutePath)
+        // the view already shows what was saved; edit the original from now on
+        if (working != file) working.delete()
+        working = file
+        workingChanged = false
         session = LivePptxSession(reader.control!!, file)
     }
 

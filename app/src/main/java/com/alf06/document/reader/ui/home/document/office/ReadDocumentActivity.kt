@@ -208,8 +208,10 @@ class ReadDocumentActivity :
         collectFlow(reader.state.map { it.status == ReaderState.Status.Ready }.distinctUntilChanged()) { ready ->
             val editable = File(document.path).extension.lowercase() in EDITABLE_EXTENSIONS
             icEditApp.isVisible = ready && editable
+            // an editor reopening its working copy keeps its panel
+            if (this@ReadDocumentActivity.editPanel?.reopening == true) return@collectFlow
             if (!ready) closeEditPanel()
-            if (ready && editable) {
+            if (ready && editable && this@ReadDocumentActivity.editPanel == null) {
                 if (intent.getBooleanExtra(ARG_START_EDITING, false)) {
                     intent.removeExtra(ARG_START_EDITING)
                     toggleEditPanel()

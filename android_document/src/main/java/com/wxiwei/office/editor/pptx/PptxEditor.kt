@@ -178,10 +178,11 @@ class PptxEditor(private val source: File) {
             sp.child(P, "nvSpPr").apply { child(P, "cNvPr").addAttribute("id", "$id")!!.addAttribute("name", "TextBox $id"); child(P, "cNvSpPr").addAttribute("txBox", "1"); child(P, "nvPr") }
             shapeProperties(sp, rectEmu).child(A, "noFill")
             val body = sp.child(P, "txBody")
-            body.child(A, "bodyPr").addAttribute("wrap", "square")!!.addAttribute("rtlCol", "0")!!.child(A, "spAutoFit"); body.child(A, "lstStyle")
+            // centered in the box, like a new text box of Google Slides / Keynote
+            body.child(A, "bodyPr").addAttribute("wrap", "square")!!.addAttribute("rtlCol", "0")!!.addAttribute("anchor", "ctr")!!.child(A, "spAutoFit"); body.child(A, "lstStyle")
             val rp = newElement(A, "rPr").addAttribute("lang", "vi-VN")!!.addAttribute("sz", (sizePt * 100).roundToLong().toString())!!.addAttribute("b", if (bold) "1" else "0")!!
             rp.child(A, "solidFill").child(A, "srgbClr").addAttribute("val", rgbHex.uppercase())
-            paragraphs(body, text, rp, null)
+            paragraphs(body, text, rp, newElement(A, "pPr").apply { addAttribute("algn", "ctr") })
         }) id else -1
     }
     fun addImage(slideIndex: Int, rectEmu: Rect, imageFile: File): Int {

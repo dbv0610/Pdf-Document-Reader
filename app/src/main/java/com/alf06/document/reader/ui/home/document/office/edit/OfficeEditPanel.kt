@@ -17,6 +17,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.wxiwei.office.editor.EditResult
 import com.wxiwei.office.reader.OfficeDocumentView
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -117,6 +120,32 @@ internal abstract class OfficeEditPanel(
         if (!hasChanges()) return
         runCatching { EditDrafts.write(context, file) { target -> writeTo(target) } }
     }
+
+    /** True while the viewer reopens a working copy for this panel: the activity keeps the panel. */
+    var reopening = false
+        private set
+
+    /**
+     * Shows [path] in the viewer (a working copy in the cache, or the saved file) and calls [then]
+     * once it is open again, with the new document in reader.control.
+     */
+    protected fun reopen(path: File, then: () -> Unit) {
+        reopening = true
+        reader.open(path.absolutePath)
+        activity.lifecycleScope.launch {
+            // the viewer leaves Ready while it opens, then comes back to it
+            kotlinx.coroutines.withTimeoutOrNull(5_000) { reader.state.first { it.status != com.wxiwei.office.reader.ReaderState.Status.Ready } }
+            val state = reader.state.first {
+                it.status == com.wxiwei.office.reader.ReaderState.Status.Ready || it.status == com.wxiwei.office.reader.ReaderState.Status.Failed
+            }
+            reopening = false
+            if (state.status == com.wxiwei.office.reader.ReaderState.Status.Ready) then() else toast("Không mở lại được tài liệu")
+        }
+    }
+
+    /** A new file for a working copy in the cache: edits live there until Save writes the original. */
+    protected fun workingCopy(): File =
+        File(File(context.cacheDir, "edit-work").apply { mkdirs() }, "work-" + System.nanoTime() + "." + file.extension)
 
     /** Called when the panel is hidden; stop listening to the document. Call super. */
     open fun close() {

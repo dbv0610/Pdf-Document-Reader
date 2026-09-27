@@ -143,6 +143,37 @@ class PptxEditSessionTest {
         assertTrue("first run changed", xml.contains("<a:t>Y</a:t>"))
     }
 
+    /** A text box added to a new presentation shows its text centered in the box. */
+    @Test
+    fun newTextBoxIsCentered() {
+        val file = OpenDocument.output("pptx_new_centered.pptx")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assertTrue(DocumentCreator.create(context, DocumentCreator.Format.POWERPOINT, file) is EditResult.Ok)
+        OpenDocument.open(file, { it.pageCount >= 1 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, file) }
+            val size = onMain { session.slideSizeEmu() }
+            val box = Rect(size.width / 4, size.height * 2 / 5, size.width / 2, size.height / 5)
+            assertTrue(onMain { session.addTextBox(0, box, "Text box", 32f) } > 0)
+            kotlinx.coroutines.delay(500)
+            val bitmap = reader.thumbnails!!.render(1, 1280)!!
+            File(out, "pptx_new_centered.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 90, it) }
+            // the dark pixels of the text, and their middle against the box's middle
+            var minX = Int.MAX_VALUE; var maxX = -1; var minY = Int.MAX_VALUE; var maxY = -1
+            for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+                val c = bitmap.getPixel(x, y)
+                if (android.graphics.Color.red(c) < 100 && android.graphics.Color.green(c) < 100 && android.graphics.Color.blue(c) < 100) {
+                    minX = minOf(minX, x); maxX = maxOf(maxX, x); minY = minOf(minY, y); maxY = maxOf(maxY, y)
+                }
+            }
+            val scale = bitmap.width / size.width.toDouble()
+            val boxCx = (box.x + box.width / 2) * scale; val boxCy = (box.y + box.height / 2) * scale
+            Log.i("PptxEditTest", "text ink $minX..$maxX x $minY..$maxY, box centre ${boxCx.toInt()},${boxCy.toInt()}")
+            assertTrue("text drawn", maxX > minX)
+            assertEquals("horizontally centered", boxCx, (minX + maxX) / 2.0, bitmap.width * 0.02)
+            assertEquals("vertically centered", boxCy, (minY + maxY) / 2.0, bitmap.height * 0.04)
+        }
+    }
+
     /** Bold + red on chars [4, 8) of a text box: only they change, live, undone, and in the file as their own run. */
     @Test
     fun formatPartOfText() {

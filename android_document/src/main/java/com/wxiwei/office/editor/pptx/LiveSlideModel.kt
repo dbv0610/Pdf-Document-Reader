@@ -213,7 +213,13 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         AttrManage.instance().setFontSize(leafAttr, Math.round(sizePt))
         AttrManage.instance().setFontColor(leafAttr, Color.parseColor("#" + rgbHex.removePrefix("#")))
         if (bold) AttrManage.instance().setFontBold(leafAttr, true)
-        setText(box, text, null, leafAttr, null)
+        // centered like the file's new text box (PptxEditor.addTextBox): algn="ctr", anchor="ctr"
+        val paraAttr = com.wxiwei.office.simpletext.model.AttributeSetImpl()
+        AttrManage.instance().setParaHorizontalAlign(paraAttr, com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt())
+        val sectionAttr = com.wxiwei.office.simpletext.model.AttributeSetImpl()
+        SectionAttr.instance().setSectionAttribute(DocumentHelper.createElement("bodyPr")!!.apply { addAttribute("wrap", "square"); addAttribute("anchor", "ctr") },
+            sectionAttr, null, null, false)
+        setText(box, text, paraAttr, leafAttr, sectionAttr)
         slide.appendShapes(box)
         repaint()
         return true
