@@ -327,6 +327,43 @@ class LiveDocxSessionTest {
     }
 
     @Test
+    fun bulletsLive() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_bullets.docx")
+        val saved = OpenDocument.output("live_docx_bullets_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val at = offsetOf(source.absolutePath, "Tính năng Play-along cho phép")
+            assertTrue(at >= 0)
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertFalse(onMain { session.hasBullet(at) })
+            assertTrue(session.lastError?.toString(), onMain { session.setBullets(at, at + 1, true) })
+            assertTrue(onMain { session.hasBullet(at) })
+            // the page shows a bullet view for that paragraph
+            val drawn = onMain {
+                val w = reader.control!!.getView() as Word
+                val root = w.getRoot(com.wxiwei.office.constant.wp.WPViewConstant.PAGE_ROOT.toInt())!!
+                val para = root.getView(at, com.wxiwei.office.constant.wp.WPViewConstant.PARAGRAPH_VIEW.toInt(), false) as? com.wxiwei.office.wp.view.ParagraphView
+                para?.getBNView() != null
+            }
+            assertTrue("bullet drawn", drawn)
+            assertTrue(onMain { session.undo() })
+            assertFalse(onMain { session.hasBullet(at) })
+            assertTrue(onMain { session.redo() })
+            shot(reader, "docx_bullets_live")
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        val z = java.util.zip.ZipFile(saved)
+        val numbering = z.getEntry("word/numbering.xml")?.let { z.getInputStream(it).readBytes().toString(Charsets.UTF_8) }
+        z.close()
+        assertTrue("numbering part", numbering != null && numbering.contains("bullet"))
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val at = offsetOf(saved.absolutePath, "Tính năng Play-along cho phép")
+            val session = onMain { LiveDocxSession(reader.control!!, saved) }
+            assertTrue("bullet saved", onMain { session.hasBullet(at) })
+        }
+    }
+
+    @Test
     fun paragraphFormattingLive() {
         val source = OpenDocument.copySample("sample.docx", "live_docx_para.docx")
         val saved = OpenDocument.output("live_docx_para_saved.docx")

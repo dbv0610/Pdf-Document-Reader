@@ -9,6 +9,9 @@ import java.io.File
 import java.text.Normalizer
 import kotlin.math.roundToInt
 
+private const val REL_NUMBERING = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"
+private val BULLETS = listOf("\u25CF", "\u25CB", "\u25A0")
+
 /** Queued operations use ORIGINAL UTF-16 model offsets, with exclusive ends.
  * Queue order is preserved, including overlapping formatting. Inserted text has no original offsets.
  * Save always reopens the source, verifies affected source leaves, then atomically writes a copy.
@@ -53,6 +56,69 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     /** Line spacing as a multiple of single (1.0, 1.5, 2.0...) of every paragraph touching [start, end). */
     fun setLineSpacing(start: Long, end: Long, multiple: Float): Boolean =
         if (multiple in 0.25f..10f) queue(Op(start, end, "pline", Math.round(multiple * 240).toString())) else invalid("Bad line spacing")
+    /** Bullets ("●" list, level 0) on or off for every paragraph touching [start, end). */
+    fun setBullets(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "pnum", if (on) "1" else "0"))
+
+    /**
+     * w:abstractNumId of the list [setBullets] uses: the document's first bullet list, else the
+     * one save will add. The live view shows bullets with the list of this id.
+     */
+    val bulletListId: Int by lazy {
+        try { bulletList(OoxmlPackage.open(source), create = false).first } catch (e: Exception) { -1 }
+    }
+
+    private fun numberingPart(pkg: OoxmlPackage, create: Boolean): String? {
+        val doc = "word/document.xml"
+        pkg.relationships(doc).firstOrNull { it.type == REL_NUMBERING && it.targetMode != "External" }?.let { return pkg.resolveTarget(doc, it.target) }
+        if (!create) return null
+        val part = "word/numbering.xml"
+        pkg.putXml(part, com.wxiwei.office.fc.dom4j.DocumentHelper.createDocument(newElement(W, "numbering"))!!)
+        pkg.addRelationship(doc, REL_NUMBERING, "numbering.xml")
+        pkg.ensureOverride(part, "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml")
+        return part
+    }
+
+    /** (abstractNumId, numId) of a bullet list; with [create], added to the package when missing. */
+    private fun bulletList(pkg: OoxmlPackage, create: Boolean): Pair<Int, String> {
+        val root = numberingPart(pkg, create)?.let { pkg.xml(it).rootElement }
+        val abstracts = root?.childrenNamed(W, "abstractNum").orEmpty()
+        val nums = root?.childrenNamed(W, "num").orEmpty()
+        fun Element.w(name: String) = attributeValue(QName(name, W))
+        for (a in abstracts) {
+            val lvl = a.childrenNamed(W, "lvl").firstOrNull { it.w("ilvl") == "0" } ?: continue
+            if (lvl.firstChild(W, "numFmt")?.w("val") != "bullet") continue
+            val id = a.w("abstractNumId") ?: continue
+            val num = nums.firstOrNull { it.firstChild(W, "abstractNumId")?.w("val") == id } ?: continue
+            return (id.toIntOrNull() ?: continue) to (num.w("numId") ?: continue)
+        }
+        val abstractId = (abstracts.mapNotNull { it.w("abstractNumId")?.toIntOrNull() }.maxOrNull() ?: -1) + 1
+        val numId = ((nums.mapNotNull { it.w("numId")?.toIntOrNull() }.maxOrNull() ?: 0) + 1).toString()
+        if (!create || root == null) return abstractId to numId
+        val abstract = newElement(W, "abstractNum").apply {
+            addAttribute(QName("abstractNumId", W), abstractId.toString())
+            addElement(QName("multiLevelType", W))!!.addAttribute(QName("val", W), "hybridMultilevel")
+            for (i in 0..8) addElement(QName("lvl", W))!!.apply {
+                addAttribute(QName("ilvl", W), i.toString())
+                addElement(QName("start", W))!!.addAttribute(QName("val", W), "1")
+                addElement(QName("numFmt", W))!!.addAttribute(QName("val", W), "bullet")
+                addElement(QName("lvlText", W))!!.addAttribute(QName("val", W), BULLETS[i % BULLETS.size])
+                addElement(QName("lvlJc", W))!!.addAttribute(QName("val", W), "left")
+                addElement(QName("pPr", W))!!.addElement(QName("ind", W))!!
+                    .addAttribute(QName("left", W), (720 * (i + 1)).toString())!!.addAttribute(QName("hanging", W), "360")
+            }
+        }
+        val num = newElement(W, "num").apply {
+            addAttribute(QName("numId", W), numId)
+            addElement(QName("abstractNumId", W))!!.addAttribute(QName("val", W), abstractId.toString())
+        }
+        // CT_Numbering: every abstractNum, then every num, then numIdMacAtCleanup
+        val children = root.elements()!!.filterIsInstance<Element>()
+        addBefore(root, abstracts.lastOrNull()?.let { children.getOrNull(children.indexOf(it) + 1) } ?: children.firstOrNull { it.name == "num" || it.name == "numIdMacAtCleanup" }, abstract)
+        val after = root.elements()!!.filterIsInstance<Element>()
+        addBefore(root, nums.lastOrNull()?.let { after.getOrNull(after.indexOf(it) + 1) } ?: after.firstOrNull { it.name == "numIdMacAtCleanup" }, num)
+        return abstractId to numId
+    }
+
     fun insertText(offset: Long, text: String) = queue(Op(offset, offset, "insert", text))
     fun deleteText(start: Long, end: Long) = queue(Op(start, end, "delete"))
     fun replaceText(start: Long, end: Long, text: String) = queue(Op(start, end, "replace", text))
@@ -95,6 +161,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         val insertionEnds = HashMap<Long, Element>()
         val deletedSeparators = HashSet<Long>()
         val opaqueSpans = HashMap<Int, LongRange>()
+        val bulletNumId: String by lazy { bulletList(pkg, create = true).second }
         init {
             body.elements()!!.filterIsInstance<Element>().filter { it.namespaceURI == W.uRI && it.name in setOf("p", "tbl", "sdt") }.forEach { child ->
                 walk(child) { if (it.namespaceURI == W.uRI) when (it.name) { "r" -> runs.add(it); "p" -> paragraphs.add(it) } }
@@ -132,7 +199,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                         if (b != null) insert(b, op.value)?.let { insertionEnds[op.start] = it }
                         delete(op.start, op.end)
                     }
-                    "pjc", "pind", "pline" -> paragraphFormat(op)
+                    "pjc", "pind", "pline", "pnum" -> paragraphFormat(op)
                     else -> format(op)
                 }
             }
@@ -169,6 +236,15 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             for (p in paras.filter { it.start < end && it.end > op.start }) {
                 val e = paragraphs.getOrNull(p.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
                 val pPr = e.firstChild(W, "pPr") ?: newElement(W, "pPr").also { addBefore(e, e.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
+                if (op.type == "pnum") {
+                    // numId 0 turns off a list the paragraph style would give
+                    pPr.firstChild(W, "numPr")?.let { pPr.remove(it) }
+                    val numPr = newElement(W, "numPr")
+                    numPr.addElement(QName("ilvl", W))!!.addAttribute(QName("val", W), "0")
+                    numPr.addElement(QName("numId", W))!!.addAttribute(QName("val", W), if (op.value == "1") bulletNumId else "0")
+                    insertInPPr(pPr, numPr)
+                    continue
+                }
                 val (name, attrs) = when (op.type) {
                     "pjc" -> "jc" to listOf("val" to op.value)
                     "pind" -> "ind" to listOf("left" to op.value)

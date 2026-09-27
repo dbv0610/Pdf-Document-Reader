@@ -506,5 +506,44 @@ class ReadDocumentEditTest {
         }
         assertEquals("SỬA TẠI CHỖ", com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0).first { it.id == expected.id }.text)
     }
+
+    @Test
+    fun wordBulletAtCaret() {
+        val file = sample("sample.docx")
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            var start = -1L
+            var point = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+                for (i in 0 until map.size) { val l = map.leaf(i); val k = l.text.indexOf("Tính năng Play-along"); if (k >= 0) { start = l.start + k; break } }
+                val r = com.wxiwei.office.editor.word.WordSelection(word).rectsFor(start + 3, start + 4).first()
+                val o = IntArray(2); word.getLocationOnScreen(o)
+                point = floatArrayOf(o[0] + r.exactCenterX(), o[1] + r.exactCenterY())
+            }
+            val t = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
+            inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], t)
+            Thread.sleep(1200)
+            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "• Đầu dòng" }!!.performClick() }
+            Thread.sleep(1000)
+            screenshot("word_bullet")
+            scenario.onActivity {
+                val doc = (viewer.control!!.getView() as com.wxiwei.office.wp.control.Word).getDocument()
+                assertTrue("bullet on", com.wxiwei.office.simpletext.model.AttrManage.instance().getParaListID(doc.getParagraph(start)!!.getAttribute()) >= 0)
+            }
+            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            Thread.sleep(2000)
+        }
+        val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val i = xml.indexOf("Tính năng Play-along")
+        assertTrue("numPr saved", xml.lastIndexOf("<w:numPr>", i) > xml.lastIndexOf("<w:p>", i).coerceAtLeast(xml.lastIndexOf("<w:p ", i)))
+    }
 }
 

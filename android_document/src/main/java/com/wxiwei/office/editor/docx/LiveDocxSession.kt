@@ -129,6 +129,40 @@ class LiveDocxSession(control: IControl, private val source: File) {
         am.setParaLineSpace(it, multiple)
     }
 
+    /** Bullets on or off for the paragraphs touching [start, end). */
+    fun setBullets(start: Long, end: Long, on: Boolean): Boolean {
+        val id = editor.bulletListId
+        if (on && id < 0) return refuse("Cannot read the document's lists")
+        if (on) ensureBulletList(id)
+        return paragraphFormat(start, end, { e, s, t -> e.setBullets(s, t, on) }) {
+            // -1 also hides a list the paragraph style would give, like numId 0 in the file
+            am.setParaListID(it, if (on) id else -1)
+            am.setParaListLevel(it, 0)
+        }
+    }
+
+    /** True when the paragraph at [offset] shows a bullet or number. */
+    fun hasBullet(offset: Long): Boolean = word.getDocument().getParagraph(offset)?.let { am.getParaListID(it.getAttribute()) >= 0 } == true
+
+    /** The view draws a list from its ListData: add the one save will write when it is new. */
+    private fun ensureBulletList(id: Int) {
+        val lists = word.getControl().getSysKit().getListManage()
+        if (lists.getListData(id) != null) return
+        val bullets = charArrayOf('\u25CF', '\u25CB', '\u25A0')
+        lists.putListData(id, com.wxiwei.office.common.bulletnumber.ListData().apply {
+            listID = id
+            levels = Array(9) { i ->
+                com.wxiwei.office.common.bulletnumber.ListLevel().apply {
+                    startAt = 1
+                    numberText = charArrayOf(bullets[i % bullets.size])
+                    textIndent = 720 * (i + 1)
+                    specialIndent = -360
+                }
+            }
+            simpleList = 9
+        })
+    }
+
     /** Left indent (twips) of the paragraph at [offset], to step it. */
     fun indentLeftAt(offset: Long): Int = word.getDocument().getParagraph(offset)?.let { am.getParaIndentLeft(it.getAttribute()) } ?: 0
 

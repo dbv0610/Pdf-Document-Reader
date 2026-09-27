@@ -88,14 +88,15 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("Dán") { paste() },
             button("Xóa", color = 0xFFC00000.toInt()) { op { e, r -> e.deleteText(r.first, r.last + 1) } },
             button("↵ Xuống dòng") { op { e, r -> e.insertText(r.first, "\n") } },
-            button("⇤") { op { e, r -> e.setAlignment(r.first, r.last + 1, "left") } },
-            button("↔") { op { e, r -> e.setAlignment(r.first, r.last + 1, "center") } },
-            button("⇥") { op { e, r -> e.setAlignment(r.first, r.last + 1, "right") } },
-            button("☰") { op { e, r -> e.setAlignment(r.first, r.last + 1, "both") } },
-            button("Thụt +") { op { e, r -> e.setIndentLeft(r.first, r.last + 1, e.indentLeftAt(r.first) + 720) } },
-            button("Thụt −") { op { e, r -> e.setIndentLeft(r.first, r.last + 1, maxOf(0, e.indentLeftAt(r.first) - 720)) } },
-            button("Dòng 1.0") { op { e, r -> e.setLineSpacing(r.first, r.last + 1, 1f) } },
-            button("Dòng 1.5") { op { e, r -> e.setLineSpacing(r.first, r.last + 1, 1.5f) } },
+            button("• Đầu dòng") { paraOp { e, r -> e.setBullets(r.first, r.last + 1, !e.hasBullet(r.first)) } },
+            button("⇤") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "left") } },
+            button("↔") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "center") } },
+            button("⇥") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "right") } },
+            button("☰") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "both") } },
+            button("Thụt +") { paraOp { e, r -> e.setIndentLeft(r.first, r.last + 1, e.indentLeftAt(r.first) + 720) } },
+            button("Thụt −") { paraOp { e, r -> e.setIndentLeft(r.first, r.last + 1, maxOf(0, e.indentLeftAt(r.first) - 720)) } },
+            button("Dòng 1.0") { paraOp { e, r -> e.setLineSpacing(r.first, r.last + 1, 1f) } },
+            button("Dòng 1.5") { paraOp { e, r -> e.setLineSpacing(r.first, r.last + 1, 1.5f) } },
             button("↶") { stopTyping(); session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },
             button("↷") { stopTyping(); session?.let { if (!it.redo()) toast("Không còn gì để làm lại") } },
             button("Bỏ chọn") { clearSelection() },
@@ -266,6 +267,18 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     }
 
     /** Runs [action] on the selection: formatting shows at once, text changes after Save. */
+    /** A paragraph change: works on the selection, or on the caret's paragraph while typing. */
+    private fun paraOp(action: (LiveDocxSession, LongRange) -> Boolean) {
+        if (base < 0 || selection()?.selection() != null) return op(action)
+        val caretAt = base + typing.selectionEnd.coerceAtLeast(0)
+        val s = session() ?: return
+        if (!action(s, caretAt..caretAt)) return toast(s.lastError?.message ?: "Không thực hiện được")
+        // offsets did not move: keep typing at the same place
+        resetBuffer(caretAt)
+        caret.touch()
+        reader.thumbnails?.invalidateAll()
+    }
+
     private fun op(action: (LiveDocxSession, LongRange) -> Boolean) {
         stopTyping()
         val range = selection()?.selection() ?: return toast("Chọn chữ trước")
