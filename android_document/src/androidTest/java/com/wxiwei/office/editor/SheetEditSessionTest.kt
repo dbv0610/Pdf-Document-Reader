@@ -178,7 +178,8 @@ class SheetEditSessionTest {
             for (c in 0 until 14) {
                 val cell = row?.getCell(c)
                 val v = cell?.let { it.formula?.let { f -> "=$f" } ?: com.wxiwei.office.ss.util.ModelUtil.instance().getFormatContents(book, it) } ?: ""
-                sb.append(v).append('|')
+                val bold = cell?.getCellStyle()?.let { st -> book.getFont(st.getFontIndex().toInt())?.isBold() } == true
+                sb.append(v).append(if (bold) "*" else "").append('|')
             }
             sb.append('\n')
         }
@@ -201,7 +202,7 @@ class SheetEditSessionTest {
                 val rnd = java.util.Random(seed)
                 repeat(args.getString("fuzzOps")?.toInt() ?: 60) { step ->
                     val r = rnd.nextInt(40); val c = rnd.nextInt(10)
-                    val kind = rnd.nextInt(10)
+                    val kind = rnd.nextInt(13)
                     val ok = onMain {
                         when (kind) {
                             0, 1, 2 -> session.setCellInput(sheet, r, c, (rnd.nextInt(1000) / 10.0).toString())
@@ -211,7 +212,10 @@ class SheetEditSessionTest {
                             6 -> session.deleteRows(sheet, r, 1)
                             7 -> session.insertColumns(sheet, c, 1)
                             8 -> session.undo()
-                            else -> session.redo()
+                            9 -> session.redo()
+                            10 -> session.setCellFormat(sheet, r, c, com.wxiwei.office.editor.xlsx.CellFormat(bold = rnd.nextBoolean()))
+                            11 -> session.deleteColumns(sheet, c, 1)
+                            else -> session.setRangeFormat(sheet, r, c, r + 2, c + 1, com.wxiwei.office.editor.xlsx.CellFormat(bold = true))
                         }
                     }
                     log.append("$step:$kind@$r,$c:$ok ")
