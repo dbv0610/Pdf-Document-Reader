@@ -438,6 +438,72 @@ class LiveDocxSessionTest {
         }
     }
 
+    /** The whole main text of the open document. */
+    private fun mainText(reader: com.wxiwei.office.reader.OfficeReader): String = onMain {
+        val doc = (reader.control!!.getView() as Word).getDocument()
+        doc.getText(0, doc.getAreaEnd(0))
+    }
+
+    /** Random typing, deleting, Enter and Backspace; the saved file must read back as shown. */
+    @Test
+    fun randomEditsSaveAsShown() {
+        for ((name, seed) in listOf("sample.docx" to 7L, "sample.docx" to 11L, "sample.docx" to 23L, "doc_test.docx" to 3L, "doc_test.docx" to 5L, "shape_in_table.docx" to 2L).let { all ->
+            InstrumentationRegistry.getArguments().getString("fuzzOnly")?.toInt()?.let { listOf(all[it]) } ?: all
+        }) {
+            val source = OpenDocument.copySample(name, "fuzz_${seed}_$name")
+            val saved = OpenDocument.output("fuzz_${seed}_saved_$name")
+            var shown = ""
+            var log = ""
+            OpenDocument.open(source, { it.layout != null }) { reader ->
+                pages(reader)
+                val session = onMain { LiveDocxSession(reader.control!!, source) }
+                val rnd = java.util.Random(seed)
+                val end = onMain { (reader.control!!.getView() as Word).getDocument().getAreaEnd(0) }
+                var caret = end / 3 + rnd.nextInt(200)
+                val ops = StringBuilder()
+                var kind = ""
+                repeat(InstrumentationRegistry.getArguments().getString("fuzzOps")?.toInt() ?: 120) { step ->
+                    val wasReopen = session.needsReopen
+                    val docEnd = onMain { (reader.control!!.getView() as Word).getDocument().getAreaEnd(0) }
+                    if (rnd.nextInt(6) == 0) caret = rnd.nextInt(docEnd.toInt() - 2).toLong() // jump elsewhere
+                    caret = caret.coerceIn(1, docEnd - 2)
+                    val k = rnd.nextInt(12)
+                    kind = listOf("ins", "ins", "ins", "ins", "ins", "bs", "bs", "enter", "del", "bold", "repl", "paste")[k]
+                    val ok = when (k) {
+                        in 0..4 -> { val t = listOf("a", "ễ", " ", "xin ", "Đ").let { it[rnd.nextInt(it.size)] }; onMain { session.insertText(caret, t) }.also { if (it) caret += t.length } }
+                        5, 6 -> onMain { session.deleteText(caret - 1, caret) }.also { if (it) caret -= 1 }
+                        7 -> onMain { session.insertText(caret, "\n") }.also { if (it) caret += 1 }
+                        8 -> { val n = 1 + rnd.nextInt(5); onMain { session.deleteText(caret, caret + n) } }
+                        9 -> onMain { session.setBold(caret - 1, caret + 2, rnd.nextBoolean()) }
+                        10 -> { val n = 1 + rnd.nextInt(4); onMain { session.replaceText(caret - n, caret, "zz") }.also { if (it) caret += 2 - n } }
+                        else -> onMain { session.insertText(caret, "dòng một\ndòng hai ") }.also { if (it) caret += 18 }
+                    }
+                    ops.append("$step@$caret:$kind:${if (ok) "ok" else session.lastError?.message}${if (!wasReopen && session.needsReopen) " REOPEN" else ""} ")
+                    if (InstrumentationRegistry.getArguments().getString("saveEachStep") != null) {
+                        val r = onMain { session.save(OpenDocument.output("fuzz_step.docx")) }
+                        if (r !is EditResult.Ok) {
+                            val d = onMain { (reader.control!!.getView() as Word).getDocument() }
+                            val around = onMain { d.getText(maxOf(0, caret - 40), minOf(d.getAreaEnd(0), caret + 40)) }
+                            throw AssertionError("save breaks at $ops :: $r :: around='$around'")
+                        }
+                    }
+                }
+                log = ops.toString()
+                assertFalse("all edits shown live: $log", session.needsReopen)
+                shown = mainText(reader)
+                val result = onMain { session.save(saved) }
+                assertTrue(result.toString() + " " + log, result is EditResult.Ok)
+            }
+            OpenDocument.open(saved, { it.layout != null }) { reader ->
+                val reread = mainText(reader)
+                if (reread != shown) {
+                    val i = reread.zip(shown).indexOfFirst { (a, b) -> a != b }.let { if (it < 0) minOf(reread.length, shown.length) else it }
+                    throw AssertionError("$name/$seed differs at $i: shown='${shown.substring(maxOf(0, i - 30), minOf(shown.length, i + 30))}' saved='${reread.substring(maxOf(0, i - 30), minOf(reread.length, i + 30))}' ops=$log")
+                }
+            }
+        }
+    }
+
     @Test
     fun paragraphFormattingLive() {
         val source = OpenDocument.copySample("sample.docx", "live_docx_para.docx")

@@ -348,6 +348,13 @@ class WPDocument : STDocument() {
         if (next is TableElement || next.getStartOffset() != markOffset + 1) return false
         // same table cell (or both outside tables)
         if (AttrManage.instance().getParaLevel(p.getAttribute()) != AttrManage.instance().getParaLevel(next.getAttribute())) return false
+        // the last paragraph of a table cell: the next one is in another cell
+        if (AttrManage.instance().getParaLevel(p.getAttribute()) >= 0) {
+            val cell = try {
+                ((getParagraph0(markOffset) as? TableElement)?.getRowElement(markOffset) as? RowElement)?.getCellElement(markOffset)
+            } catch (e: RuntimeException) { null } ?: return false
+            if (cell.getEndOffset() <= markOffset + 1) return false
+        }
         val markLeaf = p.getLeaf(markOffset) as? LeafElement ?: return false
         if (markLeaf.javaClass != LeafElement::class.java) return false
         val text = markLeaf.getText(null) ?: return false

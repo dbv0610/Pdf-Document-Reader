@@ -11,7 +11,6 @@ import kotlin.math.roundToInt
 
 private const val REL_NUMBERING = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"
 private val BULLETS = listOf("\u25CF", "\u25CB", "\u25A0")
-private val RUN_FORMATS = setOf("b", "i", "u", "color", "sz", "highlight", "shd")
 private val NUMBER_FORMATS = listOf("decimal", "lowerLetter", "lowerRoman")
 
 /** Queued operations use ORIGINAL UTF-16 model offsets, with exclusive ends.
@@ -20,13 +19,12 @@ private val NUMBER_FORMATS = listOf("decimal", "lowerLetter", "lowerRoman")
  */
 class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     private data class Op(val start: Long, val end: Long, val type: String, val value: String = "",
-                          val image: File? = null, val width: Int = 0, val height: Int = 0) {
-        /** Run formatting on parts of an insert's text (chars [from, to) of [value]). */
-        val spans = ArrayList<Span>()
-    }
-    private data class Span(val from: Int, val to: Int, val type: String, val value: String)
-    // while set, run formatting goes to this insert's text instead of the original text
-    private var formatInto: Op? = null
+                          val image: File? = null, val width: Int = 0, val height: Int = 0)
+
+    /** Run properties (w:b "1", w:color "FF0000", w:sz half points...) for chars [from, to) of an inserted text. */
+    data class RunFormat(val from: Int, val to: Int, val props: List<Pair<String, String>>)
+    /** What a queued insert (see [lastOp]) writes instead of its own text, e.g. the text as edited later. */
+    data class InsertOverride(val text: String, val runs: List<RunFormat>)
     private val ops = ArrayList<Op>()
     var lastError: EditResult.Error? = null; private set
     private fun queue(op: Op): Boolean {
@@ -37,34 +35,12 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             else -> null
         }
         if (lastError != null) return false
-        formatInto?.let { target ->
-            if (op.type !in RUN_FORMATS || op.end > target.value.length) return invalid("Only run formatting applies to inserted text")
-            target.spans.add(Span(op.start.toInt(), op.end.toInt(), op.type, op.value))
-            return true
-        }
         ops.add(op); return true
     }
 
-    /** Handle of the last queued operation, for [formatInserted]. */
+    /** Handle of the last queued operation (an insert), for [save] overrides. */
     fun lastOp(): Any? = ops.lastOrNull()
 
-    /**
-     * Runs [format] (calls like setBold(from, to, on)) on the text of the insert [handle]: its
-     * offsets count characters of that inserted text. Saved as runs split at the formatted parts.
-     */
-    fun formatInserted(handle: Any, format: () -> Boolean): Boolean {
-        val target = ops.firstOrNull { it === handle && it.type == "insert" } ?: return invalid("Inserted text not found")
-        formatInto = target
-        return try { format() } finally { formatInto = null }
-    }
-
-    /** Takes back the last [formatInserted] on [handle] (undo). */
-    fun unformatInserted(handle: Any): Boolean {
-        val target = ops.firstOrNull { it === handle } ?: return false
-        if (target.spans.isEmpty()) return false
-        target.spans.removeAt(target.spans.lastIndex)
-        return true
-    }
     private fun invalid(message: String): Boolean { lastError = EditResult.Error(Reason.INVALID_ARGUMENT, message); return false }
     fun highlight(start: Long, end: Long, color: String = "yellow"): Boolean {
         val hex = color.removePrefix("#")
@@ -171,8 +147,13 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     }
 
     fun insertText(offset: Long, text: String) = queue(Op(offset, offset, "insert", text))
-    fun deleteText(start: Long, end: Long) = queue(Op(start, end, "delete"))
-    fun replaceText(start: Long, end: Long, text: String) = queue(Op(start, end, "replace", text))
+    fun deleteText(start: Long, end: Long) = if (touchesObject(start, end)) invalid("Pictures and fields cannot be deleted as text") else queue(Op(start, end, "delete"))
+    fun replaceText(start: Long, end: Long, text: String) = if (touchesObject(start, end)) invalid("Pictures and fields cannot be replaced as text") else queue(Op(start, end, "replace", text))
+    /** True when [start, end) (original offsets) holds a picture, shape or field, which save cannot delete. */
+    fun touchesObject(start: Long, end: Long): Boolean = (0 until map.size).any { i ->
+        val l = map.leaf(i)
+        l.start < end && l.end > start && (l.kind == DocxSourceMap.Kind.FIELD || l.kind == DocxSourceMap.Kind.OBJECT)
+    }
     fun insertImage(offset: Long, imageFile: File, widthPx: Int, heightPx: Int): Boolean =
         if (widthPx <= 0 || heightPx <= 0 || !imageFile.isFile) invalid("Image file and positive dimensions required")
         else queue(Op(offset, offset, "image", image = imageFile, width = widthPx, height = heightPx))
@@ -187,11 +168,15 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     private data class Piece(var start: Long, var end: Long, val run: Element, val kind: DocxSourceMap.Kind)
     private data class Boundary(val parent: Element, val before: Element?, val style: Element?)
 
-    fun save(target: File): EditResult {
+    /**
+     * Writes the edited document to [target]. [overrides] (by [lastOp] handle) replace the text
+     * of queued inserts, with their run formatting.
+     */
+    fun save(target: File, overrides: Map<Any, InsertOverride> = emptyMap()): EditResult {
         val result = try {
             if (!source.extension.equals("docx", true)) fail(Reason.UNSUPPORTED_FORMAT, "Only DOCX is editable")
             val pkg = OoxmlPackage.open(source)
-            Session(pkg).applyAll()
+            Session(pkg, java.util.IdentityHashMap(overrides)).applyAll()
             pkg.saveTo(target)
         } catch (e: Failure) { EditResult.Error(e.reason, e.message ?: "Edit failed")
         } catch (e: IllegalArgumentException) { EditResult.Error(Reason.INVALID_ARGUMENT, e.message ?: "Invalid argument", e)
@@ -201,7 +186,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         return result
     }
 
-    private inner class Session(val pkg: OoxmlPackage) {
+    private inner class Session(val pkg: OoxmlPackage, val overrides: java.util.IdentityHashMap<Any, InsertOverride>) {
         val root: Element = pkg.xml("word/document.xml").rootElement!!
         val body = root.firstChild(W, "body") ?: fail(Reason.MAP_MISMATCH, "No document body")
         val runs = ArrayList<Element>()
@@ -247,12 +232,12 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 if (op.type == "append") { append(op.value); continue }
                 checkRange(op)
                 when (op.type) {
-                    "insert" -> (if (op.spans.isEmpty()) insert(boundary(op.start), op.value) else insertSpans(boundary(op.start), op))?.let { insertionEnds[op.start] = it }
+                    "insert" -> overrides[op].let { o -> insert(boundary(op.start), o?.text ?: op.value, o?.runs) }?.let { insertionEnds[op.start] = it }
                     "image" -> { val b = boundary(op.start); val run = image(op); addBefore(b.parent, b.before, run); insertionEnds[op.start] = run }
                     "delete", "replace" -> {
                         // Capture insertion anchor before removing original characters.
                         val b = if (op.type == "replace") boundary(op.start) else null
-                        if (b != null) insert(b, op.value)?.let { insertionEnds[op.start] = it }
+                        if (b != null) overrides[op].let { o -> insert(b, o?.text ?: op.value, o?.runs) }?.let { insertionEnds[op.start] = it }
                         delete(op.start, op.end)
                     }
                     "pjc", "pind", "pline", "pnum", "plvl" -> paragraphFormat(op)
@@ -344,21 +329,6 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             })
             if (type == "sz") { pr.childrenNamed(W, "szCs").forEach { it.detach() }; pr.add(newElement(W, "szCs").apply { addAttribute(QName("val", W), value) }) }
         }
-        /** Inserted text with formatted parts: one run per part. Single line only. */
-        fun insertSpans(b: Boundary, op: Op): Element? {
-            val text = op.value
-            if (text.contains('\n')) return insert(b, text)
-            val cuts = (listOf(0, text.length) + op.spans.flatMap { listOf(it.from, it.to) }).filter { it in 0..text.length }.distinct().sorted()
-            var last: Element? = null
-            for ((a, z) in cuts.zipWithNext()) {
-                if (a == z) continue
-                val run = textRun(text.substring(a, z), b.style)
-                addBefore(b.parent, b.before, run)
-                op.spans.filter { it.from <= a && it.to >= z }.forEach { runProp(run, it.type, it.value) }
-                last = run
-            }
-            return last
-        }
         fun boundary(at: Long): Boundary {
             if (opaqueSpans.values.any { at > it.first && at < it.last })
                 fail(Reason.INVALID_ARGUMENT, "Insert before or after the whole field/object run")
@@ -386,28 +356,53 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             }
             val para = paras.firstOrNull { at >= it.start && at < it.end } ?: fail(Reason.INVALID_ARGUMENT, "No paragraph at offset")
             val element = paragraphs.getOrNull(para.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
+            // the text from here on was deleted: go before what is left of the paragraph after it
+            val later = pieces.filter { it.start > at && it.start < para.end && it.run.parent != null }.minByOrNull { it.start }
+            if (later != null) {
+                val parent = later.run.parent!!
+                val style = later.run.firstChild(W, "rPr")?.createCopy()
+                return if (parent.name == "fldSimple") Boundary(parent.parent!!, parent, style) else Boundary(parent, later.run, style)
+            }
             if (at != para.start && leaves.none { it.kind == DocxSourceMap.Kind.PARA_END && it.start == at }) fail(Reason.INVALID_ARGUMENT, "Offset was deleted by an earlier operation")
-            return Boundary(element, null, null)
+            // the start of an emptied paragraph: after its properties, before anything else
+            val first = if (at == para.start) element.elements()!!.filterIsInstance<Element>().firstOrNull { it.name != "pPr" } else null
+            return Boundary(element, first, null)
         }
-        fun insert(b: Boundary, text: String): Element? {
+        fun insert(b: Boundary, text: String, formats: List<RunFormat>? = null): Element? {
+            // runs for chars [at, at + part.length) of text, split where the formatting changes
+            fun runs(part: String, at: Int): List<Element> {
+                if (part.isEmpty()) return emptyList()
+                if (formats == null) return listOf(textRun(part, b.style))
+                val cuts = (listOf(at, at + part.length) + formats.flatMap { listOf(it.from, it.to) }).filter { it in at..at + part.length }.distinct().sorted()
+                return cuts.zipWithNext().filter { it.first < it.second }.map { (x, z) ->
+                    textRun(text.substring(x, z), b.style).also { run ->
+                        formats.filter { it.from <= x && it.to >= z }.forEach { f -> f.props.forEach { (k, v) -> runProp(run, k, v) } }
+                    }
+                }
+            }
             val parts = text.split('\n')
             if (parts.size == 1) {
-                if (text.isEmpty()) return null
-                return textRun(text, b.style).also { addBefore(b.parent, b.before, it) }
+                val made = runs(text, 0)
+                made.forEach { addBefore(b.parent, b.before, it) }
+                return made.lastOrNull()
             }
             if (b.parent.name != "p" || b.parent.namespaceURI != W.uRI) fail(Reason.INVALID_ARGUMENT, "Paragraph split inside a hyperlink/field is unsupported")
             val para = b.parent
             val parent = para.parent ?: fail(Reason.INVALID_ARGUMENT, "Detached paragraph")
             val after = parent.elements()!!.filterIsInstance<Element>().let { it.getOrNull(it.indexOf(para) + 1) }
             val tail = if (b.before == null) emptyList() else para.elements()!!.filterIsInstance<Element>().let { it.drop(it.indexOf(b.before)) }
-            if (parts[0].isNotEmpty()) addBefore(para, b.before, textRun(parts[0], b.style))
+            runs(parts[0], 0).forEach { addBefore(para, b.before, it) }
             var last = para
             var lastRun: Element? = null
+            var at = parts[0].length + 1
             parts.drop(1).forEach { part ->
                 last = newElement(W, "p")
                 para.firstChild(W, "pPr")?.let { last.add(it.createCopy()) }
-                lastRun = textRun(part, b.style); last.add(lastRun)
+                val made = runs(part, at)
+                made.forEach { last.add(it) }
+                lastRun = made.lastOrNull()
                 addBefore(parent, after, last)
+                at += part.length + 1
             }
             tail.forEach { it.detach(); last.add(it) }
             // The original paragraph separator now belongs to the last new paragraph.

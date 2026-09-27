@@ -73,6 +73,9 @@ class LiveDocxSession(control: IControl, private val source: File) {
         class Delete(val at: Long, val length: Long) : Edit()
     }
     private val edits = ArrayList<Edit>()
+    /** The queued file insert of each live insert, whose text is taken from the view on save. */
+    private val handles = java.util.IdentityHashMap<Edit.Insert, Any>()
+    private fun track(edit: Edit.Insert) { editor.lastOp()?.let { handles[edit] = it } }
 
     /** Current model offset -> original file offset (the start of typed text for positions inside it). */
     private fun toOriginal(offset: Long): Long {
@@ -260,7 +263,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 last.text += text
                 last.edit.length = last.text.length.toLong()
                 editor.insertText(last.original, last.text)
-                last.handle = editor.lastOp()
+                track(last.edit)
                 redoStack.clear()
                 word.relayoutContent(offset)
                 return true
@@ -280,7 +283,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
             }
             val edit = Edit.Insert(offset, text.length.toLong())
             edits.add(edit)
-            undoStack.add(TypingStep(offset, original, text, edit).also { it.handle = editor.lastOp() }); redoStack.clear()
+            track(edit)
+            undoStack.add(TypingStep(offset, original, text, edit)); redoStack.clear()
             word.relayoutContent(offset)
             return true
         }
@@ -296,9 +300,10 @@ class LiveDocxSession(control: IControl, private val source: File) {
         }
         val edit = Edit.Insert(offset, 1)
         edits.add(edit)
+        track(edit)
         undoStack.add(SplitStep(offset,
             undo = { editor.undoLast() && doc.joinMainParagraph(offset).also { edits.remove(edit); word.relayoutContent(offset) } },
-            redo = { editor.insertText(original, "\n") && doc.splitMainParagraph(offset).also { edits.add(edit); word.relayoutContent(offset) } },
+            redo = { editor.insertText(original, "\n") && doc.splitMainParagraph(offset).also { track(edit); edits.add(edit); word.relayoutContent(offset) } },
         ))
         redoStack.clear()
         word.relayoutContent(offset)
@@ -330,11 +335,13 @@ class LiveDocxSession(control: IControl, private val source: File) {
             // Backspace right after Enter at the same place: take the Enter back
             (undoStack.lastOrNull() as? SplitStep)?.let { if (it.at == start && end == start + 1) return undo() }
             editTyping(start, end, "")?.let { return it }
-            if (touchesTyped(start, end)) return refuse("Save first to delete text typed in this session")
             val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
+            val removedAll = doc.getText(start, end)
+            // text inserted in this session, paragraph marks, or several paragraphs: piece by piece
+            if (touchesTyped(start, end) || (removedAll.length > 1 && removedAll.contains('\n'))) return deletePieces(doc, start, end)
             val os = toOriginal(start)
             val oe = toOriginal(end)
-            val removed = doc.getText(start, end)
+            val removed = removedAll
             // a lone paragraph mark: join the two paragraphs (Backspace at a paragraph start)
             if (removed == "\n") return joinParagraphs(doc, start, os, oe)
             if (!editor.deleteText(os, oe)) return false
@@ -375,7 +382,10 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 return replaceText(start, end, text.substring(0, nl)) && insertText(start + nl, text.substring(nl))
             }
             editTyping(start, end, text)?.let { return it }
-            if (touchesTyped(start, end)) return refuse("Save first to replace text typed in this session")
+            // over text inserted in this session: delete, then insert (its text is taken on save)
+            if (touchesTyped(start, end)) return grouped { deleteText(start, end) && insertText(start, text) }
+            // across paragraphs: the marks go piece by piece
+            if ((word.getDocument() as? WPDocument)?.getText(start, end)?.contains('\n') == true) return grouped { deleteText(start, end) && insertText(start, text) }
             val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
             val os = toOriginal(start)
             val oe = toOriginal(end)
@@ -393,6 +403,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             val delete = Edit.Delete(start, end - start)
             val insert = Edit.Insert(start, n)
             edits.add(delete); edits.add(insert)
+            track(insert)
             undoStack.add(Step(
                 undo = {
                     editor.undoLast() && doc.insertMainText(start + n, removed).also {
@@ -403,6 +414,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 redo = {
                     editor.replaceText(os, oe, text) && doc.insertMainText(start, text).also {
                         doc.deleteMainText(start + n, end + n)
+                        track(insert)
                         edits.add(delete); edits.add(insert); word.relayoutContent(start)
                     }
                 },
@@ -435,7 +447,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             last.text = updated
             last.edit.length = updated.length.toLong()
             editor.insertText(last.original, updated)
-            last.handle = editor.lastOp()
+            track(last.edit)
         }
         redoStack.clear()
         word.relayoutContent(start)
@@ -446,8 +458,6 @@ class LiveDocxSession(control: IControl, private val source: File) {
     private inner class TypingStep(val at: Long, val original: Long, var text: String, val edit: Edit.Insert) : Step(
         undo = { false }, redo = { false },
     ) {
-        /** The queued insert of [text] (DocxEditor.lastOp), to format parts of it. */
-        var handle: Any? = null
 
         override fun runUndo(): Boolean {
             val doc = word.getDocument() as? WPDocument ?: return false
@@ -461,7 +471,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         override fun runRedo(): Boolean {
             val doc = word.getDocument() as? WPDocument ?: return false
             if (!editor.insertText(original, text) || !doc.insertMainText(at, text)) return false
-            handle = editor.lastOp()
+            track(edit)
             edits.add(edit)
             word.relayoutContent(at)
             return true
@@ -484,7 +494,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         }
     }
 
-    fun save(target: File): EditResult = editor.save(target)
+    fun save(target: File): EditResult = synchronized(layoutLock) { editor.save(target, overrides()) }
 
 
     /** Leaves of [start, end) in every paragraph it touches, split at the ends. */
@@ -505,27 +515,20 @@ class LiveDocxSession(control: IControl, private val source: File) {
         synchronized(layoutLock) {
             ownError = null
             if (end <= start) return refuse("Empty range")
-            // original text and text typed in this session take different file operations
-            val parts = ArrayList<Triple<Long, Long, Pair<TypingStep, Int>?>>()
+            // text inserted in this session is written from the view on save: only original text
+            // takes file operations
+            val parts = ArrayList<Pair<Long, Long>>()
             var i = start
             while (i < end) {
-                val typed = typedAt(i)
+                val inserted = insertedAt(i)
                 var j = i + 1
-                while (j < end && typedAt(j)?.first === typed?.first) j++
-                if (typed == null && touchesTyped(i, j)) return refuse("Save first to format this text")
-                parts.add(Triple(i, j, typed))
+                while (j < end && insertedAt(j) == inserted) j++
+                if (!inserted) parts.add(i to j)
                 i = j
             }
-            val fileOps = parts.map { (s, e, typed) ->
-                if (typed == null) {
-                    val os = toOriginal(s); val oe = toOriginal(e)
-                    ({ fileOp(editor, os, oe) } to { editor.undoLast() })
-                } else {
-                    val (step, from) = typed
-                    val to = from + (e - s)
-                    ({ step.handle?.let { h -> editor.formatInserted(h) { fileOp(editor, from.toLong(), to) } } == true } to
-                        { step.handle?.let { editor.unformatInserted(it) } == true })
-                }
+            val fileOps = parts.map { (s, e) ->
+                val os = toOriginal(s); val oe = toOriginal(e)
+                ({ fileOp(editor, os, oe) } to { editor.undoLast() })
             }
             fun redoFile(): Boolean {
                 for ((k, op) in fileOps.withIndex()) if (!op.first()) { for (u in fileOps.take(k).asReversed()) u.second(); return false }
@@ -550,20 +553,140 @@ class LiveDocxSession(control: IControl, private val source: File) {
         }
     }
 
-    /** The typing step whose text holds the character at [pos], and its index there. */
-    private fun typedAt(pos: Long): Pair<TypingStep, Int>? {
+    /** True when the character at [pos] was inserted in this session (typed, pasted, an Enter). */
+    private fun insertedAt(pos: Long): Boolean {
         var x = pos
         for (edit in edits.asReversed()) when (edit) {
             is Edit.Insert -> {
-                val a = edit.at
-                if (x >= a && x < a + edit.length) {
-                    val step = undoStack.firstOrNull { it is TypingStep && it.edit === edit } as? TypingStep ?: return null
-                    return step to (x - a).toInt()
-                }
-                if (x >= a + edit.length) x -= edit.length
+                if (x >= edit.at && x < edit.at + edit.length) return true
+                if (x >= edit.at + edit.length) x -= edit.length
             }
             is Edit.Delete -> if (x >= edit.at) x += edit.length
         }
-        return null
+        return false
+    }
+
+    /** Runs [block] as one undo step, whatever steps it records. */
+    private fun grouped(block: () -> Boolean): Boolean {
+        val mark = undoStack.size
+        val ok = block()
+        if (undoStack.size - mark > 1) {
+            val steps = ArrayList(undoStack.subList(mark, undoStack.size))
+            repeat(steps.size) { undoStack.removeAt(undoStack.lastIndex) }
+            undoStack.add(Step(
+                undo = { steps.asReversed().all { it.runUndo() } },
+                redo = { steps.all { it.runRedo() } },
+            ))
+        }
+        return ok
+    }
+
+    /**
+     * Deletes [start, end) from the end backwards: paragraph marks join paragraphs, text inserted
+     * in this session only leaves the view (its file text is taken from the view on save),
+     * original text is also deleted in the file. One undo step.
+     */
+    private fun deletePieces(doc: WPDocument, start: Long, end: Long): Boolean = grouped {
+        var e = end
+        var ok = true
+        while (e > start && ok) {
+            val c = doc.getText(e - 1, e)
+            val inserted = insertedAt(e - 1)
+            var s = e - 1
+            if (c != "\n") while (s > start && doc.getText(s - 1, s) != "\n" && insertedAt(s - 1) == inserted) s--
+            ok = deletePiece(doc, s, e, c == "\n", inserted)
+            e = s
+        }
+        ok
+    }
+
+    private fun deletePiece(doc: WPDocument, s: Long, e: Long, mark: Boolean, inserted: Boolean): Boolean {
+        val os = toOriginal(s)
+        val oe = toOriginal(e)
+        val removed = doc.getText(s, e)
+        if (!inserted && !editor.deleteText(os, oe)) return false
+        val fileUndo = { if (inserted) true else editor.undoLast() }
+        val fileRedo = { if (inserted) true else editor.deleteText(os, oe) }
+        val live = { if (mark) doc.joinMainParagraph(s) else doc.deleteMainText(s, e) }
+        val back = { if (mark) doc.splitMainParagraph(s) else doc.insertMainText(s, removed) }
+        if (!live()) {
+            if (!inserted) editor.undoLast()
+            return refuse("Cannot delete here")
+        }
+        val edit = Edit.Delete(s, e - s)
+        edits.add(edit)
+        undoStack.add(Step(
+            undo = { fileUndo() && back().also { edits.remove(edit); word.relayoutContent(s) } },
+            redo = { fileRedo() && live().also { edits.add(edit); word.relayoutContent(s) } },
+        ))
+        redoStack.clear()
+        word.relayoutContent(s)
+        return true
+    }
+
+    /** Text and run formatting of the live inserts, as shown now, for [DocxEditor.save]. */
+    private fun overrides(): Map<Any, DocxEditor.InsertOverride> {
+        class Group(var s: Long, var e: Long, val leader: Any)
+        val groups = ArrayList<Group>()
+        val member = java.util.IdentityHashMap<Any, Group>()
+        for ((k, edit) in edits.withIndex()) {
+            if (edit !is Edit.Insert) continue
+            val op = handles[edit] ?: continue
+            // where that text is now
+            var s = edit.at
+            var e = edit.at + edit.length
+            for (later in edits.subList(k + 1, edits.size)) when (later) {
+                is Edit.Insert -> if (later.at < s) { s += later.length; e += later.length } else if (later.at <= e) e += later.length
+                is Edit.Delete -> {
+                    val a = later.at
+                    val b = a + later.length
+                    fun cut(v: Long) = when { v >= b -> v - later.length; v > a -> a; else -> v }
+                    s = cut(s); e = cut(e)
+                }
+            }
+            // inserts touching each other are written together, by the first of them
+            val touching = groups.filter { s <= it.e && e >= it.s }
+            val group = touching.firstOrNull() ?: Group(s, e, op).also { groups.add(it) }
+            for (other in touching.drop(1)) {
+                group.s = minOf(group.s, other.s); group.e = maxOf(group.e, other.e)
+                member.entries.filter { it.value === other }.forEach { it.setValue(group) }
+                groups.remove(other)
+            }
+            group.s = minOf(group.s, s); group.e = maxOf(group.e, e)
+            member[op] = group
+        }
+        val doc = word.getDocument()
+        val result = java.util.IdentityHashMap<Any, DocxEditor.InsertOverride>()
+        for ((op, g) in member) {
+            result[op] = if (g.leader === op) DocxEditor.InsertOverride(doc.getText(g.s, g.e), runFormats(g.s, g.e))
+            else DocxEditor.InsertOverride("", emptyList())
+        }
+        return result
+    }
+
+    /** The formatting shown on [s, e), as run properties relative to [s]. */
+    private fun runFormats(s: Long, e: Long): List<DocxEditor.RunFormat> {
+        val doc = word.getDocument()
+        val out = ArrayList<DocxEditor.RunFormat>()
+        var pos = s
+        while (pos < e) {
+            val para = doc.getParagraph(pos) ?: break
+            val leaf = doc.getLeaf(pos) ?: break
+            val stop = minOf(e, leaf.getEndOffset()).let { if (it <= pos) pos + 1 else it }
+            val p = para.getAttribute()
+            val l = leaf.getAttribute()
+            val props = arrayListOf(
+                "b" to (if (am.getFontBold(p, l)) "1" else "0"),
+                "i" to (if (am.getFontItalic(p, l)) "1" else "0"),
+                "u" to (if (am.getFontUnderline(p, l) > 0) "single" else "none"),
+                "color" to "%06X".format(am.getFontColor(p, l) and 0xFFFFFF),
+                "sz" to Math.round(am.getFontSizeF(p, l) * 2).toString(),
+            )
+            val highlight = am.getFontHighLight(p, l)
+            if (highlight != -1 && highlight != Int.MIN_VALUE && (highlight ushr 24) != 0) props.add("shd" to "%06X".format(highlight and 0xFFFFFF))
+            out.add(DocxEditor.RunFormat((pos - s).toInt(), (stop - s).toInt(), props))
+            pos = stop
+        }
+        return out
     }
 }
