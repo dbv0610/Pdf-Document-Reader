@@ -607,17 +607,22 @@ class ReadDocumentEditTest {
                 Thread.sleep(1200)
             }
             tap()
+            screenshot("empty_after_tap")
             // long-press on the empty page, then tap again
             val t = android.os.SystemClock.uptimeMillis()
             inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
             Thread.sleep(900)
             inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], t)
             Thread.sleep(800)
+            screenshot("empty_after_longpress")
             tap()
+            screenshot("empty_after_tap2")
             instrumentation.runOnMainSync {
                 lateinit var typing: EditText
                 scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
-                assertTrue("keyboard target focused after tapping again", typing.hasFocus())
+                var focus = ""
+                scenario.onActivity { a -> focus = a.currentFocus?.toString() ?: "none" }
+                assertTrue("keyboard target focused after tapping again; focus=$focus", typing.hasFocus())
                 typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("Vẫn gõ được", 1)
             }
             Thread.sleep(800)

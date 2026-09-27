@@ -24,7 +24,12 @@ internal class WordSelectionHandles(
     private val caret: (Long) -> Rect?,
     private val offsetAt: (rawX: Float, rawY: Float) -> Long,
     private val onChange: (start: Long, end: Long) -> Unit,
+    /** A touch on a handle that did not drag it: a tap on the document there. */
+    private val onTap: (rawX: Float, rawY: Float) -> Unit = { _, _ -> },
 ) : View(context) {
+    private var moved = false
+    private var downX = 0f
+    private var downY = 0f
     private val density = context.resources.displayMetrics.density
     private val radius = 9 * density
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1A73E8.toInt() }
@@ -81,10 +86,14 @@ internal class WordSelectionHandles(
                     else -> 0
                 }
                 if (dragging != 0) parent?.requestDisallowInterceptTouchEvent(true)
+                moved = false
+                downX = event.x; downY = event.y
                 return dragging != 0
             }
             MotionEvent.ACTION_MOVE -> {
                 if (dragging == 0) return false
+                if (!moved && Math.hypot((event.x - downX).toDouble(), (event.y - downY).toDouble()) < 8 * density) return true
+                moved = true
                 val r = range() ?: return true
                 // aim at the text line above the knob, not under the finger
                 val offset = offsetAt(event.rawX, event.rawY - radius - lineHeight / 2)
@@ -98,6 +107,7 @@ internal class WordSelectionHandles(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val was = dragging != 0
                 dragging = 0
+                if (was && !moved && event.actionMasked == MotionEvent.ACTION_UP) onTap(event.rawX, event.rawY)
                 return was
             }
         }

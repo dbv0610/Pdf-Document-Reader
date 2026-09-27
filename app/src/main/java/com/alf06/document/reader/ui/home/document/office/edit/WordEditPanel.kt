@@ -128,10 +128,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
                     true
                 }
                 IMainFrame.ON_SINGLE_TAP_CONFIRMED -> {
-                    // a tap ends any selection and puts the caret there; the handles extend a selection
-                    val offset = selection.offsetAtScreen(event.rawX, event.rawY)
-                    if (offset < 0) return@gesture false
-                    clickAndType(selection, offset, event.rawX, event.rawY) || startTyping(offset)
+                    tapAt(event.rawX, event.rawY)
                 }
                 else -> false
             }
@@ -144,10 +141,12 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         range = { selection()?.selection() },
         caret = { offset -> selection()?.caretRect(offset) },
         offsetAt = { x, y -> selection()?.offsetAtScreen(x, y) ?: -1 },
-    ) { start, end ->
-        selection()?.let { select(it, start until end) }
-        anchor = start until end
-    }
+        onChange = { start, end ->
+            selection()?.let { select(it, start until end) }
+            anchor = start until end
+        },
+        onTap = { x, y -> tapAt(x, y) },
+    )
 
     init {
         reader.addView(caret, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -162,6 +161,14 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         reader.removeView(caret)
         reader.removeView(handles)
         clearSelection()
+    }
+
+    /** A tap ends any selection and puts the caret there; the handles extend a selection. */
+    private fun tapAt(rawX: Float, rawY: Float): Boolean {
+        val sel = selection() ?: return false
+        val offset = sel.offsetAtScreen(rawX, rawY)
+        if (offset < 0) return false
+        return clickAndType(sel, offset, rawX, rawY) || startTyping(offset)
     }
 
     /**

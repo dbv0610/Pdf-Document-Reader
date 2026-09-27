@@ -178,6 +178,8 @@ class WordSelection(private val word: Word) {
         val boundaries = BreakIterator.getWordInstance().apply { setText(text) }
         val start = if (boundaries.isBoundary(local)) local else boundaries.preceding(local)
         val end = boundaries.following(local).let { if (it == BreakIterator.DONE) text.length else it }
+        // a paragraph mark or spaces are not a word to select
+        if (text.substring(start, end).isBlank()) return offset until offset
         return (para.getStartOffset() + start) until (para.getStartOffset() + end)
     }
 }
