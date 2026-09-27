@@ -23,7 +23,7 @@ import java.io.File
 
 /**
  * Word: tap the text to put the caret there and type with the keyboard (Vietnamese IMEs
- * included); long-press a word to select it, tap another word to extend the selection.
+ * included); long-press a word to select it and drag its handles to extend the selection.
  * Formatting and text changes show at once; Save writes the .docx in place.
  */
 internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocumentView, file: File) :
@@ -121,17 +121,17 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
                     val offset = selection.offsetAtScreen(event.rawX, event.rawY)
                     if (offset < 0) return@gesture false
                     val word = selection.wordAt(offset)
+                    // no word here (an empty paragraph, a space): just put the caret
+                    if (word.isEmpty()) return@gesture startTyping(offset)
                     anchor = word
                     select(selection, word)
                     true
                 }
                 IMainFrame.ON_SINGLE_TAP_CONFIRMED -> {
+                    // a tap ends any selection and puts the caret there; the handles extend a selection
                     val offset = selection.offsetAtScreen(event.rawX, event.rawY)
                     if (offset < 0) return@gesture false
-                    val start = anchor ?: return@gesture startTyping(offset)
-                    val word = selection.wordAt(offset)
-                    select(selection, minOf(start.first, word.first)..maxOf(start.last, word.last))
-                    true
+                    startTyping(offset)
                 }
                 else -> false
             }

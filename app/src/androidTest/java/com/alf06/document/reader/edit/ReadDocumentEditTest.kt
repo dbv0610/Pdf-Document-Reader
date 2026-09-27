@@ -583,5 +583,49 @@ class ReadDocumentEditTest {
         val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
         assertTrue(xml, xml.contains("Tài liệu mới") && xml.contains("Dòng hai"))
     }
+
+    @Test
+    fun emptyDocumentLongPressThenTapStillTypes() {
+        val file = File(context.filesDir, "edit-test-empty.docx").apply { delete() }
+        assertTrue(com.wxiwei.office.editor.DocumentCreator.create(context, com.wxiwei.office.editor.DocumentCreator.Format.WORD, file) is com.wxiwei.office.editor.EditResult.Ok)
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(2000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            var point = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val o = IntArray(2); viewer.getLocationOnScreen(o)
+                point = floatArrayOf(o[0] + viewer.width / 2f, o[1] + viewer.height * 0.2f)
+            }
+            fun tap() {
+                val t = android.os.SystemClock.uptimeMillis()
+                inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
+                inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], t)
+                Thread.sleep(1200)
+            }
+            tap()
+            // long-press on the empty page, then tap again
+            val t = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
+            Thread.sleep(900)
+            inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], t)
+            Thread.sleep(800)
+            tap()
+            instrumentation.runOnMainSync {
+                lateinit var typing: EditText
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                assertTrue("keyboard target focused after tapping again", typing.hasFocus())
+                typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("Vẫn gõ được", 1)
+            }
+            Thread.sleep(800)
+            scenario.onActivity {
+                val doc = (viewer.control!!.getView() as com.wxiwei.office.wp.control.Word).getDocument()
+                assertEquals("Vẫn gõ được\n", doc.getText(0, doc.getAreaEnd(0)))
+            }
+        }
+    }
 }
 
