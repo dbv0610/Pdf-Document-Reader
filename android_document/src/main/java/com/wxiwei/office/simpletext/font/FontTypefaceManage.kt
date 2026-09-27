@@ -128,8 +128,13 @@ class FontTypefaceManage {
     private val boldFaces = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
     private val styled = java.util.concurrent.ConcurrentHashMap<Long, Typeface>()
 
+    /** A family we really have whose regular face is already heavy: never embolden it again. */
     private fun isBoldFace(name: String?): Boolean =
-        name != null && (boldFaces.contains(name) || BOLD_NAME.containsMatchIn(name))
+        name != null && (boldFaces.contains(name) || (BOLD_NAME.containsMatchIn(name) && embeddedFonts.containsKey(name)))
+
+    /** A family named for a heavy face ("Mona-Sans Black") that the device lacks: its stand-in is drawn bold. */
+    private fun missingHeavyFace(name: String?): Boolean =
+        name != null && BOLD_NAME.containsMatchIn(name) && !embeddedFonts.containsKey(name) && BUNDLED[name.trim().lowercase()] == null
 
     /**
      * Typeface of [index] in the requested style. Android picks the family's real bold/italic face
@@ -139,7 +144,7 @@ class FontTypefaceManage {
     fun getFontTypeface(index: Int, bold: Boolean, italic: Boolean): Typeface {
         val base = getFontTypeface(index)
         val name = if (index < 0) null else sysFontName?.getOrNull(index)
-        val style = (if (bold && !isBoldFace(name)) Typeface.BOLD else 0) or (if (italic) Typeface.ITALIC else 0)
+        val style = (if ((bold || missingHeavyFace(name)) && !isBoldFace(name)) Typeface.BOLD else 0) or (if (italic) Typeface.ITALIC else 0)
         if (style == Typeface.NORMAL) return base
         val key = (index.toLong() shl 8) or style.toLong()
         styled[key]?.let { return it }
@@ -150,6 +155,9 @@ class FontTypefaceManage {
             // the exact bundled face; a missing one (Cousine italic) is synthesized from the nearest
             val exact = if (bundled.file(wantBold, wantItalic) != null) bundledTypeface(name!!, wantBold, wantItalic) else null
             exact ?: Typeface.create(bundledTypeface(name!!, wantBold, false) ?: base, if (wantItalic) Typeface.ITALIC else 0)
+        } else if (android.os.Build.VERSION.SDK_INT >= 28) {
+            // by weight: Typeface.create(base, BOLD) of a family the device lacks stays regular
+            Typeface.create(base, if (wantBold) 700 else base.weight, wantItalic)
         } else {
             Typeface.create(base, style)
         }

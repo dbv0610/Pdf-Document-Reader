@@ -38,10 +38,10 @@ class LiveDocxSessionTest {
         AttrManage.instance().getFontBold(para.getAttribute(), leaf.getAttribute())
     }
 
-    private suspend fun shot(reader: com.wxiwei.office.reader.OfficeReader, name: String) {
+    private suspend fun shot(reader: com.wxiwei.office.reader.OfficeReader, name: String, page: Int = 2) {
         reader.thumbnails?.invalidateAll()
         delay(500)
-        val bitmap = reader.thumbnails!!.render(2, 1240) ?: return
+        val bitmap = reader.thumbnails!!.render(page, 1240) ?: return
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 90, it) }
     }
 
@@ -118,6 +118,56 @@ class LiveDocxSessionTest {
             }
         }
         return out
+    }
+
+    /** doc_test.docx: "School Name" is in a text box; tap it, type, bold, undo/redo, save, reopen. */
+    @Test
+    fun editTextBox() {
+        val textbox = com.wxiwei.office.constant.wp.WPModelConstant.TEXTBOX
+        val source = OpenDocument.copySample("doc_test.docx", "live_docx_textbox.docx")
+        val saved = OpenDocument.output("live_docx_textbox_saved.docx")
+        fun find(path: String, needle: String): Long {
+            val map = DocxSourceMap.get(path)!!
+            for (i in 0 until map.size) {
+                val l = map.leaf(i)
+                val k = l.text.indexOf(needle)
+                if (k >= 0 && (l.start and com.wxiwei.office.constant.wp.WPModelConstant.AREA_MASK) == textbox) return l.start + k
+            }
+            return -1
+        }
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            delay(1500)
+            val at = find(source.absolutePath, "School Name")
+            assertTrue("text box text mapped", at > 0)
+            // the caret spot of "S" and a tap on its middle give that offset back
+            val tapped = onMain {
+                val sel = com.wxiwei.office.editor.word.WordSelection(reader.control!!).apply { storyPage = 0 }
+                val r = sel.rectsFor(at, at + 1).first()
+                sel.offsetAt(r.left + r.width() * 0.25f, r.exactCenterY())
+            }
+            assertEquals(at, tapped)
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(at, "Tên ") })
+            assertEquals("Tên School Name", modelText(reader, at, 15))
+            assertTrue(session.lastError?.toString(), onMain { session.setBold(at, at + 3, true) })
+            assertTrue("bold live", bold(reader, at + 1))
+            assertTrue(onMain { session.undo() })
+            assertFalse("undo bold", bold(reader, at + 1))
+            assertTrue(onMain { session.redo() })
+            assertTrue("redo bold", bold(reader, at + 1))
+            delay(1000)
+            shot(reader, "docx_textbox_edit", 1)
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            delay(1000)
+            // "Tên" is a bold run of its own now, right before "School Name"
+            val name = find(saved.absolutePath, "School Name")
+            assertTrue("text box still mapped", name > 0)
+            assertEquals("Tên School Name", modelText(reader, name - 4, 15))
+            assertTrue("saved bold", bold(reader, name - 3))
+            assertFalse("rest not bold", bold(reader, name + 1))
+        }
     }
 
     /** Copy "MidiConverter parse" with "Midi" bold and "parse" red, paste it elsewhere: formatting kept, one undo, saved. */

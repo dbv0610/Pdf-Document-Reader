@@ -172,9 +172,11 @@ class PptxEditSessionTest {
             assertTrue(onMain { session.save(saved) } is EditResult.Ok)
         }
         val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide10.xml")).readBytes().toString(Charsets.UTF_8) }
-        val run = Regex("<a:r><a:rPr([^>]*)>(.*?)</a:rPr><a:t>" + Regex.escape(part) + "</a:t></a:r>").find(xml)
-        assertTrue("run of its own for '$part'", run != null)
-        assertTrue(run!!.value, run.groupValues[1].contains("b=\"1\"") && run.groupValues[2].contains("C00000"))
+        // the shape's runs that are now bold and red read exactly the formatted chars (Canva splits words over runs)
+        val shape = xml.substring(Regex("<p:cNvPr[^>]*\\bid=\"8\"").find(xml)!!.range.first).substringBefore("</p:sp>")
+        val formatted = Regex("<a:r><a:rPr([^>]*)>(.*?)</a:rPr><a:t>([^<]*)</a:t></a:r>").findAll(shape)
+            .filter { it.groupValues[1].contains("b=\"1\"") && it.groupValues[2].contains("C00000") }.joinToString("") { it.groupValues[3] }
+        assertEquals(part, formatted)
         assertEquals(PptxEditor(source).listShapes(9).first { it.id == 8 }.text, PptxEditor(saved).listShapes(9).first { it.id == 8 }.text)
     }
 
