@@ -93,7 +93,7 @@ class LiveDocxSessionTest {
         sb.take(len).toString()
     }
 
-    /** sample.docx with its run "MidiConverter parse..." split: "MidiConverter" hidden (w:vanish), " parse" raised 6pt. */
+    /** sample.docx with its run "MidiConverter parse..." split: "MidiConverter" hidden (w:vanish), " parse" raised 6pt, the rest in small caps. */
     private fun hiddenAndRaised(name: String): File {
         val source = OpenDocument.copySample("sample.docx", "$name.src.docx")
         val out = OpenDocument.output("$name.docx")
@@ -108,7 +108,8 @@ class LiveDocxSessionTest {
                         check(xml.contains(old))
                         val hidden = rPr.replace("<w:sz ", "<w:vanish/><w:sz ")
                         val raised = rPr.replace("<w:sz ", "<w:position w:val=\"12\"/><w:sz ")
-                        bytes = xml.replace(old, "<w:r>$hidden<w:t>MidiConverter</w:t></w:r><w:r>$raised<w:t xml:space=\"preserve\"> parse</w:t></w:r><w:r>$rPr<w:t>").toByteArray()
+                        val small = rPr.replace("<w:sz ", "<w:smallCaps/><w:sz ")
+                        bytes = xml.replace(old, "<w:r>$hidden<w:t>MidiConverter</w:t></w:r><w:r>$raised<w:t xml:space=\"preserve\"> parse</w:t></w:r><w:r>$small<w:t>").toByteArray()
                     }
                     zos.putNextEntry(java.util.zip.ZipEntry(entry.name))
                     zos.write(bytes)

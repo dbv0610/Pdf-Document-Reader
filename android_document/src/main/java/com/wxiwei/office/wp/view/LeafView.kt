@@ -72,7 +72,7 @@ open class LeafView : AbstractView {
      */
     /**
      * The text as shown: all/small caps upper-case each character in place (same length, so model
-     * offsets are unchanged). Small caps are drawn as plain capitals for now.
+     * offsets are unchanged). Small caps draw lower-case letters as smaller capitals ([SMALL_CAPS_SCALE]).
      */
     private fun displayText(): String? {
         val text = elem?.getText(null) ?: return null
@@ -81,6 +81,23 @@ open class LeafView : AbstractView {
         val chars = text.toCharArray()
         for (i in chars.indices) chars[i] = Character.toUpperCase(chars[i])
         return String(chars)
+    }
+
+    /** True when the character at [i] of the element's text is a lower-case letter drawn as a small capital. */
+    private fun small(i: Int): Boolean {
+        if (charAttr?.caps != 2) return false
+        val c = elem?.getText(null)?.getOrNull(i) ?: return false
+        return Character.isLowerCase(c)
+    }
+
+    private fun scaleSmallCaps(widths: FloatArray, from: Int) {
+        for (k in widths.indices) if (small(from + k)) widths[k] *= SMALL_CAPS_SCALE
+    }
+
+    /** Widths of [text], which starts at index [from] of the element's text, as drawn. */
+    private fun measure(text: String, from: Int, widths: FloatArray) {
+        paint!!.getTextWidths(text, widths)
+        if (charAttr?.caps == 2) scaleSmallCaps(widths, from)
     }
 
     /** Extra width (px at zoom 1) after each space, set by a justified line. */
@@ -149,7 +166,7 @@ open class LeafView : AbstractView {
             text = text!!.substring((start - startElem).toInt(), (elem!!.getEndOffset() - startElem).toInt())
         }
         val widths = FloatArray(text!!.length)
-        paint!!.getTextWidths(text, widths)
+        measure(text, maxOf(0L, start - startElem).toInt(), widths)
         var tW = 0f
         var i = 0
         val layoutInTable = ViewKit.instance().getBitValue(flag, WPViewConstant.LAYOUT_PARA_IN_TABLE.toInt())
@@ -203,7 +220,7 @@ open class LeafView : AbstractView {
         val e = (end - elem!!.getStartOffset()).toInt()
         text = text!!.substring(s, e)
         val widths = FloatArray(text.length)
-        paint!!.getTextWidths(text, widths)
+        measure(text, s, widths)
         var tW = 0f
         for (i in 0 until text.length) {
             tW += widths[i]
@@ -262,6 +279,8 @@ open class LeafView : AbstractView {
         // Measure the same shaping context, but retain only this leaf's range.
         val widths = FloatArray(text.length)
         paint.getTextWidths(text, widths)
+        // small caps: the drawn capitals of lower-case letters are smaller (a field's page number has none)
+        if (charAttr?.caps == 2 && text.length == elem?.getText(null)?.length) scaleSmallCaps(widths, 0)
         val measured = DrawWidths(text, start, end, paint.textSize, widths.copyOfRange(start, end))
         // Keep thumbnail and screen zooms from evicting each other; draw holds the leaf monitor.
         alternateDrawWidths = cached
@@ -386,7 +405,12 @@ open class LeafView : AbstractView {
                 }
                 skip++
             }
-            canvas.drawText(text, i, i + 1 + skip, drawX, drawY, paint)
+            if (!adjustFieldText && small(i)) {
+                val size = paint.textSize
+                paint.textSize = size * SMALL_CAPS_SCALE
+                canvas.drawText(text, i, i + 1 + skip, drawX, drawY, paint)
+                paint.textSize = size
+            } else canvas.drawText(text, i, i + 1 + skip, drawX, drawY, paint)
             drawX += widths[i - s] - extX
             i += skip
             i++
@@ -416,7 +440,9 @@ open class LeafView : AbstractView {
         val s = (start - elem!!.getStartOffset()).toInt()
         val e = (offset - elem!!.getStartOffset()).toInt()
         text = text!!.substring(s, e)
-        rect.x = (paint!!.measureText(text) + text.count { it == ' ' } * justifyExtra).toInt()
+        val widths = FloatArray(text.length)
+        measure(text, s, widths)
+        rect.x = (widths.sum() + text.count { it == ' ' } * justifyExtra).toInt()
         rect.x += getX()
         rect.y += getY()
         rect.height = getLayoutSpan(WPViewConstant.Y_AXIS)
@@ -436,7 +462,7 @@ open class LeafView : AbstractView {
         val e = (end - elem!!.getStartOffset()).toInt()
         text = text!!.substring(s, e)
         val widths = FloatArray(text.length)
-        paint!!.getTextWidths(text, widths)
+        measure(text, s, widths)
         var count = 0
         if (justifyExtra > 0f) {
             for (i in text.indices) if (text[i] == ' ') widths[i] += justifyExtra
@@ -507,5 +533,7 @@ open class LeafView : AbstractView {
     companion object {
         // a text size that measures and draws as nothing (0 is not a valid size)
         private const val HIDDEN_TEXT_SIZE = 0.001f
+        // size of the capitals standing for lower-case letters in small caps
+        private const val SMALL_CAPS_SCALE = 0.8f
     }
 }

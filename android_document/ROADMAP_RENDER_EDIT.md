@@ -244,7 +244,7 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
 - [x] **D7. Bảng: `tblHeader` lặp khi sang trang** (27/09 — `TableLayoutKit.layoutRepeatedHeader`; `tblW`/autofit/fixed chưa làm) (D-i) — `TableLayoutKit.kt`; `setTableHeaderRow` đã có trong `AttrManage.kt:1141`.
 - [x] **D8. Font theo theme** (26/09 — `readThemeFonts`/`themeFont`; thứ tự asciiTheme > ascii > hAnsiTheme > hAnsi > eastAsia. Chưa chia leaf theo script) (D-j): đọc `theme1.xml` `majorFont/minorFont` (latin/ea/cs); `rFonts asciiTheme="minorHAnsi"` → font minor; ưu tiên `ascii` cho ký tự ASCII, `hAnsi` cho Latin mở rộng (tiếng Việt), `eastAsia` cho CJK (có thể chia leaf theo script — bước sau).
 - [x] **D9. Crop ảnh `srcRect`** (đã có sẵn qua `PictureEffectInfoFactory` trong `addPicture`) (D-k): áp `srcRect` l/t/r/b (1/1000 %) khi vẽ `PictureShape` DOCX, giá trị âm = thêm lề trống.
-- [~] **D10. Thuộc tính run còn thiếu** (27/09 — xong: `position` (nâng/hạ, `FONT_POSITION_ID`), `vanish` (`FONT_HIDDEN_ID`, leaf rộng 0), `caps`/`smallCaps` (small caps vẽ như caps), giãn chữ `w:spacing`. **Cố ý chưa vẽ** `rPr/shd`: WPS ghi `shd fill=FFFFFF` dưới chữ trắng trên nền màu (doc_test) — cần ảnh tham chiếu Word trước khi quyết định) (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
+- [~] **D10. Thuộc tính run còn thiếu** (27/09 — xong: `position` (nâng/hạ, `FONT_POSITION_ID`), `vanish` (`FONT_HIDDEN_ID`, leaf rộng 0), `caps`/`smallCaps` (27/09: small caps = chữ thường vẽ thành chữ hoa 80%, đo/vẽ/con trỏ khớp), giãn chữ `w:spacing`. **Cố ý chưa vẽ** `rPr/shd`: WPS ghi `shd fill=FFFFFF` dưới chữ trắng trên nền màu (doc_test) — cần ảnh tham chiếu Word trước khi quyết định) (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
 - [x] **D12. Số trang trong footer trống** (26/09 — placeholder "1" khi field PAGE/NUMPAGES trong header/footer không có kết quả cache; LeafView thay bằng số trang thật) — render thấy "Trang  • Internal Dev Doc" thiếu số: field `PAGE` dạng
   `fldChar begin / instrText PAGE / separate / end` **không có run kết quả** giữa separate và end (WPS ghi vậy) → reader
   phải tự tạo leaf số trang (`setFontPageNumberType`) khi gặp instrText `PAGE`/`NUMPAGES` dù không có kết quả cache. Xem `processRun` quanh `fldChar`.
@@ -416,7 +416,7 @@ Khoảng **85–90%** roadmap đã xong. Còn lại:
 **A. Việc nhỏ đang làm (không cần ảnh tham chiếu)** — theo thứ tự:
 1. ~~**D10** `position`/`vanish`~~ (xong 27/09). (`rPr/shd` của WPS vẫn để chờ ảnh tham chiếu.)
 2. ~~**X8**~~ (không lỗi), ~~**P7**~~ ảnh lớn, ~~**P4**~~ `spAutoFit` — xong 27/09.
-3. Nhỏ khác: G0.5 test JVM reader, G0.6 debug overlay (tùy chọn), small caps đúng cỡ, D7 `tblW`/fixed layout.
+3. ~~small caps đúng cỡ~~ (xong 27/09). Nhỏ khác: G0.5 test JVM reader, G0.6 debug overlay (tùy chọn), D7 `tblW`/fixed layout.
 
 **B. Cần ảnh tham chiếu từ WPS/Office (G0.3 — người dùng xuất giúp)**: X7/X11 chart (màu pie, "Series 1"), D15 khoảng trắng TOC rỗng, P5/P6/P8 ảnh custGeom + group scale + tiêu đề Bahianita, D11/X9 kiểm tra hồi quy bằng mắt, `rPr/shd` WPS.
 
