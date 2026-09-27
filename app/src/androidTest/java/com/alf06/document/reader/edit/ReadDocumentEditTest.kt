@@ -545,5 +545,43 @@ class ReadDocumentEditTest {
         val i = xml.indexOf("Tính năng Play-along")
         assertTrue("numPr saved", xml.lastIndexOf("<w:numPr>", i) > xml.lastIndexOf("<w:p>", i).coerceAtLeast(xml.lastIndexOf("<w:p ", i)))
     }
+
+    @Test
+    fun newWordDocumentTypeAndSave() {
+        val file = File(context.filesDir, "edit-test-new.docx").apply { delete() }
+        assertTrue(com.wxiwei.office.editor.DocumentCreator.create(context, com.wxiwei.office.editor.DocumentCreator.Format.WORD, file) is com.wxiwei.office.editor.EditResult.Ok)
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(2000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            // tap the empty page, below the only (empty) paragraph
+            var point = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val o = IntArray(2); viewer.getLocationOnScreen(o)
+                point = floatArrayOf(o[0] + viewer.width / 2f, o[1] + viewer.height * 0.3f)
+            }
+            val t = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
+            inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], t)
+            Thread.sleep(1200)
+            instrumentation.runOnMainSync {
+                lateinit var typing: EditText
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                val ic = typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!
+                ic.commitText("Tài liệu mới", 1)
+                ic.commitText("\n", 1)
+                ic.commitText("Dòng hai", 1)
+            }
+            Thread.sleep(800)
+            screenshot("new_word_typed")
+            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            Thread.sleep(2000)
+        }
+        val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        assertTrue(xml, xml.contains("Tài liệu mới") && xml.contains("Dòng hai"))
+    }
 }
 

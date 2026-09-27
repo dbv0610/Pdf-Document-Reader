@@ -1,0 +1,7 @@
+<resources>
+    <string name="create_document">Tạo mới</string>
+    <string name="create_document_failed">Không thể tạo tài liệu. Hãy kiểm tra quyền truy cập bộ nhớ và thử lại.</string>
+    <string name="new_word_name">Tài liệu mới</string>
+    <string name="new_excel_name">Bảng tính mới</string>
+    <string name="new_powerpoint_name">Bản trình chiếu mới</string>
+</resources>

@@ -506,6 +506,36 @@ class LiveDocxSessionTest {
         }
     }
 
+    /** A document made by "New Word document": one empty paragraph. */
+    @Test
+    fun typeInNewDocument() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val source = OpenDocument.output("new_blank.docx")
+        ctx.assets.open("document_templates/blank.docx").use { i -> source.outputStream().use { i.copyTo(it) } }
+        val saved = OpenDocument.output("new_blank_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            // a tap below the text: the caret the view gives
+            val tapped = onMain {
+                val w = reader.control!!.getView() as Word
+                com.wxiwei.office.editor.word.WordSelection(w).offsetAt(w.width / 2f, w.height * 0.8f)
+            }
+            android.util.Log.i("NewDoc", "tap offset=$tapped end=${onMain { (reader.control!!.getView() as Word).getDocument().getAreaEnd(0) }}")
+            assertEquals("caret stays before the last paragraph mark", 0L, tapped)
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(tapped, "Xin chào") })
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(8, "\n") })
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(9, "Dòng hai") })
+            assertTrue(session.lastError?.toString(), onMain { session.setBold(0, 3, true) })
+            assertTrue(onMain { session.setBullets(9, 10, true) })
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            assertEquals("Xin chào\nDòng hai\n", mainText(reader))
+            assertTrue(bold(reader, 1))
+        }
+    }
+
     @Test
     fun paragraphFormattingLive() {
         val source = OpenDocument.copySample("sample.docx", "live_docx_para.docx")

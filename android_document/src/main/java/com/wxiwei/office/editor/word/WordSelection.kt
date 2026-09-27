@@ -17,7 +17,25 @@ class WordSelection(private val word: Word) {
     constructor(control: IControl) : this(control.getView() as? Word ?: error("Open a Word document first"))
     private val printMode get() = word.getCurrentRootType() == WPViewConstant.PRINT_ROOT.toInt()
     private fun root(): IView? = if (printMode) word.getPrintWord().getListView().model as? PageRoot else word.getRoot(word.getCurrentRootType())
+    /**
+     * Offset of the caret for a touch at ([viewX], [viewY]) in Word view coordinates, or -1. A
+     * touch right of a paragraph's last line (or below the text) puts it before that paragraph's
+     * mark, never after the document's last mark.
+     */
     fun offsetAt(viewX: Float, viewY: Float): Long {
+        val raw = rawOffsetAt(viewX, viewY)
+        if (raw <= 0 || (raw and com.wxiwei.office.constant.wp.WPModelConstant.AREA_MASK) != com.wxiwei.office.constant.wp.WPModelConstant.MAIN) return raw
+        val doc = word.getDocument()
+        var o = minOf(raw, doc.getAreaEnd(0) - 1).coerceAtLeast(0)
+        if (o > 0 && doc.getText(o - 1, o) == "\n") {
+            val before = caretRect(o - 1)
+            val here = caretRect(o)
+            if (before != null && viewY >= before.top && viewY < before.bottom && (here == null || viewY < here.top || viewY >= here.bottom)) o -= 1
+        }
+        return o
+    }
+
+    private fun rawOffsetAt(viewX: Float, viewY: Float): Long {
         val z = word.getZoom()
         if (printMode) {
             val list = word.getPrintWord().getListView()

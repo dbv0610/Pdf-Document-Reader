@@ -246,6 +246,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
         synchronized(layoutLock) {
             ownError = null
             if (text.isEmpty()) return refuse("Nothing to insert")
+            // after the last paragraph mark there is no paragraph to hold the text
+            if (offset < 0 || offset >= word.getDocument().getAreaEnd(0)) return refuse("Cannot insert after the end of the document")
             val lines = text.replace("\r\n", "\n").replace('\r', '\n')
             if (lines.length > 1 && lines.contains('\n')) {
                 var at = offset
