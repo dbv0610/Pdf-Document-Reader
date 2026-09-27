@@ -93,6 +93,8 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
 
     // Slide changes are saved; the open view shows them after a reopen ([needsReopen]).
     fun slideCount(): Int = editor.slideCount()
+    /** Size, color and typeface of the shape's text as shown, for an editor over it. */
+    fun textStyle(slideIndex: Int, shapeId: Int): TextStyle? = display.textStyle(slideIndex, shapeId)
     /** Current bold/italic/underline of the shape's text (from its first run). */
     fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = editor.textFormatOf(slideIndex, shapeId)
 

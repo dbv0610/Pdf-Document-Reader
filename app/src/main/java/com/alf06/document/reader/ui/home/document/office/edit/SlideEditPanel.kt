@@ -91,6 +91,18 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             textSize = 16f
             setTextColor(0xFF111111.toInt())
             setBackgroundColor(0xF0FFFFFF.toInt())
+            // the shape's own look, at the slide's zoom (points at 96 dpi, then the view zoom)
+            val p = reader.control?.getView() as? Presentation
+            session.textStyle(slide(), s.id)?.let { st ->
+                val zoom = p?.getZoom() ?: 1f
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (st.sizePt * 96f / 72f * zoom).coerceIn(dp(12).toFloat(), dp(48).toFloat()))
+                typeface = st.typeface
+                val c = st.color or 0xFF000000.toInt()
+                // light text keeps a dark backdrop so it stays readable
+                val light = android.graphics.Color.luminance(c) > 0.6f
+                setTextColor(c)
+                setBackgroundColor(if (light) 0xE0303030.toInt() else 0xF0FFFFFF.toInt())
+            }
             setPadding(dp(6), dp(4), dp(6), dp(4))
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE

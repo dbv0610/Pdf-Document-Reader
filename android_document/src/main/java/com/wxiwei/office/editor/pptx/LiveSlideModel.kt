@@ -43,6 +43,8 @@ interface LiveSlideDisplay {
     fun shapeRotation(slideIndex: Int, id: Int): Float? = null
     fun rotateShape(slideIndex: Int, id: Int, degrees: Float): Boolean = false
     fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? = null
+    /** How the shape's first text run is drawn, for an editor over it; null when not shown. */
+    fun textStyle(slideIndex: Int, id: Int): TextStyle? = null
     fun restoreFormat(slideIndex: Int, token: Any): Boolean = false
 }
 
@@ -51,6 +53,9 @@ interface LiveSlideDisplay {
  * Main thread only. Model bounds are pixels at 96 dpi, i.e. EMU / 9525, and model shape ids are the
  * XML cNvPr ids, so they match [PptxEditor] ids.
  */
+/** Text size in points, ARGB color and typeface of a shape's text. */
+data class TextStyle(val sizePt: Float, val color: Int, val typeface: android.graphics.Typeface)
+
 class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     private val presentation get() = control.getView() as? Presentation
 
@@ -175,6 +180,17 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         }
         repaint()
         return true
+    }
+
+    override fun textStyle(slideIndex: Int, id: Int): TextStyle? {
+        val box = slide(slideIndex)?.let { find(it, id) }?.filterIsInstance<TextBox>()?.firstOrNull() ?: return null
+        val para = box.element?.getParaCollection()?.getElementForIndex(0) as? ParagraphElement ?: return null
+        val leaf = para.getElementForIndex(0) ?: return null
+        val am = AttrManage.instance()
+        val p = para.getAttribute(); val l = leaf.getAttribute()
+        val bold = am.getFontBold(p, l); val italic = am.getFontItalic(p, l)
+        return TextStyle(am.getFontSizeF(p, l), am.getFontColor(p, l),
+            com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().getFontTypeface(am.getFontName(p, l), bold, italic))
     }
 
     override fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? {
