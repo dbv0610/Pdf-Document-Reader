@@ -59,6 +59,9 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         if (multiple in 0.25f..10f) queue(Op(start, end, "pline", Math.round(multiple * 240).toString())) else invalid("Bad line spacing")
     /** Bullets ("●" list, level 0) on or off for every paragraph touching [start, end). */
     fun setBullets(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "pnum", if (on) "bullet" else "0"))
+    /** List level (0-8) of every listed paragraph touching [start, end). */
+    fun setListLevel(start: Long, end: Long, level: Int): Boolean =
+        if (level in 0..8) queue(Op(start, end, "plvl", level.toString())) else invalid("Bad list level")
     /** Numbering ("1." list, level 0) on or off for every paragraph touching [start, end). */
     fun setNumbering(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "pnum", if (on) "decimal" else "0"))
 
@@ -219,7 +222,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                         if (b != null) insert(b, op.value)?.let { insertionEnds[op.start] = it }
                         delete(op.start, op.end)
                     }
-                    "pjc", "pind", "pline", "pnum" -> paragraphFormat(op)
+                    "pjc", "pind", "pline", "pnum", "plvl" -> paragraphFormat(op)
                     else -> format(op)
                 }
             }
@@ -256,6 +259,12 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             for (p in paras.filter { it.start < end && it.end > op.start }) {
                 val e = paragraphs.getOrNull(p.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
                 val pPr = e.firstChild(W, "pPr") ?: newElement(W, "pPr").also { addBefore(e, e.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
+                if (op.type == "plvl") {
+                    val numPr = pPr.firstChild(W, "numPr") ?: continue // style lists keep their level
+                    val ilvl = numPr.firstChild(W, "ilvl") ?: newElement(W, "ilvl").also { addBefore(numPr, numPr.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
+                    ilvl.addAttribute(QName("val", W), op.value)
+                    continue
+                }
                 if (op.type == "pnum") {
                     // numId 0 turns off a list the paragraph style would give
                     pPr.firstChild(W, "numPr")?.let { pPr.remove(it) }

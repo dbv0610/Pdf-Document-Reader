@@ -148,6 +148,17 @@ class LiveDocxSession(control: IControl, private val source: File) {
         }
     }
 
+    /** List level of the paragraph at [offset] (0 when not in a list). */
+    fun listLevelAt(offset: Long): Int = word.getDocument().getParagraph(offset)?.let { maxOf(0, am.getParaListLevel(it.getAttribute())) } ?: 0
+
+    /** Moves the listed paragraphs touching [start, end) to list level [level] (0-8). */
+    fun setListLevel(start: Long, end: Long, level: Int): Boolean {
+        if (!hasBullet(start)) return refuse("Not in a list")
+        return paragraphFormat(start, end, { e, s, t -> e.setListLevel(s, t, level) }) {
+            if (am.getParaListID(it) >= 0) am.setParaListLevel(it, level)
+        }
+    }
+
     /** List id of the paragraph at [offset] (-1: none). */
     fun listAt(offset: Long): Int = word.getDocument().getParagraph(offset)?.let { am.getParaListID(it.getAttribute()) } ?: -1
 

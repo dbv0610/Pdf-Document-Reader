@@ -94,8 +94,15 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("↔") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "center") } },
             button("⇥") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "right") } },
             button("☰") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "both") } },
-            button("Thụt +") { paraOp { e, r -> e.setIndentLeft(r.first, r.last + 1, e.indentLeftAt(r.first) + 720) } },
-            button("Thụt −") { paraOp { e, r -> e.setIndentLeft(r.first, r.last + 1, maxOf(0, e.indentLeftAt(r.first) - 720)) } },
+            button("Thụt +") { paraOp { e, r ->
+                // in a list: one level deeper, like Tab in Word
+                if (e.hasBullet(r.first)) e.setListLevel(r.first, r.last + 1, minOf(8, e.listLevelAt(r.first) + 1))
+                else e.setIndentLeft(r.first, r.last + 1, e.indentLeftAt(r.first) + 720)
+            } },
+            button("Thụt −") { paraOp { e, r ->
+                if (e.hasBullet(r.first)) e.setListLevel(r.first, r.last + 1, maxOf(0, e.listLevelAt(r.first) - 1))
+                else e.setIndentLeft(r.first, r.last + 1, maxOf(0, e.indentLeftAt(r.first) - 720))
+            } },
             button("Dòng 1.0") { paraOp { e, r -> e.setLineSpacing(r.first, r.last + 1, 1f) } },
             button("Dòng 1.5") { paraOp { e, r -> e.setLineSpacing(r.first, r.last + 1, 1.5f) } },
             button("↶") { stopTyping(); session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },

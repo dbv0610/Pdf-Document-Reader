@@ -381,6 +381,8 @@ class LiveDocxSessionTest {
             bulletId = onMain { session.listAt(p2) }
             assertTrue(numberId >= 0 && bulletId >= 0 && numberId != bulletId)
             assertEquals(numberId, onMain { session.listAt(p4) })
+            assertTrue(session.lastError?.toString(), onMain { session.setListLevel(p4, p4 + 1, 1) })
+            assertEquals(1, onMain { session.listLevelAt(p4) })
             val result = onMain { session.save(saved) }
             assertTrue(result.toString(), result is EditResult.Ok)
         }
@@ -389,6 +391,7 @@ class LiveDocxSessionTest {
             assertEquals("numbered list id saved", numberId, onMain { session.listAt(offsetOf(saved.absolutePath, "Paragraph 3")) })
             assertEquals("bullet list id saved", bulletId, onMain { session.listAt(offsetOf(saved.absolutePath, "Paragraph 2")) })
             assertTrue(onMain { session.hasNumbering(offsetOf(saved.absolutePath, "Paragraph 4")) })
+            assertEquals("level saved", 1, onMain { session.listLevelAt(offsetOf(saved.absolutePath, "Paragraph 4")) })
         }
     }
 
