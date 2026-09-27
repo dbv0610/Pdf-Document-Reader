@@ -202,8 +202,35 @@ class PptxEditor(private val source: File) {
         val e = find(pkg, slideIndex, shapeId).first
         val body = e.firstChild(P, "txBody") ?: throw IllegalArgumentException("Shape has no editable text body")
         val rp = descendants(body).firstOrNull { it.namespaceURI == A.uRI && it.name == "r" }?.firstChild(A, "rPr")?.createCopy()
-        val pp = body.firstChild(A, "p")?.firstChild(A, "pPr")?.createCopy()
-        paragraphs(body, text, rp, pp)
+        val old = body.childrenNamed(A, "p")
+        if (old.isEmpty()) return@queue paragraphs(body, text, rp, null)
+        // keep the runs of the text that stays (Retext); new text borrows a neighbouring run
+        val paras = old.map { p ->
+            val runs = p.elements()!!.filterIsInstance<Element>()
+                .filter { it.namespaceURI == A.uRI && it.name in setOf("r", "fld", "br") }
+                .map { r -> Retext.Run(if (r.name == "br") "\n" else r.firstChild(A, "t")?.text ?: "", r, r.name == "br") }
+            Retext.Para(p, runs, p.firstChild(A, "endParaRPr"))
+        }
+        val at = body.content()!!.indexOf(old.first())
+        old.forEach { body.remove(it) }
+        Retext.apply(paras, text).forEachIndexed { i, para ->
+            val source = para.source.tag
+            val p = newElement(A, "p")
+            source.firstChild(A, "pPr")?.let { p.add(it.createCopy()) }
+            for (run in para.runs) {
+                val from = run.tag
+                p.add(when {
+                    from != null && run.lineBreak -> from.createCopy()!!
+                    from != null -> from.createCopy()!!.also { r -> (r.firstChild(A, "t") ?: r.child(A, "t")).text = run.text }
+                    else -> newElement(A, "r").also { r ->
+                        (para.source.end?.createCopy(QName("rPr", A)) ?: rp?.createCopy())?.let { r.add(it) }
+                        r.child(A, "t").text = run.text
+                    }
+                })
+            }
+            source.firstChild(A, "endParaRPr")?.let { p.add(it.createCopy()) }
+            (body.content() as MutableList<Any?>).add(at + i, p)
+        }
     }
     /** Formats every run (and paragraph for [TextFormat.align]) of a shape's text. */
     /** Bold/italic/underline of the shape's first text run as written in the slide (null: no text). */

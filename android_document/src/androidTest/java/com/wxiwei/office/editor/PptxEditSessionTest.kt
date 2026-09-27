@@ -74,9 +74,73 @@ class PptxEditSessionTest {
         assertTrue("undone box not saved", after.none { it.text == "tạm" })
         // the saved title runs carry the format
         val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide2.xml")).readBytes().toString(Charsets.UTF_8) }
-        val titleXml = xml.substring(xml.indexOf("LỘ TRÌNH ĐÃ SỬA").let { xml.lastIndexOf("<p:sp>", it) }, xml.indexOf("LỘ TRÌNH ĐÃ SỬA"))
+        // the kept runs split the new title over several a:t, so find the shape by its id
+        val idAt = Regex("<p:cNvPr[^>]*\\bid=\"$titleId\"").find(xml)!!.range.first
+        val titleXml = xml.substring(xml.lastIndexOf("<p:sp>", idAt), xml.indexOf("</p:sp>", idAt))
         assertTrue(titleXml, titleXml.contains("b=\"1\"") && titleXml.contains("sz=\"6000\"") && titleXml.contains("C00000") && titleXml.contains("algn=\"r\""))
         OpenDocument.open(saved, { it.pageCount >= 10 }) { reader -> shot(reader, "pptx_edit_reopened") }
+    }
+
+    /** Copy of [sample] whose slide [slide] has the run with text [runText] made bold. */
+    private fun withBoldRun(sample: String, slide: String, runText: String, name: String): File {
+        val source = OpenDocument.copySample(sample, "$name.src.pptx")
+        val out = OpenDocument.output("$name.pptx")
+        java.util.zip.ZipFile(source).use { zip ->
+            java.util.zip.ZipOutputStream(out.outputStream()).use { zos ->
+                for (entry in zip.entries()) {
+                    var bytes = zip.getInputStream(entry).readBytes()
+                    if (entry.name == slide) {
+                        val xml = bytes.toString(Charsets.UTF_8)
+                        val at = xml.lastIndexOf("<a:rPr ", xml.indexOf("<a:t>$runText</a:t>")) + "<a:rPr ".length
+                        bytes = (xml.substring(0, at) + "b=\"1\" " + xml.substring(at)).toByteArray()
+                    }
+                    zos.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                    zos.write(bytes)
+                    zos.closeEntry()
+                }
+            }
+        }
+        return out
+    }
+
+    /** Editing part of a shape's text keeps the format of the other runs, live, after undo and in the file. */
+    @Test
+    fun setTextKeepsRunFormats() {
+        val source = withBoldRun("ppt2.pptx", "ppt/slides/slide10.xml", "in ch", "pptx_runs")
+        val saved = OpenDocument.output("pptx_runs_saved.pptx")
+        OpenDocument.open(source, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, source) }
+            val before = onMain { session.listShapes(9) }.first { it.id == 8 }.text
+            assertTrue(before, before.startsWith("Xin ch"))
+            // the leaves as shown: text and bold
+            val leaves = {
+                onMain {
+                    val box = (reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation).getSlide(9)!!.getShapes()
+                        .filterIsInstance<com.wxiwei.office.common.shape.TextBox>().first { it.shapeID == 8 }
+                    val para = box.element!!.getParaCollection()!!.getElementForIndex(0) as com.wxiwei.office.simpletext.model.ParagraphElement
+                    (0 until para.leafCount()).map { j ->
+                        val leaf = para.getElementForIndex(j)!!
+                        leaf.getText(null)!!.trimEnd('\n') to com.wxiwei.office.simpletext.model.AttrManage.instance().getFontBold(para.getAttribute(), leaf.getAttribute())
+                    }
+                }
+            }
+            val original = leaves()
+            assertTrue(original.toString(), original.contains("in ch" to true))
+            assertTrue(onMain { session.setShapeText(9, 8, "Y" + before.substring(1)) })
+            val edited = leaves()
+            assertEquals(edited.toString(), "Y" to false, edited[0])
+            assertTrue(edited.toString(), edited.contains("in ch" to true))
+            assertEquals(original.size, edited.size)
+            assertTrue(onMain { session.undo() })
+            assertEquals(original, leaves())
+            assertTrue(onMain { session.redo() })
+            assertEquals(edited, leaves())
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide10.xml")).readBytes().toString(Charsets.UTF_8) }
+        val bold = xml.lastIndexOf("<a:rPr ", xml.indexOf("<a:t>in ch</a:t>"))
+        assertTrue("bold run kept", bold >= 0 && xml.substring(bold, xml.indexOf("<a:t>in ch</a:t>")).contains("b=\"1\""))
+        assertTrue("first run changed", xml.contains("<a:t>Y</a:t>"))
     }
 
     /** id, kind, bounds, rotation and text of every shape of a slide as the view has it. */

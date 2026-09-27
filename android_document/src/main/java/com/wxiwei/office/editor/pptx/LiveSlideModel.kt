@@ -33,6 +33,9 @@ interface LiveSlideDisplay {
     fun shapeText(slideIndex: Int, id: Int): String?
     /** [where]: the shape's box, for a shape the view does not draw yet (an empty text box). */
     fun setShapeText(slideIndex: Int, id: Int, text: String, where: Rect? = null): Boolean
+    /** The shape's text as the view has it, for [restoreText]; null when not shown live. */
+    fun saveText(slideIndex: Int, id: Int): Any? = null
+    fun restoreText(slideIndex: Int, id: Int, token: Any): Boolean = false
     /** Current bounds, or null when the shape is not in the model. */
     fun shapeRect(slideIndex: Int, id: Int): Rect?
     fun moveShape(slideIndex: Int, id: Int, rectEmu: Rect): Boolean
@@ -88,6 +91,11 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
 
     /** One paragraph per line, laid out like the PPTX reader builds them (fc/ppt/attribute/RunAttr). */
     private fun buildSection(rect: Rectangle, text: String, paraAttr: IAttributeSet?, leafAttr: IAttributeSet?,
+                             sectionAttr: IAttributeSet?): SectionElement =
+        buildSection(rect, text.replace("\r\n", "\n").split('\n').map { paraAttr to listOf(it to leafAttr) }, sectionAttr)
+
+    /** Paragraphs of (paragraph attributes, runs of (text, run attributes)); a run "\u000b" is a line break. */
+    private fun buildSection(rect: Rectangle, paras: List<Pair<IAttributeSet?, List<Pair<String, IAttributeSet?>>>>,
                              sectionAttr: IAttributeSet?): SectionElement {
         val section = SectionElement()
         section.setStartOffset(0)
@@ -97,19 +105,24 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         AttrManage.instance().setPageWidth(attr, (rect.width * MainConstant.PIXEL_TO_TWIPS).toInt())
         AttrManage.instance().setPageHeight(attr, (rect.height * MainConstant.PIXEL_TO_TWIPS).toInt())
         var offset = 0L
-        for (line in text.replace("\r\n", "\n").split('\n')) {
+        for ((paraAttr, runs) in paras) {
             val para = ParagraphElement()
             para.setStartOffset(offset)
             paraAttr?.let { para.getAttribute()!!.mergeAttribute(it) }
-            val leaf = LeafElement(line.replace(160.toChar(), ' '))
-            leafAttr?.let { leaf.getAttribute()!!.mergeAttribute(it) }
-            leaf.setStartOffset(offset)
-            offset += line.length
-            leaf.setEndOffset(offset)
+            var leaf: LeafElement? = null
+            for ((text, leafAttr) in runs.ifEmpty { listOf("" to null) }) {
+                if (text.isEmpty() && leaf != null) continue
+                leaf = LeafElement(text.replace(160.toChar(), ' '))
+                leafAttr?.let { leaf.getAttribute()!!.mergeAttribute(it) }
+                leaf.setStartOffset(offset)
+                offset += text.length
+                leaf.setEndOffset(offset)
+                para.appendLeaf(leaf)
+            }
             // Like RunAttr.processRun: the paragraph mark is appended to the last leaf
-            leaf.setText(line + "\n")
+            leaf!!.setText(leaf.getText(null) + "\n")
             offset++
-            para.appendLeaf(leaf)
+            leaf.setEndOffset(offset)
             para.setEndOffset(offset)
             section.appendParagraph(para, WPModelConstant.MAIN)
         }
@@ -121,6 +134,48 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         box.rootView?.dispose()
         box.rootView = null // SlideDrawKit lays out a new root on the next draw
         box.element = buildSection(requireNotNull(box.bounds), text, paraAttr, leafAttr, sectionAttr)
+    }
+
+    /** New text in [box], keeping the attributes of the runs whose text stays ([Retext]). */
+    private fun retext(box: TextBox, section: SectionElement, text: String) {
+        val paras = ArrayList<Retext.Para<IAttributeSet?, IAttributeSet?>>()
+        val count = section.getParaCollection()?.size() ?: 0
+        for (i in 0 until count) {
+            val para = section.getParaCollection()!!.getElementForIndex(i) as? ParagraphElement ?: continue
+            val runs = ArrayList<Retext.Run<IAttributeSet?>>()
+            var end: IAttributeSet? = null
+            for (j in 0 until para.leafCount()) {
+                val leaf = para.getElementForIndex(j) ?: continue
+                end = leaf.getAttribute()
+                val t = (leaf.getText(null) ?: "").let { if (j == para.leafCount() - 1) it.removeSuffix("\n") else it }
+                // a line break (a:br) is its own leaf "\u000b"
+                if (t == "\u000b") runs.add(Retext.Run("\n", end, true)) else if (t.isNotEmpty()) runs.add(Retext.Run(t, end))
+            }
+            paras.add(Retext.Para(para.getAttribute(), runs, end))
+        }
+        if (paras.isEmpty()) return setText(box, text, null, null, section.getAttribute()?.clone())
+        val built = Retext.apply(paras, text).map { out ->
+            out.source.tag?.clone() to out.runs.map { run ->
+                (if (run.lineBreak) "\u000b" else run.text) to (run.tag ?: out.source.end)?.clone()
+            }
+        }
+        box.rootView?.dispose()
+        box.rootView = null
+        box.element = buildSection(requireNotNull(box.bounds), built, section.getAttribute()?.clone())
+    }
+
+    private class SavedText(val box: TextBox, val section: SectionElement?)
+
+    override fun saveText(slideIndex: Int, id: Int): Any? {
+        val box = slide(slideIndex)?.let { find(it, id) }?.filterIsInstance<TextBox>()?.firstOrNull() ?: return null
+        return SavedText(box, box.element)
+    }
+
+    override fun restoreText(slideIndex: Int, id: Int, token: Any): Boolean {
+        val saved = token as? SavedText ?: return false
+        saved.box.element = saved.section
+        relayout(saved.box)
+        return true
     }
 
     override fun addTextBox(slideIndex: Int, id: Int, rectEmu: Rect, text: String, sizePt: Float, rgbHex: String, bold: Boolean): Boolean {
@@ -173,11 +228,9 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
             setText(created, text, null, null, null)
             slide.appendShapes(created)
         } else {
-            // Keep the look of the first run and paragraph, which already hold the inherited styles
+            // runs already hold the inherited styles; keep them for the text that stays
             val section = box.element
-            val para = section?.getElement(0) as? ParagraphElement
-            val leaf = para?.getLeaf(0)
-            setText(box, text, para?.getAttribute()?.clone(), leaf?.getAttribute()?.clone(), section?.getAttribute()?.clone())
+            if (section is SectionElement) retext(box, section, text) else setText(box, text, null, null, null)
         }
         repaint()
         return true
