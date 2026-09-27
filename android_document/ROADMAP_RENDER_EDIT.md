@@ -241,7 +241,7 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
   - Layout: trong `LayoutKit`/`LineView`, sau khi xếp leaf vào dòng: nếu justified và **không phải dòng cuối đoạn** (và dòng không kết thúc bằng ngắt dòng cứng) → chia phần dư cho các khoảng trắng (cộng `extraSpace` vào x của leaf phía sau mỗi space).
   - Ảnh hưởng: `editor/word/WordSelection.kt` (offsetAt/rectsFor) phải dùng vị trí sau khi giãn → kiểm tra lại chọn chữ.
   - Xong khi: đoạn ảnh (có `jc=both`) mép phải thẳng.
-- [x] **D7. Bảng: `tblHeader` lặp khi sang trang** (27/09 — `TableLayoutKit.layoutRepeatedHeader`; `tblW`/autofit/fixed chưa làm) (D-i) — `TableLayoutKit.kt`; `setTableHeaderRow` đã có trong `AttrManage.kt:1141`.
+- [x] **D7. Bảng: `tblHeader` lặp khi sang trang** (27/09 — `TableLayoutKit.layoutRepeatedHeader`. Độ rộng ô (27/09): ưu tiên lưới `tblGrid` (bố cục Word đã tính); không có lưới thì `tcW` dxa, hoặc `pct` (phần 50 của %, hoặc "NN%") × độ rộng bảng `tblW` (dxa/pct của vùng chữ) — trước đây `pct` bị hiểu là twips; test `percentCellWidthsWithoutGrid`. Autofit theo nội dung chưa làm) (D-i) — `TableLayoutKit.kt`; `setTableHeaderRow` đã có trong `AttrManage.kt:1141`.
 - [x] **D8. Font theo theme** (26/09 — `readThemeFonts`/`themeFont`; thứ tự asciiTheme > ascii > hAnsiTheme > hAnsi > eastAsia. Chưa chia leaf theo script) (D-j): đọc `theme1.xml` `majorFont/minorFont` (latin/ea/cs); `rFonts asciiTheme="minorHAnsi"` → font minor; ưu tiên `ascii` cho ký tự ASCII, `hAnsi` cho Latin mở rộng (tiếng Việt), `eastAsia` cho CJK (có thể chia leaf theo script — bước sau).
 - [x] **D9. Crop ảnh `srcRect`** (đã có sẵn qua `PictureEffectInfoFactory` trong `addPicture`) (D-k): áp `srcRect` l/t/r/b (1/1000 %) khi vẽ `PictureShape` DOCX, giá trị âm = thêm lề trống.
 - [~] **D10. Thuộc tính run còn thiếu** (27/09 — xong: `position` (nâng/hạ, `FONT_POSITION_ID`), `vanish` (`FONT_HIDDEN_ID`, leaf rộng 0), `caps`/`smallCaps` (27/09: small caps = chữ thường vẽ thành chữ hoa 80%, đo/vẽ/con trỏ khớp), giãn chữ `w:spacing`. **Cố ý chưa vẽ** `rPr/shd`: WPS ghi `shd fill=FFFFFF` dưới chữ trắng trên nền màu (doc_test) — cần ảnh tham chiếu Word trước khi quyết định) (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
@@ -409,6 +409,7 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 27/09/2026 | **E-D6 header/footer** | Tầng file (lưu vào `header1.xml`/`footer1.xml`) + live (chạm vào header/footer để đặt con trỏ, gõ/định dạng/undo hiện ngay). Test thư viện 23/23, app 13/13 pass. |
 | 27/09/2026 | D10 | `w:position` (nâng/hạ chữ) và `w:vanish` (chữ ẩn: rộng 0, không vẽ); test `hiddenAndRaisedText`, đã xem ảnh. |
 | 27/09/2026 | X8, P7, P4 | X8 kiểm tra không lỗi; ảnh lớn decode theo cỡ hiển thị (41 → 10 MB/ảnh); hộp `spAutoFit` cao theo chữ khi sửa. Test PPTX 4/4 pass. |
+| 27/09/2026 | small caps, G0.5, D7 | Small caps đúng cỡ; 28 test JVM (font nhúng, màu, numFmt…); độ rộng ô bảng `pct`/không lưới. Hồi quy Word + render 26/26 pass. |
 
 ### Tiến độ tổng (cập nhật 27/09/2026)
 Khoảng **85–90%** roadmap đã xong. Còn lại:
@@ -416,7 +417,7 @@ Khoảng **85–90%** roadmap đã xong. Còn lại:
 **A. Việc nhỏ đang làm (không cần ảnh tham chiếu)** — theo thứ tự:
 1. ~~**D10** `position`/`vanish`~~ (xong 27/09). (`rPr/shd` của WPS vẫn để chờ ảnh tham chiếu.)
 2. ~~**X8**~~ (không lỗi), ~~**P7**~~ ảnh lớn, ~~**P4**~~ `spAutoFit` — xong 27/09.
-3. ~~small caps đúng cỡ~~ (xong 27/09). ~~G0.5~~ (xong). Nhỏ khác: G0.6 debug overlay (tùy chọn), D7 `tblW`/fixed layout.
+3. ~~small caps đúng cỡ~~ (xong 27/09). ~~G0.5~~ (xong). ~~D7 `tblW`/pct~~ (xong). Nhỏ khác: G0.6 debug overlay (tùy chọn).
 
 **B. Cần ảnh tham chiếu từ WPS/Office (G0.3 — người dùng xuất giúp)**: X7/X11 chart (màu pie, "Series 1"), D15 khoảng trắng TOC rỗng, P5/P6/P8 ảnh custGeom + group scale + tiêu đề Bahianita, D11/X9 kiểm tra hồi quy bằng mắt, `rPr/shd` WPS.
 

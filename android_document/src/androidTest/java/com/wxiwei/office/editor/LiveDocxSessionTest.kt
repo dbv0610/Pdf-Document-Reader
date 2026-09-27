@@ -120,6 +120,47 @@ class LiveDocxSessionTest {
         return out
     }
 
+    /** Cell widths in percent (tcW type="pct", fiftieths of a percent) of a table without a grid. */
+    @Test
+    fun percentCellWidthsWithoutGrid() {
+        val source = OpenDocument.copySample("sample.docx", "docx_pct_cells.src.docx")
+        val file = OpenDocument.output("docx_pct_cells.docx")
+        java.util.zip.ZipFile(source).use { zip ->
+            java.util.zip.ZipOutputStream(file.outputStream()).use { zos ->
+                for (entry in zip.entries()) {
+                    var bytes = zip.getInputStream(entry).readBytes()
+                    if (entry.name == "word/document.xml") {
+                        val xml = bytes.toString(Charsets.UTF_8)
+                        val a = xml.indexOf("<w:tbl>"); val b = xml.indexOf("</w:tbl>", a)
+                        // first table: no grid, 20% / 80% of its 9200 twips
+                        val table = xml.substring(a, b)
+                            .replace("<w:tblGrid><w:gridCol w:w=\"3000\"/><w:gridCol w:w=\"6200\"/></w:tblGrid>", "")
+                            .replace("<w:tcW w:w=\"3000\" w:type=\"dxa\"/>", "<w:tcW w:w=\"1000\" w:type=\"pct\"/>")
+                            .replace("<w:tcW w:w=\"6200\" w:type=\"dxa\"/>", "<w:tcW w:w=\"80%\" w:type=\"pct\"/>")
+                        check(!table.contains("tblGrid") && table.contains("w:w=\"1000\" w:type=\"pct\""))
+                        bytes = (xml.substring(0, a) + table + xml.substring(b)).toByteArray()
+                    }
+                    zos.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                    zos.write(bytes)
+                    zos.closeEntry()
+                }
+            }
+        }
+        OpenDocument.open(file, { it.layout != null }) { reader ->
+            val first = offsetOf(file.absolutePath, "Hạng mục")
+            val second = offsetOf(file.absolutePath, "Thông tin")
+            assertTrue(first >= 0 && second > first)
+            delay(500)
+            val (dx, zoom) = onMain {
+                val sel = com.wxiwei.office.editor.word.WordSelection(reader.control!!)
+                (sel.caretRect(second)!!.left - sel.caretRect(first)!!.left) to (reader.control!!.getView() as Word).getZoom()
+            }
+            // both cells have the same left margin: the text starts one column (20% of 9200 twips) apart
+            val expected = 1840 * com.wxiwei.office.constant.MainConstant.TWIPS_TO_PIXEL
+            assertEquals(expected, dx / zoom, 3f)
+        }
+    }
+
     /** Hidden text takes no room (the text after it starts where it would); raised text keeps its place in the line. */
     @Test
     fun hiddenAndRaisedText() {

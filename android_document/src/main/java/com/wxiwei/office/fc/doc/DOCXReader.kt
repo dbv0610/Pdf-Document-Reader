@@ -185,6 +185,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private var tblCellMar: Map<String, Int> = emptyMap()
     private var tblRowCount = 0
     private var tblGridCount = 0
+    // width of the table being read in twips (tblW, else the grid), for cell widths given in percent
+    private var tableWidthTwips = 0
     // TỐI ƯU: HashMap thay Hashtable (không cần synchronized)
     private val bulletNumbersID: HashMap<String, String> = HashMap()
     // theme color
@@ -900,6 +902,13 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             }
         }
         tblGridCount = tableGridCol.size
+        tableWidthTwips = tblPr?.element("tblW")?.let { tblW ->
+            when (tblW.attributeValue("type")) {
+                "dxa", null -> tblW.attributeValue("w").toIntSafe(0)
+                "pct" -> percentOf(tblW.attributeValue("w"), textWidthTwips())
+                else -> 0
+            }
+        }?.takeIf { it > 0 } ?: tableGridCol.values.sum()
 
         val rows = table.childElements("tr")
         tblRowCount = rows.size
@@ -909,6 +918,20 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 
         tableElem.setEndOffset(offset)
         document.appendParagraph(tableElem, offset)
+    }
+
+    /** [value] of an OOXML percent (fiftieths of a percent, or "NN%") applied to [whole]. */
+    private fun percentOf(value: String?, whole: Int): Int {
+        if (value.isNullOrEmpty()) return 0
+        val pct = if (value.endsWith("%")) value.dropLast(1).toFloatSafe(0f) else value.toFloatSafe(0f) / 50f
+        return (whole * pct / 100f).toInt()
+    }
+
+    /** Text width of the page in twips, when the section is known yet (sectPr may come last). */
+    private fun textWidthTwips(): Int {
+        val attr = section.getAttribute()
+        val w = am.getPageWidth(attr) - am.getPageMarginLeft(attr) - am.getPageMarginRight(attr)
+        return if (w > 0) w else 9360 // 6.5": Letter with 1" margins
     }
 
     /**
@@ -997,26 +1020,18 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         var gridSpan = 1
         tcPr.element("gridSpan")?.let { gridSpan = it.attributeValue("val").toIntSafe(1) }
 
-        // 宽度
+        // width: the grid is the layout Word resolved; without one, the preferred width (tcW)
+        var gridWidth = 0
+        for (i in gridColIndex until gridColIndex + gridSpan) gridWidth += tableGridCol[i] ?: 0
         val tcW = tcPr.element("tcW")
-        if (tcW != null) {
-            var w = tcW.attributeValue("w").toIntSafe(0)
-            val type = tcW.attributeValue("type")
-            if ("pct" == type || "auto" == type) {
-                var tW = 0
-                for (i in gridColIndex until gridColIndex + gridSpan) {
-                    tW += tableGridCol[i] ?: 0
-                }
-                w = maxOf(tW, w)
-            }
-            am.setTableCellWidth(attr, w)
-        } else {
-            var tW = 0
-            for (i in gridColIndex until gridColIndex + gridSpan) {
-                tW += tableGridCol[i] ?: 0
-            }
-            am.setTableCellWidth(attr, tW)
+        val width = when {
+            gridWidth > 0 || tcW == null -> gridWidth
+            // fiftieths of a percent (5000 = 100%) or "50%" of the table width
+            tcW.attributeValue("type") == "pct" -> percentOf(tcW.attributeValue("w"), tableWidthTwips)
+            tcW.attributeValue("type") == "auto" || tcW.attributeValue("type") == "nil" -> 0
+            else -> tcW.attributeValue("w").toIntSafe(0)
         }
+        am.setTableCellWidth(attr, width)
 
         // 合并单元格
         tcPr.element("vMerge")?.let {
