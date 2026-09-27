@@ -164,6 +164,27 @@ class DocxEditorTest {
         }
     }
 
+    /** The picture of sample.docx: resized to 200 x 100 px and moved to the start of the document. */
+    @Test
+    fun resizeAndMovePicture() {
+        val source = OpenDocument.copySample("sample.docx", "docx_picture_source.docx")
+        val saved = OpenDocument.output("docx_picture_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val map = DocxSourceMap.get(source.absolutePath)!!
+            val at = (0 until map.size).map { map.leaf(it) }.first { it.kind == DocxSourceMap.Kind.OBJECT && it.start < com.wxiwei.office.constant.wp.WPModelConstant.HEADER }.start
+            val session = onMain { com.wxiwei.office.editor.docx.LiveDocxSession(reader.control!!, source) }
+            assertTrue("picture found in the model", onMain { session.shapeAt(at) } != null)
+            assertTrue(session.lastError?.toString(), onMain { session.resizeObject(at, 200, 100) })
+            assertTrue(session.lastError?.toString(), onMain { session.moveObject(at, 0) })
+            assertTrue(onMain { session.needsReopen })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val drawing = xml.indexOf("<w:drawing>")
+        assertTrue("picture before the first text", drawing in 0 until xml.indexOf("<w:t"))
+        assertTrue(xml.substring(drawing).contains("cx=\"1905000\" cy=\"952500\""))
+    }
+
     @Test
     fun editSaveReopen() {
         val source = OpenDocument.copySample("sample.docx", "docx_edit_source.docx")

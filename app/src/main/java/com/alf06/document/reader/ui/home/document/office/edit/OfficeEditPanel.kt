@@ -139,8 +139,25 @@ internal abstract class OfficeEditPanel(
                 it.status == com.wxiwei.office.reader.ReaderState.Status.Ready || it.status == com.wxiwei.office.reader.ReaderState.Status.Failed
             }
             reopening = false
+            // the new document's frame was added on top of the caret, handles, selection frame
+            overlays.forEach { it.bringToFront() }
             if (state.status == com.wxiwei.office.reader.ReaderState.Status.Ready) then() else toast("Không mở lại được tài liệu")
         }
+    }
+
+    // views drawn over the document (caret, selection handles, shape frame, in-place editor)
+    private val overlays = ArrayList<View>()
+
+    /** Adds [overlay] over the document; it stays over it when the document is reopened. */
+    protected fun addOverlay(overlay: View, params: android.view.ViewGroup.LayoutParams =
+        android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT)) {
+        reader.addView(overlay, params)
+        overlays.add(overlay)
+    }
+
+    protected fun removeOverlay(overlay: View) {
+        reader.removeView(overlay)
+        overlays.remove(overlay)
     }
 
     /** The document's view, or null while the viewer (re)opens a document. */

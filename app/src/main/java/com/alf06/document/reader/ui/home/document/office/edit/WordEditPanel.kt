@@ -259,9 +259,26 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         onTap = { x, y -> tapAt(x, y) },
     )
 
+    // the selected picture: its one-char object in the text, and whether it floats on the page
+    private var pictureAt = -1L
+    private var pictureFloats = false
+    private val picture = WordPictureOverlay(context, { docView() },
+        frame = {
+            val sel = selection()
+            when {
+                pictureAt < 0 || sel == null -> null
+                pictureFloats -> sel.floatingShapeRect(pictureAt)
+                else -> sel.rectsFor(pictureAt, pictureAt + 1).firstOrNull()
+            }
+        },
+        onMove = { rawX, rawY, dx, dy -> movePicture(rawX, rawY, dx, dy) },
+        onResize = { w, h -> resizePicture(w, h) },
+    )
+
     init {
-        reader.addView(caret, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        reader.addView(handles, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        addOverlay(caret)
+        addOverlay(handles)
+        addOverlay(picture)
         keepAboveKeyboard(true)
     }
 
@@ -269,14 +286,83 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         super.close()
         reader.onDocumentGesture = null
         stopTyping()
-        reader.removeView(caret)
-        reader.removeView(handles)
+        removeOverlay(caret)
+        removeOverlay(handles)
+        removeOverlay(picture)
         clearSelection()
+    }
+
+    private fun zoom(): Float = (docView() as? com.wxiwei.office.wp.control.Word)?.getZoom() ?: 1f
+
+    private fun isPicture(shape: com.wxiwei.office.common.shape.IShape?) =
+        shape != null && (shape is com.wxiwei.office.common.shape.PictureShape || shape is com.wxiwei.office.common.shape.WPPictureShape ||
+            shape.type.toInt() == com.wxiwei.office.common.shape.AbstractShape.SHAPE_PICTURE.toInt())
+
+    /** Selects the picture under a tap (floating, or in a line of text); false when there is none. */
+    private fun pictureTap(sel: WordSelection, rawX: Float, rawY: Float): Boolean {
+        val word = docView() ?: return false
+        val at = IntArray(2)
+        word.getLocationOnScreen(at)
+        sel.floatingShapeAt(rawX - at[0], rawY - at[1])?.takeIf { isPicture(it.shape) }?.let { return selectPicture(it.offset, true) }
+        val s = session() ?: return false
+        val offset = sel.offsetAtScreen(rawX, rawY)
+        if (offset < 0) return false
+        for (o in listOf(offset, offset - 1)) {
+            if (o >= 0 && isPicture(s.shapeAt(o))) {
+                // in a line: only when the tap is on the picture itself
+                val r = sel.rectsFor(o, o + 1).firstOrNull() ?: continue
+                if (r.contains((rawX - at[0]).toInt(), (rawY - at[1]).toInt())) return selectPicture(o, false)
+            }
+        }
+        return false
+    }
+
+    private fun selectPicture(offset: Long, floats: Boolean): Boolean {
+        stopTyping()
+        clearSelection()
+        pictureAt = offset
+        pictureFloats = floats
+        picture.active = true
+        selectionLabel.text = "Đã chọn ảnh: kéo để di chuyển, kéo góc để đổi cỡ"
+        return true
+    }
+
+    private fun clearPicture() {
+        if (pictureAt < 0) return
+        pictureAt = -1
+        picture.active = false
+        selectionLabel.text = HINT
+    }
+
+    private fun movePicture(rawX: Float, rawY: Float, dx: Float, dy: Float) {
+        val s = session() ?: return
+        val sel = selection() ?: return
+        val z = zoom()
+        val ok = if (pictureFloats) s.shiftObject(pictureAt, Math.round(dx / z), Math.round(dy / z))
+        else {
+            // to the text position where the finger was lifted
+            val to = sel.offsetAtScreen(rawX, rawY)
+            to >= 0 && s.moveObject(pictureAt, to)
+        }
+        clearPicture()
+        if (!ok) return toast(s.lastError?.message ?: "Không di chuyển được ảnh")
+        reloadWorking()
+    }
+
+    private fun resizePicture(width: Float, height: Float) {
+        val s = session() ?: return
+        val z = zoom()
+        val ok = s.resizeObject(pictureAt, maxOf(1, Math.round(width / z)), maxOf(1, Math.round(height / z)))
+        clearPicture()
+        if (!ok) return toast(s.lastError?.message ?: "Không đổi cỡ được ảnh")
+        reloadWorking()
     }
 
     /** A tap ends any selection and puts the caret there; the handles extend a selection. */
     private fun tapAt(rawX: Float, rawY: Float): Boolean {
         val sel = selection() ?: return false
+        if (pictureTap(sel, rawX, rawY)) return true
+        clearPicture()
         val offset = sel.offsetAtScreen(rawX, rawY)
         if (offset < 0) return false
         return clickAndType(sel, offset, rawX, rawY) || startTyping(offset)

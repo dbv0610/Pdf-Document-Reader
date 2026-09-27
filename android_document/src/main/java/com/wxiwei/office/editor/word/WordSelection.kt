@@ -270,6 +270,34 @@ class WordSelection(private val word: Word) {
         return true
     }
 
+    /** A floating picture or shape drawn on a page: its anchor offset and its box in Word view coordinates. */
+    class PlacedShape(val offset: Long, val shape: com.wxiwei.office.common.shape.IShape, val rect: Rect)
+
+    private fun placedShapes(): List<PlacedShape> {
+        val root = root() as? PageRoot ?: return emptyList()
+        val z = word.getZoom()
+        val out = ArrayList<PlacedShape>()
+        for (i in 0 until root.getPageCount()) {
+            val page = root.getPageView(i) ?: continue
+            val (dx, dy) = shift(root, page) ?: continue
+            for (sv in page.getShapeViews()) {
+                val shape = (sv as? com.wxiwei.office.wp.view.ShapeView)?.getShape() ?: (sv as? com.wxiwei.office.wp.view.ObjView)?.getShape() ?: continue
+                val b = shape.bounds ?: continue
+                val left = (page.getX() + sv.getX()) * z + dx
+                val top = (page.getY() + sv.getY()) * z + dy
+                out.add(PlacedShape(sv.getStartOffset(null), shape, Rect(floor(left).toInt(), floor(top).toInt(), ceil(left + b.width * z).toInt(), ceil(top + b.height * z).toInt())))
+            }
+        }
+        return out
+    }
+
+    /** The floating picture or shape under ([viewX], [viewY]) (Word view coordinates), topmost first, or null. */
+    fun floatingShapeAt(viewX: Float, viewY: Float): PlacedShape? =
+        placedShapes().lastOrNull { it.rect.contains(viewX.toInt(), viewY.toInt()) }
+
+    /** The box of the floating shape anchored at [offset], or null. */
+    fun floatingShapeRect(offset: Long): Rect? = placedShapes().firstOrNull { it.offset == offset }?.rect
+
     fun setSelection(start: Long, end: Long) {
         require(start >= 0 && end >= start)
         word.getHighlight().addHighlight(start, end); repaint()

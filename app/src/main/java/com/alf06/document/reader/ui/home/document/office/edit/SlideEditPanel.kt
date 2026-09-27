@@ -71,7 +71,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     private val overlay = SlideSelectionOverlay(context) { docView() as? Presentation }
 
     init {
-        reader.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        addOverlay(overlay)
         keepAboveKeyboard(true)
         reader.onDocumentGesture = gesture@{ type, event ->
             if (type != IMainFrame.ON_SINGLE_TAP_CONFIRMED) return@gesture false
@@ -133,7 +133,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         inline = edit
         // the keyboard takes half the screen: give the slide the rest while typing on it
         view.visibility = View.GONE
-        reader.addView(edit, FrameLayout.LayoutParams(1, 1))
+        addOverlay(edit, FrameLayout.LayoutParams(1, 1))
         placeInline(overlay.frameOnScreen())
         edit.requestFocus()
         (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
@@ -178,7 +178,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         val value = edit.text.toString()
         (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
             .hideSoftInputFromWindow(edit.windowToken, 0)
-        reader.removeView(edit)
+        removeOverlay(edit)
         view.visibility = View.VISIBLE
         if (commit && shapeId >= 0 && value != text.text.toString()) {
             if (!session.setShapeText(slide(), shapeId, value)) toast(session.lastError?.message ?: "Không đổi được chữ")
@@ -215,7 +215,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         stopInline(commit = true)
         super.close()
         reader.onDocumentGesture = null
-        reader.removeView(overlay)
+        removeOverlay(overlay)
     }
 
     /** Undo/redo may move the selected shape: re-read its frame and redraw the thumbnail. */

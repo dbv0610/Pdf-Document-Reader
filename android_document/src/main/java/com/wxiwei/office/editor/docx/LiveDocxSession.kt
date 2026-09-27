@@ -27,6 +27,8 @@ import java.io.File
  * this session is formatted through its queued insert (DocxEditor.formatInserted). Main thread only.
  */
 class LiveDocxSession(control: IControl, private val source: File) {
+    private companion object { const val EMU_PER_PX = 9525L }
+
     private val word = control.getView() as? Word ?: error("Open a Word document first")
     private val editor = DocxEditor(source, DocxSourceMap.get(source.absolutePath) ?: error("Document is still loading"))
     private val am = AttrManage.instance()
@@ -591,6 +593,35 @@ class LiveDocxSession(control: IControl, private val source: File) {
         undoStack.add(Step({ editor.undoLast() }, { editor.insertImage(toOriginal(offset), image, widthPx, heightPx) })); redoStack.clear()
         true
     }
+
+    /** The picture or shape whose one-char object is at [offset], or null. */
+    fun shapeAt(offset: Long): com.wxiwei.office.common.shape.IShape? {
+        val doc = word.getDocument()
+        val leaf = doc.getLeaf(offset) ?: return null
+        if (leaf.getEndOffset() - leaf.getStartOffset() != 1L) return null
+        val id = am.getShapeID(leaf.getAttribute())
+        if (id < 0) return null
+        return word.getControl().getSysKit().getWPShapeManage().getShape(id)
+    }
+
+    private fun objectEdit(fileOp: () -> Boolean): Boolean = synchronized(layoutLock) {
+        ownError = null
+        if (!fileOp()) return false
+        needsReopen = true
+        undoStack.add(Step({ editor.undoLast() }, fileOp)); redoStack.clear()
+        true
+    }
+
+    /** New size (pixels at 96 dpi) of the picture at [offset]; shown after the file is read again. */
+    fun resizeObject(offset: Long, widthPx: Int, heightPx: Int): Boolean =
+        objectEdit { editor.resizeObject(toOriginal(offset), widthPx * EMU_PER_PX, heightPx * EMU_PER_PX) }
+
+    /** Moves the in-line picture at [from] to the text position [to]; shown after the file is read again. */
+    fun moveObject(from: Long, to: Long): Boolean = objectEdit { editor.moveObject(toOriginal(from), toOriginal(to)) }
+
+    /** Moves the floating picture at [offset] by [dxPx], [dyPx]; shown after the file is read again. */
+    fun shiftObject(offset: Long, dxPx: Int, dyPx: Int): Boolean =
+        objectEdit { editor.shiftObject(toOriginal(offset), dxPx * EMU_PER_PX, dyPx * EMU_PER_PX) }
 
     /** A [rows] x [cols] table after the paragraph at [offset]; shown after the file is read again ([needsReopen]). */
     fun insertTable(offset: Long, rows: Int, cols: Int): Boolean = synchronized(layoutLock) {

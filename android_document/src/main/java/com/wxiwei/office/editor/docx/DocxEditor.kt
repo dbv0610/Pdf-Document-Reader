@@ -165,6 +165,13 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         if (widthPx <= 0 || heightPx <= 0 || !imageFile.isFile) invalid("Image file and positive dimensions required")
         else queue(Op(offset, offset, "image", image = imageFile, width = widthPx, height = heightPx))
     fun appendParagraph(text: String) = queue(Op(0, 0, "append", text))
+    /** The picture or shape at [offset] (its one-char object) gets the size [widthEmu] x [heightEmu]. */
+    fun resizeObject(offset: Long, widthEmu: Long, heightEmu: Long): Boolean =
+        if (widthEmu <= 0 || heightEmu <= 0) invalid("Positive size required") else queue(Op(offset, offset, "objsize", "$widthEmu,$heightEmu"))
+    /** Moves the in-line picture at [from] to the text position [to] (original offsets). */
+    fun moveObject(from: Long, to: Long): Boolean = queue(Op(from, from, "objmove", to.toString()))
+    /** Moves the floating picture or shape at [offset] by [dxEmu], [dyEmu] on the page. */
+    fun shiftObject(offset: Long, dxEmu: Long, dyEmu: Long): Boolean = queue(Op(offset, offset, "objshift", "$dxEmu,$dyEmu"))
     /** A [rows] x [cols] table with thin borders after the body paragraph holding [offset]. */
     fun insertTable(offset: Long, rows: Int, cols: Int): Boolean =
         if (rows !in 1..200 || cols !in 1..63) invalid("Bad table size") else queue(Op(offset, offset, "table", width = rows, height = cols))
@@ -260,6 +267,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                     }
                     "pjc", "pind", "pline", "pnum", "plvl" -> paragraphFormat(op)
                     "table" -> table(op)
+                    "objsize", "objmove", "objshift" -> objectOp(op)
                     else -> format(op)
                 }
             }
@@ -447,6 +455,45 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 deletedSeparators.add(leaf.start)
             }
         }
+        /** The run holding the picture/shape whose one-char object starts at [at]. */
+        fun objectRun(at: Long): Element =
+            pieces.firstOrNull { it.kind == DocxSourceMap.Kind.OBJECT && it.start == at && it.run.parent != null }?.run
+                ?: fail(Reason.INVALID_ARGUMENT, "No picture at offset")
+
+        fun objectOp(op: Op) {
+            val run = objectRun(op.start)
+            when (op.type) {
+                "objsize" -> {
+                    val (cx, cy) = op.value.split(',')
+                    // the frame on the page (wp:extent) and the picture itself (a:ext of its xfrm)
+                    for (e in descendantsOf(run)) {
+                        if ((e.name == "extent" && e.namespaceURI == WP.uRI) || (e.name == "ext" && e.namespaceURI == A.uRI && e.parent?.name == "xfrm")) {
+                            e.addAttribute("cx", cx); e.addAttribute("cy", cy)
+                        }
+                    }
+                }
+                "objshift" -> {
+                    val (dx, dy) = op.value.split(',').map { it.toLong() }
+                    val anchor = descendantsOf(run).firstOrNull { it.name == "anchor" && it.namespaceURI == WP.uRI }
+                        ?: fail(Reason.INVALID_ARGUMENT, "Not a floating picture")
+                    for ((axis, d) in listOf("positionH" to dx, "positionV" to dy)) {
+                        val pos = anchor.firstChild(WP, axis)?.firstChild(WP, "posOffset") ?: fail(Reason.INVALID_ARGUMENT, "Picture placed by alignment")
+                        pos.text = ((pos.text?.trim()?.toLongOrNull() ?: 0L) + d).toString()
+                    }
+                }
+                "objmove" -> {
+                    val to = op.value.toLong()
+                    if (to == op.start || to == op.start + 1) return
+                    val b = boundary(to)
+                    if (b.before === run) return
+                    run.detach()
+                    addBefore(b.parent, b.before, run)
+                    // it keeps its piece: its old place is empty now
+                    pieces.filter { it.run === run }.forEach { it.start = to; it.end = to }
+                }
+            }
+        }
+
         fun table(op: Op) {
             val para = paras.firstOrNull { op.start >= it.start && op.start < it.end } ?: fail(Reason.INVALID_ARGUMENT, "No paragraph at offset")
             val p = paragraphs.getOrNull(para.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
@@ -517,6 +564,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         private const val TEXTBOX = com.wxiwei.office.constant.wp.WPModelConstant.TEXTBOX
         private const val STORY_MASK = AREA_MASK or com.wxiwei.office.constant.wp.WPModelConstant.TEXTBOX_MASK
         internal fun walk(root: Element, visit: (Element) -> Unit) { visit(root); root.elements()!!.filterIsInstance<Element>().forEach { walk(it, visit) } }
+        private fun descendantsOf(root: Element): List<Element> = ArrayList<Element>().also { list -> walk(root) { list.add(it) } }
         private fun childText(child: Element): String = when (child.name) {
             "t" -> child.text ?: ""
             "tab", "ptab" -> " "
