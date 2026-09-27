@@ -24,7 +24,9 @@ class DocxSourceMap {
     /** An XML part and the model offsets [start, end) read from it. */
     data class Part(val start: Long, val end: Long, val name: String)
     // the body, then each header and footer read (default, first page, even pages)
-    private val parts = arrayListOf(Part(0L, 0x1000000000000000L, "word/document.xml"))
+    private val parts = arrayListOf(Part(0L, 0x1000000000000000L, "word/document.xml"),
+        // text boxes of the body: their runs are in document.xml too (WPModelConstant.TEXTBOX area)
+        Part(0x5000000000000000L, 0x6000000000000000L, "word/document.xml"))
 
     /** Leaves and paragraphs in [start, end) come from [part]; their run and paragraph indices count
      *  from 0 in that part. */

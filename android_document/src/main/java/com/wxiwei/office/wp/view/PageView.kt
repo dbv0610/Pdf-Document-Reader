@@ -407,6 +407,9 @@ class PageView(elem: IElement) : AbstractView() {
         this.pageBorderIndex = border
     }
 
+    /** The floating shapes and pictures drawn on this page, in anchor order. */
+    fun getShapeViews(): List<LeafView> = shapeViews?.toList() ?: emptyList()
+
     fun addShapeView(view: LeafView) {
         if (shapeViews == null) {
             shapeViews = ArrayList()

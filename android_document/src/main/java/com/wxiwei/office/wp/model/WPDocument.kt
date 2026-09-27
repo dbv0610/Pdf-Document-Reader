@@ -214,15 +214,37 @@ class WPDocument : STDocument() {
      * Moves every main-text element after [at] by [delta]: an element that starts after [at]
      * moves, one that contains it grows (or shrinks). [skip] is left alone (already updated).
      */
-    /** The body, the header and the footer can be edited live (not text boxes, notes). */
+    /** The body, headers, footers and text boxes can be edited live (not notes). */
     fun isEditableArea(offset: Long): Boolean = (offset and WPModelConstant.AREA_MASK).let {
-        it == WPModelConstant.MAIN || it == WPModelConstant.HEADER || it == WPModelConstant.FOOTER
+        it == WPModelConstant.MAIN || it == WPModelConstant.HEADER || it == WPModelConstant.FOOTER ||
+            (it == WPModelConstant.TEXTBOX && getTextboxSectionElement(offset) != null)
     }
+
+    /** The story of an offset: the body, the headers, the footers, or one text box. */
+    private fun storyOf(offset: Long) = offset and (WPModelConstant.AREA_MASK or WPModelConstant.TEXTBOX_MASK)
+
+    /** The paragraphs of the story of [offset]: a text box keeps its own in its section. */
+    private fun storyParas(offset: Long): ElementCollectionImpl? =
+        if ((offset and WPModelConstant.AREA_MASK) == WPModelConstant.TEXTBOX)
+            (getTextboxSectionElement(offset) as? SectionElement)?.getParaCollection() as? ElementCollectionImpl
+        else getParaCollection(offset)
+
+    /** The top elements (sections, headers...) of the story of [offset]. */
+    private fun storyRoots(offset: Long): List<IElement> {
+        if ((offset and WPModelConstant.AREA_MASK) == WPModelConstant.TEXTBOX) return listOfNotNull(getTextboxSectionElement(offset))
+        val c = getRootCollection(offset) ?: return emptyList()
+        return (0 until c.size()).mapNotNull { c.getElementForIndex(it) }
+    }
+
+    /** End of the story of [offset] (after its last paragraph mark). */
+    fun storyEnd(offset: Long): Long =
+        if ((offset and WPModelConstant.AREA_MASK) == WPModelConstant.TEXTBOX) getTextboxSectionElement(offset)?.getEndOffset() ?: 0L
+        else getAreaEnd(offset)
 
     /** Elements of the story of [at] (body, header or footer) after [at] move by [delta]. */
     private fun shiftMain(at: Long, delta: Long, skip: IElement?) {
         fun move(e: IElement?) {
-            if (e == null || e === skip) return
+            if (e == null || e === skip || storyOf(e.getStartOffset()) != storyOf(at)) return
             val s = e.getStartOffset()
             val en = e.getEndOffset()
             if (s > at) {
@@ -231,8 +253,8 @@ class WPDocument : STDocument() {
                 e.setEndOffset(en + delta)
             }
         }
-        getRootCollection(at)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
-        getParaCollection(at)?.let { c ->
+        storyRoots(at).forEach { move(it) }
+        storyParas(at)?.let { c ->
             for (i in 0 until c.size()) {
                 val p = c.getElementForIndex(i)
                 move(p)
@@ -304,14 +326,14 @@ class WPDocument : STDocument() {
         // everything after the range moves back; the touched leaves are already right
         val skip = touched.map { paragraph.getElementForIndex(it) }.toSet()
         fun move(e: IElement?) {
-            if (e == null || e in skip) return
+            if (e == null || e in skip || storyOf(e.getStartOffset()) != storyOf(start)) return
             val s = e.getStartOffset()
             val en = e.getEndOffset()
             if (s >= end) { e.setStartOffset(s - delta); e.setEndOffset(en - delta) }
             else if (en > start) e.setEndOffset(maxOf(start, en - delta))
         }
-        getRootCollection(start)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
-        getParaCollection(start)?.let { c ->
+        storyRoots(start).forEach { move(it) }
+        storyParas(start)?.let { c ->
             for (i in 0 until c.size()) {
                 val p = c.getElementForIndex(i)
                 move(p)
@@ -340,7 +362,7 @@ class WPDocument : STDocument() {
      */
     fun splitMainParagraph(offset: Long): Boolean {
         if (!isEditableArea(offset)) return false
-        val paragraphs = getParaCollection(offset) ?: return false
+        val paragraphs = storyParas(offset) ?: return false
         val p = getParagraph(offset) as? ParagraphElement ?: return false
         if (p is TableElement || offset < p.getStartOffset() || offset >= p.getEndOffset()) return false
         val index = paragraphs.indexOf(p)
@@ -373,7 +395,7 @@ class WPDocument : STDocument() {
      */
     fun joinMainParagraph(markOffset: Long): Boolean {
         if (!isEditableArea(markOffset)) return false
-        val paragraphs = getParaCollection(markOffset) ?: return false
+        val paragraphs = storyParas(markOffset) ?: return false
         val p = getParagraph(markOffset) as? ParagraphElement ?: return false
         if (p is TableElement || p.getEndOffset() != markOffset + 1) return false
         val index = paragraphs.indexOf(p)
@@ -407,13 +429,13 @@ class WPDocument : STDocument() {
     /** One character removed at [at]: elements after it move back; [skip] are already right. */
     private fun shiftMainBack(at: Long, vararg skip: IElement) {
         fun move(e: IElement?) {
-            if (e == null || skip.any { it === e }) return
+            if (e == null || skip.any { it === e } || storyOf(e.getStartOffset()) != storyOf(at)) return
             val s = e.getStartOffset()
             val en = e.getEndOffset()
             if (s > at) { e.setStartOffset(s - 1); e.setEndOffset(en - 1) } else if (en > at) e.setEndOffset(en - 1)
         }
-        getRootCollection(at)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
-        getParaCollection(at)?.let { c ->
+        storyRoots(at).forEach { move(it) }
+        storyParas(at)?.let { c ->
             for (i in 0 until c.size()) {
                 val p = c.getElementForIndex(i)
                 move(p)

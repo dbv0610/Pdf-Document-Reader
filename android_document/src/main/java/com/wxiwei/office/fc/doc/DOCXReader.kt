@@ -148,9 +148,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private var editRunBase = 0
     private var editParaBase = 0
     private var editObjectRun: Element? = null
-    /** The body, or the header/footer being read (not text boxes: their offsets are in another area). */
+    /** The body, the header/footer being read, or a text box of the body (its runs are in document.xml). */
     private fun editMain() = (offset >= WPModelConstant.MAIN && offset < WPModelConstant.HEADER) ||
-        (isProcessHF && (offset and WPModelConstant.AREA_MASK).let { it == WPModelConstant.HEADER || it == WPModelConstant.FOOTER })
+        (isProcessHF && (offset and WPModelConstant.AREA_MASK).let { it == WPModelConstant.HEADER || it == WPModelConstant.FOOTER }) ||
+        (!isProcessHF && (offset and WPModelConstant.AREA_MASK) == WPModelConstant.TEXTBOX)
     private fun recordEdit(start: Long, text: String, run: Element?, kind: DocxSourceMap.Kind) {
         if (editMain() && start >= 0 && editParas.isNotEmpty()) {
             val id = run?.let { editRuns[it] }
@@ -3429,7 +3430,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     }
 
     /** Tạo SectionElement cho textbox, trả về offset cũ để khôi phục */
+    // the run anchoring a text box, kept while the text box's own runs are read
+    private val anchorRuns = ArrayDeque<Element?>()
+
     private fun beginTextbox(wpShape: WPAutoShape): Pair<Long, SectionElement> {
+        anchorRuns.addLast(editObjectRun)
         val oldOffset = offset
         offset = WPModelConstant.TEXTBOX + (textboxIndex shl 32)
         wpShape.elementIndex = textboxIndex.toInt()
@@ -3444,6 +3449,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         textboxElement.setEndOffset(offset)
         textboxIndex++
         offset = oldOffset
+        editObjectRun = anchorRuns.removeLastOrNull()
     }
 
     private fun setTextboxSize(attr: IAttributeSet, wpShape: WPAutoShape) {
@@ -3586,7 +3592,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         val textboxElement = SectionElement()
         textboxElement.setStartOffset(offset)
         document.appendElement(textboxElement, offset)
+        val anchorRun = editObjectRun
         processParagraphs(txbxContent.childElements())
+        editObjectRun = anchorRun
         // section属性
         val attr = textboxElement.getAttribute()!!
         setTextboxSize(attr, wpShape)

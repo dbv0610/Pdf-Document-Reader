@@ -31,6 +31,34 @@ class WordSelection(private val word: Word) {
 
     private fun area(offset: Long) = offset and WPModelConstant.AREA_MASK
     private fun isStory(offset: Long) = area(offset) == WPModelConstant.HEADER || area(offset) == WPModelConstant.FOOTER
+    private fun isTextbox(offset: Long) = area(offset) == WPModelConstant.TEXTBOX
+
+    /** The shape of text box [offset] on [page] and its laid-out text. */
+    private fun textboxOn(page: PageView, offset: Long): Pair<com.wxiwei.office.wp.view.ShapeView, IView>? {
+        val index = ((offset and WPModelConstant.TEXTBOX_MASK) shr 32).toInt()
+        for (sv in page.getShapeViews()) {
+            val shape = sv as? com.wxiwei.office.wp.view.ShapeView ?: continue
+            return shape to (shape.textRoot(index) ?: continue)
+        }
+        return null
+    }
+
+    /** Offset in a text box of [page] under the page-local point, topmost first, or -1. */
+    private fun textboxOffsetAt(page: PageView, x: Int, y: Int): Long {
+        for (sv in page.getShapeViews().asReversed()) {
+            val shape = sv as? com.wxiwei.office.wp.view.ShapeView ?: continue
+            val index = shape.getShape()?.let { (it as? com.wxiwei.office.common.shape.WPAutoShape)?.elementIndex } ?: continue
+            val root = shape.textRoot(index) ?: continue
+            val b = shape.getShape()?.bounds ?: continue
+            val lx = x - shape.getX(); val ly = y - shape.getY()
+            if (lx < 0 || ly < 0 || lx >= b.width || ly >= b.height) continue
+            val offset = root.viewToModel(lx, ly, false)
+            if (offset < 0) continue
+            storyPage = page.getPageNumber() - 1
+            return offset
+        }
+        return -1
+    }
     private fun title(page: PageView, offset: Long): TitleView? = if (area(offset) == WPModelConstant.HEADER) page.getHeader() else page.getFooter()
 
     /** Offset in the header or footer of [page] under the page-local point ([x], [y]), or -1. */
@@ -48,8 +76,8 @@ class WordSelection(private val word: Word) {
         return -1
     }
 
-    /** Where [view] (inside [title]) is on the page: the offsets of its parents up to the title, and the title's. */
-    private fun inPage(view: IView?, title: TitleView): Pair<Int, Int> {
+    /** Where [view] (inside [title]) is in its page: the offsets of its parents up to the title, and the title's. */
+    private fun inPage(view: IView?, title: IView): Pair<Int, Int> {
         var x = title.getX(); var y = title.getY()
         var v = view
         while (v != null && v !== title) { x += v.getX(); y += v.getY(); v = v.getParentView() }
@@ -61,6 +89,17 @@ class WordSelection(private val word: Word) {
 
     private fun locate(offset: Long, isBack: Boolean): Spot? {
         val root = root() ?: return null
+        if (isTextbox(offset)) {
+            val page = (root as? PageRoot)?.getPageView(storyPage) ?: return null
+            val (shape, box) = textboxOn(page, offset) ?: return null
+            val para = box.getView(offset, WPViewConstant.PARAGRAPH_VIEW.toInt(), isBack) ?: return null
+            val line = para.getView(offset, WPViewConstant.LINE_VIEW.toInt(), isBack) ?: return null
+            val r = para.modelToView(offset, Rectangle(), isBack) ?: return null
+            val (px, py) = inPage(para.getParentView(), box)
+            val (lx, ly) = inPage(line, box)
+            val ox = page.getX() + shape.getX(); val oy = page.getY() + shape.getY()
+            return Spot(line, ox + px + r.x, oy + ly, ox + lx, page)
+        }
         if (isStory(offset)) {
             val page = (root as? PageRoot)?.getPageView(storyPage) ?: return null
             val title = title(page, offset) ?: return null
@@ -108,6 +147,7 @@ class WordSelection(private val word: Word) {
                 .firstOrNull { x >= it.left && x < it.right && y >= it.top && y < it.bottom } ?: return -1
             val page = (root() as? PageRoot)?.getPageView(item.pageIndex) ?: return -1
             val px = ((x - item.left) / z).toInt(); val py = ((y - item.top) / z).toInt()
+            textboxOffsetAt(page, px, py).let { if (it >= 0) return it }
             storyOffsetAt(page, px, py).let { if (it >= 0) return it }
             return word.viewToModel(px + page.getX(), py + page.getY(), false)
         }
@@ -117,6 +157,7 @@ class WordSelection(private val word: Word) {
             for (i in 0 until pages.getPageCount()) {
                 val page = pages.getPageView(i) ?: continue
                 if (vy < page.getY() || vy >= page.getY() + page.getHeight()) continue
+                textboxOffsetAt(page, vx - page.getX(), vy - page.getY()).let { if (it >= 0) return it }
                 storyOffsetAt(page, vx - page.getX(), vy - page.getY()).let { if (it >= 0) return it }
                 break
             }
@@ -195,7 +236,7 @@ class WordSelection(private val word: Word) {
      * in Word view coordinates; null when that page is not laid out or shown.
      */
     fun bodyBottomAt(offset: Long): Int? {
-        if (isStory(offset)) return null
+        if (isStory(offset) || isTextbox(offset)) return null
         val root = root() ?: return null
         val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), false) ?: return null
         var page: IView? = line

@@ -153,6 +153,13 @@ class ShapeView : LeafView {
         return breakType
     }
 
+    /** The laid-out text of text box [index] when this shape is that text box (not in a group), else null. */
+    fun textRoot(index: Int): WPSTRoot? {
+        val shape = wpShape ?: return null
+        if (shape.groupShape != null || shape.elementIndex != index) return null
+        return roots?.get(index)
+    }
+
     private fun layoutTextbox(wpShape: WPAutoShape?, wpGroup: WPGroupShape?) {
         if (wpGroup != null) {
             val shapes = wpGroup.getShapes()

@@ -80,8 +80,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
     private val handles = java.util.IdentityHashMap<Edit.Insert, Any>()
     private fun track(edit: Edit.Insert) { editor.lastOp()?.let { handles[edit] = it } }
 
-    /** The story (body, header, footer) of an offset: edits in one never move offsets of another. */
-    private fun area(offset: Long) = offset and WPModelConstant.AREA_MASK
+    /** The story (body, headers, footers, one text box) of an offset: edits in one never move offsets of another. */
+    private fun area(offset: Long) = offset and (WPModelConstant.AREA_MASK or WPModelConstant.TEXTBOX_MASK)
 
     /** Current model offset -> original file offset (the start of typed text for positions inside it). */
     private fun toOriginal(offset: Long): Long {
@@ -253,8 +253,9 @@ class LiveDocxSession(control: IControl, private val source: File) {
             ownError = null
             if (text.isEmpty()) return refuse("Nothing to insert")
             // after the last paragraph mark there is no paragraph to hold the text
-            if (offset < 0 || offset >= word.getDocument().getAreaEnd(offset)) return refuse("Cannot insert after the end of the document")
-            if ((word.getDocument() as? WPDocument)?.isEditableArea(offset) != true) return refuse("Only the body, header and footer are editable")
+            val wp = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
+            if (!wp.isEditableArea(offset)) return refuse("Only the body, headers, footers and text boxes are editable")
+            if (offset < 0 || offset >= wp.storyEnd(offset)) return refuse("Cannot insert after the end of the document")
             val lines = text.replace("\r\n", "\n").replace('\r', '\n')
             if (lines.length > 1 && lines.contains('\n')) {
                 var at = offset

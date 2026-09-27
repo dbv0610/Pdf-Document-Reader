@@ -411,6 +411,7 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 27/09/2026 | X8, P7, P4 | X8 kiểm tra không lỗi; ảnh lớn decode theo cỡ hiển thị (41 → 10 MB/ảnh); hộp `spAutoFit` cao theo chữ khi sửa. Test PPTX 4/4 pass. |
 | 27/09/2026 | small caps, G0.5, D7 | Small caps đúng cỡ; 28 test JVM (font nhúng, màu, numFmt…); độ rộng ô bảng `pct`/không lưới. Hồi quy Word + render 26/26 pass. |
 | 27/09/2026 | G0.6 | Khung debug layout Word (`DebugBounds`). Nhóm A (việc nhỏ không cần ảnh tham chiếu) đã xong. |
+| 27/09/2026 | Header trang đầu/chẵn, dán giữ định dạng, PPTX định dạng một phần chữ, text box Word | Header/footer `first` (titlePg) và `even` (evenAndOddHeaders) hiển thị + sửa + lưu đúng part (test pass). Dán chữ chép trong tài liệu giữ định dạng (test pass; kèm sửa: undo/redo định dạng tìm chữ theo offset). PPTX: menu chọn chữ trong ô sửa tại chỗ có Đậm/Nghiêng/Gạch chân/Chữ đỏ — **chưa chạy test trên máy**. Word text box: chạm vào text box để gõ/định dạng, lưu vào document.xml — **chưa kiểm chứng trên máy** (người dùng yêu cầu dừng test). App `wordBulletAtCaret` fail 1 lần sau khi sửa undo/redo định dạng — cần xem lại. |
 
 ### Tiến độ tổng (cập nhật 27/09/2026)
 Khoảng **85–90%** roadmap đã xong. Còn lại:
@@ -422,7 +423,7 @@ Khoảng **85–90%** roadmap đã xong. Còn lại:
 
 **B. Cần ảnh tham chiếu từ WPS/Office (G0.3 — người dùng xuất giúp)**: X7/X11 chart (màu pie, "Series 1"), D15 khoảng trắng TOC rỗng, P5/P6/P8 ảnh custGeom + group scale + tiêu đề Bahianita, D11/X9 kiểm tra hồi quy bằng mắt, `rPr/shd` WPS.
 
-**C. Realtime edit còn thiếu**: text box Word; header trang đầu/chẵn (`first`/`even`, reader mới hiện `default`); dán giữ định dạng (E-D5); PPTX định dạng theo vùng chọn trong shape; relayout mức đoạn (E-D8); Excel: dời pivot/conditional formatting khi chèn/xóa dòng-cột.
+**C. Realtime edit**: ~~text box Word~~ (chưa test máy), ~~header trang đầu/chẵn~~, ~~dán giữ định dạng~~, ~~PPTX định dạng theo vùng chọn~~ (chưa test máy) — xong 27/09. Còn: relayout mức đoạn (E-D8); Excel: dời pivot/conditional formatting khi chèn/xóa dòng-cột.
 
 ### Khi làm tiếp — ghi chú cũ — phần đọc còn lại (theo thứ tự đề xuất)
 Các mục còn lại **cần ảnh tham chiếu (G0.3) để quyết định**, không nên sửa mù: X11 tiêu đề chart ("Series 1"), `rPr/shd` của WPS, D15 khoảng trắng TOC rỗng. Ít ảnh hưởng: P4 `spAutoFit` (chỉ khác khi hộp có nền/viền), D7 `tblW`/fixed layout, small caps đúng cỡ, shape trong bảng bị chia nhiều trang.
