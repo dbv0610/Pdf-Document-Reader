@@ -1,6 +1,7 @@
 package com.wxiwei.office.editor.pptx
 
 import com.wxiwei.office.editor.EditResult
+import com.wxiwei.office.editor.UndoStack
 import com.wxiwei.office.system.IControl
 import java.io.File
 
@@ -19,7 +20,7 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
     /** A reversible change, applied to both layers. */
     private class Step(val redo: () -> Boolean, val undo: () -> Boolean)
 
-    private val undoStack = ArrayList<Step>()
+    private val undoStack = UndoStack<Step>()
     private val redoStack = ArrayList<Step>()
     private var changes = 0
 
@@ -75,9 +76,14 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         val old = display.shapeText(slideIndex, shapeId) ?: listShapes(slideIndex).firstOrNull { it.id == shapeId }?.text
         val where = listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rectEmu
         if (!editor.setShapeText(slideIndex, shapeId, text)) return false
+        // undo puts back the very runs shown before, not the old text in new runs
+        val before = display.saveText(slideIndex, shapeId)
         val show = { display.setShapeText(slideIndex, shapeId, text, where) }
         live(show())
-        record({ editor.setShapeText(slideIndex, shapeId, text) }, show) { old != null && display.setShapeText(slideIndex, shapeId, old, where) }
+        record({ editor.setShapeText(slideIndex, shapeId, text) }, show) {
+            if (before != null) display.restoreText(slideIndex, shapeId, before)
+            else old != null && display.setShapeText(slideIndex, shapeId, old, where)
+        }
         return true
     }
 

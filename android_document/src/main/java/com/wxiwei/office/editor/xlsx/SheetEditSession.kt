@@ -1,6 +1,7 @@
 package com.wxiwei.office.editor.xlsx
 
 import com.wxiwei.office.editor.EditResult
+import com.wxiwei.office.editor.UndoStack
 import com.wxiwei.office.editor.Reason
 import com.wxiwei.office.ss.control.ExcelView
 import com.wxiwei.office.ss.control.Spreadsheet
@@ -58,7 +59,7 @@ class SheetEditSession internal constructor(
     }
     /** Rows/columns inserted or deleted, in order; save replays them on the file first. */
     private val structure = ArrayList<StructureWrite>()
-    private val undoStack = ArrayList<Step>()
+    private val undoStack = UndoStack<Step>()
     private val redoStack = ArrayList<Step>()
     /** Format changes applied to each cell, in order; merged relative to the file's style on save. */
     private val formats = HashMap<Key, MutableList<CellFormat>>()

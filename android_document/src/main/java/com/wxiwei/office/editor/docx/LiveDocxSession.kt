@@ -2,6 +2,7 @@ package com.wxiwei.office.editor.docx
 
 import android.graphics.Color
 import com.wxiwei.office.editor.EditResult
+import com.wxiwei.office.editor.UndoStack
 import com.wxiwei.office.editor.Reason
 import com.wxiwei.office.simpletext.model.AttrManage
 import com.wxiwei.office.simpletext.model.IAttributeSet
@@ -38,7 +39,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
 
     /** An Enter at [at]. */
     private class SplitStep(val at: Long, undo: () -> Boolean, redo: () -> Boolean) : Step(undo, redo)
-    private val undoStack = ArrayList<Step>()
+    private val undoStack = UndoStack<Step>()
     private val redoStack = ArrayList<Step>()
 
     /** True after a text change: it is saved, but the view shows it only after reopening. */
