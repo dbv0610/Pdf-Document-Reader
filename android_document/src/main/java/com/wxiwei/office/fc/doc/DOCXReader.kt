@@ -1204,6 +1204,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             }
         }
 
+        pPr.element("contextualSpacing")?.let { am.setParaContextualSpacing(attr, it.attributeValue("val").let { v -> v != "0" && v != "false" }) }
         // shading and borders
         pPr.element("shd")?.attributeValue("fill")?.let { fill ->
             if (!fill.equals("auto", true)) am.setParaShading(attr, parseHexColor(fill, Color.WHITE))

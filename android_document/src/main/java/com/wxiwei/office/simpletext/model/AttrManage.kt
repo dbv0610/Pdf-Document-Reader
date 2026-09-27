@@ -1548,6 +1548,14 @@ class AttrManage {
         attr!!.setAttribute(AttrIDConstant.PARA_SHADING_ID, color)
     }
 
+    fun setParaContextualSpacing(attr: IAttributeSet?, on: Boolean) {
+        attr!!.setAttribute(AttrIDConstant.PARA_CONTEXTUAL_SPACING_ID, if (on) 1 else 0)
+    }
+
+    /** Word ignores the space before/after of such a paragraph next to one of the same style. */
+    fun getParaContextualSpacing(attr: IAttributeSet?): Boolean =
+        attr!!.getAttribute(AttrIDConstant.PARA_CONTEXTUAL_SPACING_ID) == 1
+
     /** Shading and borders of a paragraph, or null when it has none (the common case). */
     fun getParaDecoration(attr: IAttributeSet?): ParaDecoration? {
         val shading = attr!!.getAttribute(AttrIDConstant.PARA_SHADING_ID)

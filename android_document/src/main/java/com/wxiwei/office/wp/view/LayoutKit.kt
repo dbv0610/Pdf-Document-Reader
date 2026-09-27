@@ -96,22 +96,25 @@ class LayoutKit private constructor() {
         val elemEnd = elem!!.getEndOffset()
         // 处理段前段后间距
         val prePara = para.getPreView()
+        // contextualSpacing: no space between this paragraph and a neighbour of the same style
+        val contextual = AttrManage.instance().getParaContextualSpacing(elem.getAttribute())
+        val afterSpace = if (contextual && sameStyle(elem, doc.getParagraph(elemEnd))) 0 else paraAttr.afterSpace
         if (prePara == null) { // 页面第一个段落
             spanH -= paraAttr.beforeSpace
             para.setTopIndent(paraAttr.beforeSpace)
-            para.setBottomIndent(paraAttr.afterSpace)
+            para.setBottomIndent(afterSpace)
             para.setY(para.getY() + paraAttr.beforeSpace)
         } else {
-            if (paraAttr.beforeSpace > 0) {
+            val beforeSpace = if (contextual && sameStyle(prePara.getElement(), elem)) 0 else paraAttr.beforeSpace
+            if (beforeSpace > 0) {
                 // Word adds the previous paragraph's space after and this space before; it does not
                 // collapse them like HTML margins
-                val beforeSpace = paraAttr.beforeSpace
                 spanH -= beforeSpace
                 para.setTopIndent(beforeSpace)
                 para.setY(para.getY() + beforeSpace)
             }
-            spanH -= paraAttr.afterSpace
-            para.setBottomIndent(paraAttr.afterSpace)
+            spanH -= afterSpace
+            para.setBottomIndent(afterSpace)
         }
         var keepOne = ViewKit.instance().getBitValue(flag, WPViewConstant.LAYOUT_FLAG_KEEPONE.toInt())
         if (spanH < 0 && !keepOne) {
@@ -261,6 +264,12 @@ class LayoutKit private constructor() {
         }
         line.layoutAlignment(docAttr, pageAttr, paraAttr, bnView, w, flag)
         return breakType
+    }
+
+    private fun sameStyle(a: IElement?, b: IElement?): Boolean {
+        if (a == null || b == null || a === b) return false
+        val am = AttrManage.instance()
+        return am.getParaStyleID(a.getAttribute()) == am.getParaStyleID(b.getAttribute())
     }
 
     private fun createBNView(control: IControl, doc: IDocument, docAttr: DocAttr, pageAttr: PageAttr, paraAttr: ParaAttr,

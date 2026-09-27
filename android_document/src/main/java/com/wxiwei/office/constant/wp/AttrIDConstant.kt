@@ -97,6 +97,8 @@ object AttrIDConstant {
     const val PARA_BORDER_RIGHT_ID: Short = 0x101A
     const val PARA_BORDER_RIGHT_COLOR_ID: Short = 0x101B
     const val PARA_BORDER_RIGHT_SPACE_ID: Short = 0x101C
+    // DOCX pPr/contextualSpacing: no space before/after next to a paragraph of the same style (1/0)
+    const val PARA_CONTEXTUAL_SPACING_ID: Short = 0x101D
 
     /* ========= 章节属性 ========= */
     // 页面宽度
