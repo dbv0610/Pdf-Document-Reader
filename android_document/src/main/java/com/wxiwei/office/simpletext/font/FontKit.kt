@@ -101,7 +101,24 @@ class FontKit {
         //int newPos = wordBreak.following(pos - 1);
         lineBreak.following(pos)
         val newPos = lineBreak.previous()
-        return if (newPos == 0) pos else newPos
+        // no break opportunity (one long word): break between characters, not inside an emoji
+        return if (newPos == 0) clusterStart(text!!, pos).takeIf { it > 0 } ?: pos else newPos
+    }
+
+    /** [i], or the start of the character cluster (surrogate pair, emoji sequence, base + marks) it is inside. */
+    fun clusterStart(text: String, i: Int): Int {
+        if (i <= 0 || i >= text.length) return i
+        val chars = BreakIterator.getCharacterInstance()
+        chars.setText(text)
+        return if (chars.isBoundary(i)) i else chars.preceding(i)
+    }
+
+    /** The end of the character cluster that starts at or contains [i]. */
+    fun clusterEnd(text: String, i: Int): Int {
+        if (i >= text.length) return text.length
+        val chars = BreakIterator.getCharacterInstance()
+        chars.setText(text)
+        return chars.following(i).takeIf { it != BreakIterator.DONE } ?: text.length
     }
 
     fun breakText(content: String, lineWidth: Int, paint: Paint): List<String> {

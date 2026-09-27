@@ -13,6 +13,7 @@ import com.wxiwei.office.constant.wp.WPModelConstant
 import com.wxiwei.office.constant.wp.WPViewConstant
 import com.wxiwei.office.java.awt.Rectangle
 import com.wxiwei.office.macro.UpdateStatusListener
+import com.wxiwei.office.simpletext.font.FontKit
 import com.wxiwei.office.simpletext.font.FontTypefaceManage
 import com.wxiwei.office.simpletext.model.AttrManage
 import com.wxiwei.office.simpletext.model.IElement
@@ -173,9 +174,14 @@ open class LeafView : AbstractView {
                 tW -= widths[i]
                 breakType = WPViewConstant.BREAK_LIMIT.toInt()
                 if (keepOne && i == 0) {
-                    tW += widths[i]
-                    i++
+                    // keep the whole first character, even an emoji of several chars
+                    val end = FontKit.instance().clusterEnd(text, 0)
+                    while (i < end) tW += widths[i++]
                     breakType = WPViewConstant.BREAK_NO.toInt()
+                } else {
+                    // never split a surrogate pair or an emoji sequence between two lines
+                    val cluster = FontKit.instance().clusterStart(text, i)
+                    while (i > cluster) tW -= widths[--i]
                 }
                 break
             }
