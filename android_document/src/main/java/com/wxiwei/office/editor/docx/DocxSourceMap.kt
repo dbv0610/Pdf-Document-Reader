@@ -21,6 +21,14 @@ class DocxSourceMap {
     private var paraStarts = LongArray(32)
     private var paraEnds = LongArray(32)
     var paragraphCount = 0; private set
+    // XML part of each editable area (offset & AREA_MASK): the body, the shown header and footer
+    private val parts = HashMap<Long, String>().apply { put(0L, "word/document.xml") }
+
+    /** Leaves and paragraphs of [area] (offset & AREA_MASK) come from [part]; their run and paragraph
+     *  indices count from 0 in that part. */
+    @Synchronized fun setPart(area: Long, part: String) { parts[area] = part }
+    @Synchronized fun part(area: Long): String? = parts[area]
+    @Synchronized fun areas(): Map<Long, String> = HashMap(parts)
 
     @Synchronized fun addLeaf(start: Long, end: Long, runIndices: IntArray, text: String, kind: Kind) {
         require(start >= 0 && end >= start && end - start == text.length.toLong())

@@ -146,7 +146,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private var editRunBase = 0
     private var editParaBase = 0
     private var editObjectRun: Element? = null
-    private fun editMain() = offset >= WPModelConstant.MAIN && offset < WPModelConstant.HEADER
+    /** The body, or the header/footer being read (not text boxes: their offsets are in another area). */
+    private fun editMain() = (offset >= WPModelConstant.MAIN && offset < WPModelConstant.HEADER) ||
+        (isProcessHF && (offset and WPModelConstant.AREA_MASK).let { it == WPModelConstant.HEADER || it == WPModelConstant.FOOTER })
     private fun recordEdit(start: Long, text: String, run: Element?, kind: DocxSourceMap.Kind) {
         if (editMain() && start >= 0 && editParas.isNotEmpty()) {
             val id = run?.let { editRuns[it] }
@@ -623,7 +625,28 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 )
                 hfElem.setStartOffset(offset)
 
+                // source identities for editing, counted in this part like the body counts its own.
+                // A section break inside the body reads the header mid-body: keep the body's.
+                val bodyRuns = IdentityHashMap(editRuns)
+                val bodyParas = IdentityHashMap(editParas)
+                val bodyObjectRun = editObjectRun
+                editRuns.clear(); editParas.clear(); editObjectRun = null
+                var runCount = 0
+                var paraCount = 0
+                fun index(node: Element) {
+                    if (node.namespaceURI == "http://schemas.openxmlformats.org/wordprocessingml/2006/main") {
+                        if (node.name == "r") editRuns[node] = runCount++
+                        if (node.name == "p") editParas[node] = paraCount++
+                    }
+                    val children = node.elementIterator()
+                    while (children!!.hasNext()) index(children.next() as Element)
+                }
+                paras.filter { it.name == "p" || it.name == "tbl" || it.name == "sdt" }.forEach { index(it) }
+                editMap.setPart(offset, part.partName.name.removePrefix("/"))
+
                 processParagraphs(paras)
+                editRuns.clear(); editParas.clear()
+                editRuns.putAll(bodyRuns); editParas.putAll(bodyParas); editObjectRun = bodyObjectRun
 
                 hfElem.setEndOffset(offset)
                 document.appendElement(hfElem, offset)

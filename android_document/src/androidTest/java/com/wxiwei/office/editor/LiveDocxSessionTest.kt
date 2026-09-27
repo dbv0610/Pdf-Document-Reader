@@ -24,7 +24,7 @@ class LiveDocxSessionTest {
     /** Model offset of [needle] in the main text rebuilt from the source map (across runs). */
     private fun offsetOf(path: String, needle: String): Long {
         val map = DocxSourceMap.get(path)!!
-        val leaves = (0 until map.size).map { map.leaf(it) }
+        val leaves = (0 until map.size).map { map.leaf(it) }.filter { it.start < com.wxiwei.office.constant.wp.WPModelConstant.HEADER } // the body only
         val end = leaves.maxOfOrNull { it.end } ?: 0L
         val chars = CharArray(end.toInt()) { ' ' }
         for (l in leaves) l.text.forEachIndexed { i, c -> chars[(l.start + i).toInt()] = c }

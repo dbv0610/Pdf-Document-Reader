@@ -30,13 +30,17 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     private fun queue(op: Op): Boolean {
         lastError = when {
             !source.extension.equals("docx", true) -> EditResult.Error(Reason.UNSUPPORTED_FORMAT, "Only DOCX is editable")
-            op.start < 0 || op.end < op.start || op.end >= 0x1000000000000000L ->
-                EditResult.Error(Reason.INVALID_ARGUMENT, "Only MAIN offsets are editable")
+            op.start < 0 || op.end < op.start || map.part(area(op.start)) == null ||
+                (op.end > op.start && area(op.end - 1) != area(op.start)) ->
+                EditResult.Error(Reason.INVALID_ARGUMENT, "Only the body, header and footer are editable")
             else -> null
         }
         if (lastError != null) return false
         ops.add(op); return true
     }
+
+    /** The story of an offset: MAIN, HEADER or FOOTER (WPModelConstant). */
+    private fun area(offset: Long) = offset and AREA_MASK
 
     /** Handle of the last queued operation (an insert), for [save] overrides. */
     fun lastOp(): Any? = ops.lastOrNull()
@@ -176,7 +180,11 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         val result = try {
             if (!source.extension.equals("docx", true)) fail(Reason.UNSUPPORTED_FORMAT, "Only DOCX is editable")
             val pkg = OoxmlPackage.open(source)
-            Session(pkg, java.util.IdentityHashMap(overrides)).applyAll()
+            // one pass per edited part: the body, the header, the footer
+            val areas = map.areas()
+            for (area in ops.map { area(it.start) }.distinct()) {
+                Session(pkg, java.util.IdentityHashMap(overrides), area, areas[area] ?: fail(Reason.MAP_MISMATCH, "No part for area")).applyAll()
+            }
             pkg.saveTo(target)
         } catch (e: Failure) { EditResult.Error(e.reason, e.message ?: "Edit failed")
         } catch (e: IllegalArgumentException) { EditResult.Error(Reason.INVALID_ARGUMENT, e.message ?: "Invalid argument", e)
@@ -186,13 +194,16 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         return result
     }
 
-    private inner class Session(val pkg: OoxmlPackage, val overrides: java.util.IdentityHashMap<Any, InsertOverride>) {
-        val root: Element = pkg.xml("word/document.xml").rootElement!!
-        val body = root.firstChild(W, "body") ?: fail(Reason.MAP_MISMATCH, "No document body")
+    private inner class Session(val pkg: OoxmlPackage, val overrides: java.util.IdentityHashMap<Any, InsertOverride>,
+                                val area: Long, val part: String) {
+        val root: Element = pkg.xml(part).rootElement!!
+        // w:hdr and w:ftr hold their paragraphs directly
+        val body = if (area == 0L) root.firstChild(W, "body") ?: fail(Reason.MAP_MISMATCH, "No document body") else root
+        val ops = this@DocxEditor.ops.filter { area(it.start) == area }
         val runs = ArrayList<Element>()
         val paragraphs = ArrayList<Element>()
-        val leaves = (0 until map.size).map { map.leaf(it) }.sortedBy { it.start }
-        val paras = (0 until map.paragraphCount).map { map.paragraph(it) }
+        val leaves = (0 until map.size).map { map.leaf(it) }.filter { area(it.start) == area }.sortedBy { it.start }
+        val paras = (0 until map.paragraphCount).map { map.paragraph(it) }.filter { area(it.start) == area }
         val pieces = ArrayList<Piece>()
         val insertionEnds = HashMap<Long, Element>()
         val deletedSeparators = HashSet<Long>()
@@ -433,7 +444,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         } }
         fun image(op: Op): Element {
             val media = pkg.addMedia("word/media", op.image!!.readBytes(), op.image.extension)
-            val rel = pkg.addRelationship("word/document.xml", REL_IMAGE, media.removePrefix("word/"))
+            val rel = pkg.addRelationship(part, REL_IMAGE, media.removePrefix("word/"))
             var maxId = 0L
             walk(root) { if (it.name == "docPr" && it.namespaceURI == WP.uRI) maxId = maxOf(maxId, it.attributeValue("id")?.toLongOrNull() ?: 0) }
             val cx = pxToEmu(op.width).toString(); val cy = pxToEmu(op.height).toString()
@@ -457,6 +468,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
     }
     companion object {
+        private const val AREA_MASK = com.wxiwei.office.constant.wp.WPModelConstant.AREA_MASK
         internal fun walk(root: Element, visit: (Element) -> Unit) { visit(root); root.elements()!!.filterIsInstance<Element>().forEach { walk(it, visit) } }
         private fun childText(child: Element): String = when (child.name) {
             "t" -> child.text ?: ""
