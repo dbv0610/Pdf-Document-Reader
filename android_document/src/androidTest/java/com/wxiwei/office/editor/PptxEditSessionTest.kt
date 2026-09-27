@@ -143,6 +143,41 @@ class PptxEditSessionTest {
         assertTrue("first run changed", xml.contains("<a:t>Y</a:t>"))
     }
 
+    /** Bold + red on chars [4, 8) of a text box: only they change, live, undone, and in the file as their own run. */
+    @Test
+    fun formatPartOfText() {
+        val source = OpenDocument.copySample("ppt2.pptx", "pptx_range_fmt.pptx")
+        val saved = OpenDocument.output("pptx_range_fmt_saved.pptx")
+        var part = ""
+        OpenDocument.open(source, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, source) }
+            val text = onMain { session.listShapes(9) }.first { it.id == 8 }.text
+            part = text.substring(4, 8)
+            val boldAt = { i: Long ->
+                onMain {
+                    val box = (reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation).getSlide(9)!!.getShapes()
+                        .filterIsInstance<com.wxiwei.office.common.shape.TextBox>().first { it.shapeID == 8 }
+                    val para = box.element!!.getParaCollection()!!.getElementForIndex(0) as com.wxiwei.office.simpletext.model.ParagraphElement
+                    val leaf = (0 until para.leafCount()).map { para.getElementForIndex(it)!! }.first { i >= it.getStartOffset() && i < it.getEndOffset() }
+                    com.wxiwei.office.simpletext.model.AttrManage.instance().getFontBold(para.getAttribute(), leaf.getAttribute())
+                }
+            }
+            assertTrue(session.lastError?.toString(), onMain { session.setTextFormat(9, 8, 4, 8, com.wxiwei.office.editor.pptx.TextFormat(bold = true, rgbHex = "C00000")) })
+            assertEquals(listOf(false, true, true, false), listOf(3L, 4L, 7L, 8L).map(boldAt))
+            assertTrue(onMain { session.undo() })
+            assertEquals(false, boldAt(5))
+            assertTrue(onMain { session.redo() })
+            assertEquals(true, boldAt(5))
+            shot(reader, "pptx_range_fmt", 10)
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide10.xml")).readBytes().toString(Charsets.UTF_8) }
+        val run = Regex("<a:r><a:rPr([^>]*)>(.*?)</a:rPr><a:t>" + Regex.escape(part) + "</a:t></a:r>").find(xml)
+        assertTrue("run of its own for '$part'", run != null)
+        assertTrue(run!!.value, run.groupValues[1].contains("b=\"1\"") && run.groupValues[2].contains("C00000"))
+        assertEquals(PptxEditor(source).listShapes(9).first { it.id == 8 }.text, PptxEditor(saved).listShapes(9).first { it.id == 8 }.text)
+    }
+
     /** A box that fits its text (spAutoFit) grows with more lines, shrinks back on undo, and is saved grown. */
     @Test
     fun autoFitBoxFollowsText() {

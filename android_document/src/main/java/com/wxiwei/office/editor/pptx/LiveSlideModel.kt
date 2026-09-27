@@ -49,6 +49,8 @@ interface LiveSlideDisplay {
     fun shapeRotation(slideIndex: Int, id: Int): Float? = null
     fun rotateShape(slideIndex: Int, id: Int, degrees: Float): Boolean = false
     fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? = null
+    /** Formats chars [start, end) of the shape's text; a token for [restoreFormat], or null. */
+    fun setTextFormat(slideIndex: Int, id: Int, start: Int, end: Int, format: TextFormat): Any? = null
     /** How the shape's first text run is drawn, for an editor over it; null when not shown. */
     fun textStyle(slideIndex: Int, id: Int): TextStyle? = null
     fun restoreFormat(slideIndex: Int, token: Any): Boolean = false
@@ -293,11 +295,45 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
                 val leaf = para.getElementForIndex(j) ?: continue
                 val attr = leaf.getAttribute()!!
                 saved.add(leaf to attr.clone())
-                format.bold?.let { am.setFontBold(attr, it) }
-                format.italic?.let { am.setFontItalic(attr, it) }
-                format.underline?.let { am.setFontUnderline(attr, if (it) 1 else 0) }
-                format.sizePt?.let { am.setFontSize(attr, it) }
-                format.rgbHex?.let { am.setFontColor(attr, (0xFF shl 24) or it.removePrefix("#").toInt(16)) }
+                runFormat(attr, format)
+            }
+        }
+        relayout(box)
+        return FormatToken(box, saved)
+    }
+
+    private fun runFormat(attr: IAttributeSet, format: TextFormat) {
+        val am = AttrManage.instance()
+        format.bold?.let { am.setFontBold(attr, it) }
+        format.italic?.let { am.setFontItalic(attr, it) }
+        format.underline?.let { am.setFontUnderline(attr, if (it) 1 else 0) }
+        format.sizePt?.let { am.setFontSize(attr, it) }
+        format.rgbHex?.let { am.setFontColor(attr, (0xFF shl 24) or it.removePrefix("#").toInt(16)) }
+    }
+
+    override fun setTextFormat(slideIndex: Int, id: Int, start: Int, end: Int, format: TextFormat): Any? {
+        val slide = slide(slideIndex) ?: return null
+        val box = find(slide, id).filterIsInstance<TextBox>().firstOrNull() ?: return FormatToken(null, emptyList())
+        val section = box.element ?: return FormatToken(null, emptyList())
+        val saved = ArrayList<Pair<com.wxiwei.office.simpletext.model.IElement, IAttributeSet>>()
+        val count = section.getParaCollection()?.size() ?: 0
+        // the text starts at offset 0: the shape's char positions are model offsets
+        for (i in 0 until count) {
+            val para = section.getParaCollection()!!.getElementForIndex(i) as? ParagraphElement ?: continue
+            val ps = para.getStartOffset(); val pe = para.getEndOffset()
+            if (pe <= start || ps >= end) continue
+            format.align?.let {
+                saved.add(para to para.getAttribute()!!.clone())
+                AttrManage.instance().setParaHorizontalAlign(para.getAttribute(), when (it) {
+                    "ctr" -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt()
+                    "r" -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_RIGHT.toInt()
+                    "just" -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED.toInt()
+                    else -> com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_LEFT.toInt()
+                })
+            }
+            for (leaf in para.leavesFor(maxOf(start.toLong(), ps), minOf(end.toLong(), pe))) {
+                saved.add(leaf to leaf.getAttribute()!!.clone())
+                runFormat(leaf.getAttribute()!!, format)
             }
         }
         relayout(box)

@@ -117,6 +117,17 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         return true
     }
 
+    /** Formats chars [start, end) of the shape's text (positions as in [PptxShapeInfo.text]). */
+    fun setTextFormat(slideIndex: Int, shapeId: Int, start: Int, end: Int, format: TextFormat): Boolean {
+        if (!editor.setTextFormat(slideIndex, shapeId, start, end, format)) return false
+        var token = display.setTextFormat(slideIndex, shapeId, start, end, format)
+        live(token != null)
+        record({ editor.setTextFormat(slideIndex, shapeId, start, end, format) },
+            { display.setTextFormat(slideIndex, shapeId, start, end, format).also { token = it } != null },
+            { token?.let { display.restoreFormat(slideIndex, it) } ?: false })
+        return true
+    }
+
     // Slide changes are saved; the open view shows them after a reopen ([needsReopen]).
     fun slideCount(): Int = editor.slideCount()
     /** Size, color and typeface of the shape's text as shown, for an editor over it. */

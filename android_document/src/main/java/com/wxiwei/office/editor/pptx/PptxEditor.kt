@@ -266,19 +266,62 @@ class PptxEditor(private val source: File) {
                     else -> null
                 }
             }
-            for (rPr in props) {
-                format.bold?.let { rPr.addAttribute("b", if (it) "1" else "0") }
-                format.italic?.let { rPr.addAttribute("i", if (it) "1" else "0") }
-                format.underline?.let { rPr.addAttribute("u", if (it) "sng" else "none") }
-                format.sizePt?.let { rPr.addAttribute("sz", Math.round(it * 100).toString()) }
-                format.rgbHex?.let { rgb ->
-                    // CT_TextCharacterProperties: ln, then the fill, before effects and fonts
-                    listOf("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill").forEach { n -> rPr.childrenNamed(A, n).forEach { rPr.remove(it) } }
-                    val fill = newElement(A, "solidFill").apply { add(newElement(A, "srgbClr").apply { addAttribute("val", rgb.removePrefix("#").uppercase()) }) }
-                    val content = rPr.content() as MutableList<Any?>
-                    val ln = rPr.firstChild(A, "ln")
-                    content.add(if (ln == null) 0 else content.indexOf(ln) + 1, fill)
+            for (rPr in props) runFormat(rPr, format)
+        }
+    }
+
+    private fun runFormat(rPr: Element, format: TextFormat) {
+        format.bold?.let { rPr.addAttribute("b", if (it) "1" else "0") }
+        format.italic?.let { rPr.addAttribute("i", if (it) "1" else "0") }
+        format.underline?.let { rPr.addAttribute("u", if (it) "sng" else "none") }
+        format.sizePt?.let { rPr.addAttribute("sz", Math.round(it * 100).toString()) }
+        format.rgbHex?.let { rgb ->
+            // CT_TextCharacterProperties: ln, then the fill, before effects and fonts
+            listOf("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill").forEach { n -> rPr.childrenNamed(A, n).forEach { rPr.remove(it) } }
+            val fill = newElement(A, "solidFill").apply { add(newElement(A, "srgbClr").apply { addAttribute("val", rgb.removePrefix("#").uppercase()) }) }
+            val content = rPr.content() as MutableList<Any?>
+            val ln = rPr.firstChild(A, "ln")
+            content.add(if (ln == null) 0 else content.indexOf(ln) + 1, fill)
+        }
+    }
+
+    /**
+     * Formats chars [start, end) of the shape's text (as [listShapes] gives it: paragraphs and line
+     * breaks count one char each). Runs are split at both ends; [TextFormat.align] applies to the
+     * paragraphs touched.
+     */
+    fun setTextFormat(slideIndex: Int, shapeId: Int, start: Int, end: Int, format: TextFormat): Boolean = queue { pkg ->
+        require(start in 0 until end) { "Empty range" }
+        val e = find(pkg, slideIndex, shapeId).first
+        val body = e.firstChild(P, "txBody") ?: throw IllegalArgumentException("Shape has no editable text body")
+        format.rgbHex?.let { require(it.removePrefix("#").matches(Regex("(?i)[0-9a-f]{6}"))) { "Expected RRGGBB" } }
+        var pos = 0
+        for ((k, p) in body.childrenNamed(A, "p").withIndex()) {
+            if (k > 0) pos++ // the paragraph mark before it
+            val paraStart = pos
+            for (r in p.elements()!!.filterIsInstance<Element>().filter { it.namespaceURI == A.uRI }) {
+                val len = when (r.name) { "r", "fld" -> r.firstChild(A, "t")?.text?.length ?: 0; "br" -> 1; else -> 0 }
+                val a = maxOf(start, pos) - pos
+                val b = minOf(end, pos + len) - pos
+                if (b > a && r.name == "fld") runFormat(r.firstChild(A, "rPr") ?: newElement(A, "rPr").also { (r.content() as MutableList<Any?>).add(0, it) }, format)
+                if (b > a && r.name == "r") {
+                    val text = r.firstChild(A, "t")!!.text ?: ""
+                    // the part in range as a run of its own, the rest keeps its runs
+                    val content = p.content() as MutableList<Any?>
+                    var at = content.indexOf(r)
+                    fun piece(t: String) = r.createCopy()!!.also { c -> c.firstChild(A, "t")!!.text = t }
+                    val mid = piece(text.substring(a, b))
+                    if (a > 0) content.add(at++, piece(text.substring(0, a)))
+                    content.add(at++, mid)
+                    if (b < len) content.add(at, piece(text.substring(b)))
+                    p.remove(r)
+                    runFormat(mid.firstChild(A, "rPr") ?: newElement(A, "rPr").also { (mid.content() as MutableList<Any?>).add(0, it) }, format)
                 }
+                pos += len
+            }
+            if (format.align != null && pos >= start && paraStart < end) {
+                val pPr = p.firstChild(A, "pPr") ?: newElement(A, "pPr").also { (p.content() as MutableList<Any?>).add(0, it) }
+                pPr.addAttribute("algn", format.align)
             }
         }
     }

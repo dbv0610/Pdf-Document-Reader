@@ -107,6 +107,26 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
+        // formatting of the selected part of the text, from the text selection menu
+        edit.customSelectionActionModeCallback = object : android.view.ActionMode.Callback {
+            private val formats = listOf(
+                "Đậm" to TextFormat(bold = true), "Nghiêng" to TextFormat(italic = true),
+                "Gạch chân" to TextFormat(underline = true), "Chữ đỏ" to TextFormat(rgbHex = "C00000"))
+            override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+                formats.forEachIndexed { i, (label, _) -> menu.add(android.view.Menu.NONE, FORMAT_MENU_ID + i, 100 + i, label) }
+                return true
+            }
+            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
+            override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+                val format = formats.getOrNull(item.itemId - FORMAT_MENU_ID)?.second ?: return false
+                val start = minOf(edit.selectionStart, edit.selectionEnd)
+                val end = maxOf(edit.selectionStart, edit.selectionEnd)
+                mode.finish()
+                formatRange(start, end, format)
+                return true
+            }
+            override fun onDestroyActionMode(mode: android.view.ActionMode) {}
+        }
         inline = edit
         // the keyboard takes half the screen: give the slide the rest while typing on it
         view.visibility = View.GONE
@@ -115,6 +135,15 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         edit.requestFocus()
         (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
             .showSoftInput(edit, 0)
+    }
+
+    /** Saves the text being edited in place, then formats its chars [start, end) and shows the slide. */
+    private fun formatRange(start: Int, end: Int, format: TextFormat) {
+        if (shapeId < 0 || end <= start) return
+        // positions are in the edited text: write it to the shape first
+        stopInline(commit = true)
+        if (!session.setTextFormat(slide(), shapeId, start, end, format)) toast(session.lastError?.message ?: "Không định dạng được")
+        else reopenHint()
     }
 
     /** Keeps the editor on the shape frame, at least a few lines tall. */
@@ -328,5 +357,10 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         // slide changes and some shape edits only show after reading the file again
         if (reopenAfterSave) reader.open(file.absolutePath)
         session = LivePptxSession(reader.control!!, file)
+    }
+
+    private companion object {
+        // ids of the formatting items added to the text selection menu
+        const val FORMAT_MENU_ID = 0x5E10
     }
 }
