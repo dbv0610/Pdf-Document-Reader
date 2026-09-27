@@ -206,6 +206,16 @@ class PptxEditor(private val source: File) {
         paragraphs(body, text, rp, pp)
     }
     /** Formats every run (and paragraph for [TextFormat.align]) of a shape's text. */
+    /** Bold/italic/underline of the shape's first text run as written in the slide (null: no text). */
+    fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = read(null) { pkg ->
+        val e = find(pkg, slideIndex, shapeId).first
+        val run = descendants(e).firstOrNull { it.namespaceURI == A.uRI && it.name == "r" } ?: return@read null
+        val rPr = run.firstChild(A, "rPr")
+        fun on(v: String?) = v == "1" || v == "true"
+        TextFormat(bold = on(rPr?.attributeValue("b")), italic = on(rPr?.attributeValue("i")),
+            underline = rPr?.attributeValue("u").let { it != null && it != "none" })
+    }
+
     fun setTextFormat(slideIndex: Int, shapeId: Int, format: TextFormat): Boolean = queue { pkg ->
         val e = find(pkg, slideIndex, shapeId).first
         val body = e.firstChild(P, "txBody") ?: throw IllegalArgumentException("Shape has no editable text body")

@@ -408,6 +408,7 @@ class LiveDocxSessionTest {
             assertTrue(session.lastError?.toString(), onMain { session.setBold(at + 4, at + 8, true) })
             assertTrue(bold(reader, at + 5))
             assertFalse(bold(reader, at + 1))
+            assertTrue(onMain { session.isBold(at + 5) && !session.isBold(at + 1) })
             // italic "ào Luồng": typed + original text in one step
             assertTrue(session.lastError?.toString(), onMain { session.setItalic(at + 6, at + 14, true) })
             assertTrue(onMain { session.undo() })

@@ -76,9 +76,9 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         addView(selectionLabel)
         addView(line(text, button("Thay") { replace() }, button("Chèn") { insert() }, weights = floatArrayOf(1f, 0f, 0f)))
         addView(toolRow(
-            button("B", bold = true) { op { e, r -> e.setBold(r.first, r.last + 1, true) } },
-            button("I") { op { e, r -> e.setItalic(r.first, r.last + 1, true) } },
-            button("U") { op { e, r -> e.setUnderline(r.first, r.last + 1, true) } },
+            button("B", bold = true) { op { e, r -> e.setBold(r.first, r.last + 1, !e.isBold(r.first)) } },
+            button("I") { op { e, r -> e.setItalic(r.first, r.last + 1, !e.isItalic(r.first)) } },
+            button("U") { op { e, r -> e.setUnderline(r.first, r.last + 1, !e.isUnderlined(r.first)) } },
             button("Chữ đỏ") { op { e, r -> e.setTextColor(r.first, r.last + 1, "C00000") } },
             button("Chữ xanh") { op { e, r -> e.setTextColor(r.first, r.last + 1, "1F4E79") } },
             button("Cỡ 16") { op { e, r -> e.setFontSize(r.first, r.last + 1, 16f) } },

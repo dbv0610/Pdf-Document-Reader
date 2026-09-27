@@ -93,6 +93,8 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
 
     // Slide changes are saved; the open view shows them after a reopen ([needsReopen]).
     fun slideCount(): Int = editor.slideCount()
+    /** Current bold/italic/underline of the shape's text (from its first run). */
+    fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = editor.textFormatOf(slideIndex, shapeId)
 
     fun deleteSlide(slideIndex: Int): Boolean = slideChange { editor.deleteSlide(slideIndex) }
     fun duplicateSlide(slideIndex: Int): Boolean = slideChange { editor.duplicateSlide(slideIndex) >= 0 }

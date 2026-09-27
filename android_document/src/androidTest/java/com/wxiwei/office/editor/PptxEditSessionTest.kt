@@ -57,6 +57,7 @@ class PptxEditSessionTest {
             // format the title: bold, red, 60pt, right aligned; undo and redo
             val fmt = com.wxiwei.office.editor.pptx.TextFormat(bold = true, rgbHex = "C00000", sizePt = 60f, align = "r")
             assertTrue(session.lastError?.toString(), onMain { session.setTextFormat(1, title.id, fmt) })
+            assertEquals(true, onMain { session.textFormatOf(1, title.id)?.bold })
             assertTrue(onMain { session.undo() })
             assertTrue(onMain { session.redo() })
             Log.i("PptxEditTest", "needsReopen=${session.needsReopen} temp=$temp added=$added")

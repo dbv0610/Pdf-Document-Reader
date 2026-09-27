@@ -129,6 +129,17 @@ class LiveDocxSession(control: IControl, private val source: File) {
         am.setParaLineSpace(it, multiple)
     }
 
+    /** True when the character at [offset] is bold (italic, underlined): the B/I/U buttons toggle. */
+    fun isBold(offset: Long) = charAttr(offset) { p, l -> am.getFontBold(p, l) }
+    fun isItalic(offset: Long) = charAttr(offset) { p, l -> am.getFontItalic(p, l) }
+    fun isUnderlined(offset: Long) = charAttr(offset) { p, l -> am.getFontUnderline(p, l) > 0 }
+    private fun charAttr(offset: Long, read: (IAttributeSet, IAttributeSet) -> Boolean): Boolean {
+        val doc = word.getDocument()
+        val para = doc.getParagraph(offset) ?: return false
+        val leaf = doc.getLeaf(offset) ?: return false
+        return read(para.getAttribute()!!, leaf.getAttribute()!!)
+    }
+
     /** Bullets on or off for the paragraphs touching [start, end). */
     fun setBullets(start: Long, end: Long, on: Boolean) = setList(start, end, on, bullet = true)
 

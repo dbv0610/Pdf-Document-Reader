@@ -35,9 +35,9 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         addView(line(button("Danh sách", bold = true) { pickShape() }, selected, weights = floatArrayOf(0f, 1f)))
         addView(line(text, button("Đổi chữ") { setText() }, button("+ Text box") { addTextBox() }, weights = floatArrayOf(1f, 0f, 0f)))
         addView(toolRow(
-            button("B", bold = true) { format(TextFormat(bold = true)) },
-            button("I") { format(TextFormat(italic = true)) },
-            button("U") { format(TextFormat(underline = true)) },
+            button("B", bold = true) { toggle { TextFormat(bold = it.bold != true) } },
+            button("I") { toggle { TextFormat(italic = it.italic != true) } },
+            button("U") { toggle { TextFormat(underline = it.underline != true) } },
             button("Chữ đỏ") { format(TextFormat(rgbHex = "C00000")) },
             button("Chữ đen") { format(TextFormat(rgbHex = "000000")) },
             button("Cỡ 18") { format(TextFormat(sizePt = 18f)) },
@@ -220,6 +220,12 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         if (shapeId < 0) return toast("Chọn shape trước")
         if (!session.setShapeText(slide(), shapeId, text.text.toString())) toast(session.lastError?.message ?: "Không đổi được chữ")
         else reopenHint()
+    }
+
+    /** B/I/U turn off when the shape's text already has them. */
+    private fun toggle(next: (TextFormat) -> TextFormat) {
+        if (shapeId < 0) return toast("Chọn shape trước")
+        format(next(session.textFormatOf(slide(), shapeId) ?: TextFormat()))
     }
 
     private fun format(f: TextFormat) {
