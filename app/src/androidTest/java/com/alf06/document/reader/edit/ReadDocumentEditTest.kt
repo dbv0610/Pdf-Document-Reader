@@ -561,6 +561,52 @@ class ReadDocumentEditTest {
         assertEquals("SỬA TẠI CHỖ", com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0).first { it.id == expected.id }.text)
     }
 
+    /** Screenshots of the caret: in body text, in a table cell, and after Save (for a visual check). */
+    @Test
+    fun wordCaretScreenshots() {
+        val file = sample("sample.docx")
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(800)
+            fun tapOn(needle: String) {
+                var screen = floatArrayOf(0f, 0f)
+                scenario.onActivity {
+                    val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                    val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+                    var start = -1L
+                    for (i in 0 until map.size) { val l = map.leaf(i); val k = l.text.indexOf(needle); if (k >= 0) { start = l.start + k; break } }
+                    val r = com.wxiwei.office.editor.word.WordSelection(word).rectsFor(start + 2, start + 3).first()
+                    val o = IntArray(2); word.getLocationOnScreen(o)
+                    screen = floatArrayOf(o[0] + r.exactCenterX(), o[1] + r.exactCenterY())
+                }
+                val t = android.os.SystemClock.uptimeMillis()
+                inject(android.view.MotionEvent.ACTION_DOWN, screen[0], screen[1], t)
+                inject(android.view.MotionEvent.ACTION_UP, screen[0], screen[1], t)
+                Thread.sleep(1500)
+            }
+            tapOn("PianoLearn — Tính năng")
+            screenshot("caret_body")
+            tapOn("MidiConverter.kt, MidiAccompaniment")
+            screenshot("caret_cell")
+            instrumentation.runOnMainSync {
+                scenario.onActivity { a ->
+                    lateinit var typing: EditText
+                    typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!!
+                    typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("X", 1)
+                }
+            }
+            Thread.sleep(800)
+            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            Thread.sleep(4000)
+            tapOn("PianoLearn — Tính năng")
+            screenshot("caret_after_save")
+        }
+    }
+
     /** In the in-place slide editor, select 3 chars and pick "Đậm" in the selection menu: only they are bold, and saved. */
     @Test
     fun slideFormatSelectedText() {
