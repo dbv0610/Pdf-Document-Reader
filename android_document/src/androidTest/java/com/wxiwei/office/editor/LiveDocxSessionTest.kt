@@ -93,6 +93,50 @@ class LiveDocxSessionTest {
         sb.take(len).toString()
     }
 
+    /** sample.docx with its run "MidiConverter parse..." split: "MidiConverter" hidden (w:vanish), " parse" raised 6pt. */
+    private fun hiddenAndRaised(name: String): File {
+        val source = OpenDocument.copySample("sample.docx", "$name.src.docx")
+        val out = OpenDocument.output("$name.docx")
+        java.util.zip.ZipFile(source).use { zip ->
+            java.util.zip.ZipOutputStream(out.outputStream()).use { zos ->
+                for (entry in zip.entries()) {
+                    var bytes = zip.getInputStream(entry).readBytes()
+                    if (entry.name == "word/document.xml") {
+                        val xml = bytes.toString(Charsets.UTF_8)
+                        val rPr = "<w:rPr><w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\" w:eastAsia=\"Arial\" w:cs=\"Arial\"/><w:color w:val=\"222222\"/><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr>"
+                        val old = "<w:r>$rPr<w:t>MidiConverter parse"
+                        check(xml.contains(old))
+                        val hidden = rPr.replace("<w:sz ", "<w:vanish/><w:sz ")
+                        val raised = rPr.replace("<w:sz ", "<w:position w:val=\"12\"/><w:sz ")
+                        bytes = xml.replace(old, "<w:r>$hidden<w:t>MidiConverter</w:t></w:r><w:r>$raised<w:t xml:space=\"preserve\"> parse</w:t></w:r><w:r>$rPr<w:t>").toByteArray()
+                    }
+                    zos.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                    zos.write(bytes)
+                    zos.closeEntry()
+                }
+            }
+        }
+        return out
+    }
+
+    /** Hidden text takes no room (the text after it starts where it would); raised text keeps its place in the line. */
+    @Test
+    fun hiddenAndRaisedText() {
+        val file = hiddenAndRaised("docx_hidden")
+        OpenDocument.open(file, { it.layout != null }) { reader ->
+            val at = offsetOf(file.absolutePath, "MidiConverter parse")
+            assertTrue(at >= 0)
+            delay(500)
+            val (hidden, next) = onMain {
+                val sel = com.wxiwei.office.editor.word.WordSelection(reader.control!!)
+                sel.rectsFor(at, at + 13).first() to sel.caretRect(at + 13)!!
+            }
+            assertTrue("hidden text width ${hidden.width()}", hidden.width() <= 2)
+            assertTrue("text after hidden text starts where it did", Math.abs(next.left - hidden.left) <= 2)
+            shot(reader, "docx_hidden_raised")
+        }
+    }
+
     /** Offset of [needle] in the header or footer ([area]) from the source map. */
     private fun storyOffsetOf(path: String, area: Long, needle: String): Long {
         val map = DocxSourceMap.get(path)!!

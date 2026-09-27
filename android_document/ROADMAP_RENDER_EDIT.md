@@ -244,7 +244,7 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
 - [x] **D7. Bảng: `tblHeader` lặp khi sang trang** (27/09 — `TableLayoutKit.layoutRepeatedHeader`; `tblW`/autofit/fixed chưa làm) (D-i) — `TableLayoutKit.kt`; `setTableHeaderRow` đã có trong `AttrManage.kt:1141`.
 - [x] **D8. Font theo theme** (26/09 — `readThemeFonts`/`themeFont`; thứ tự asciiTheme > ascii > hAnsiTheme > hAnsi > eastAsia. Chưa chia leaf theo script) (D-j): đọc `theme1.xml` `majorFont/minorFont` (latin/ea/cs); `rFonts asciiTheme="minorHAnsi"` → font minor; ưu tiên `ascii` cho ký tự ASCII, `hAnsi` cho Latin mở rộng (tiếng Việt), `eastAsia` cho CJK (có thể chia leaf theo script — bước sau).
 - [x] **D9. Crop ảnh `srcRect`** (đã có sẵn qua `PictureEffectInfoFactory` trong `addPicture`) (D-k): áp `srcRect` l/t/r/b (1/1000 %) khi vẽ `PictureShape` DOCX, giá trị âm = thêm lề trống.
-- [~] **D10. Thuộc tính run còn thiếu** (27/09 — xong: `caps`/`smallCaps` (small caps vẽ như caps), giãn chữ `w:spacing`. **Cố ý chưa vẽ** `rPr/shd`: WPS ghi `shd fill=FFFFFF` dưới chữ trắng trên nền màu (doc_test) — cần ảnh tham chiếu Word trước khi quyết định) (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
+- [~] **D10. Thuộc tính run còn thiếu** (27/09 — xong: `position` (nâng/hạ, `FONT_POSITION_ID`), `vanish` (`FONT_HIDDEN_ID`, leaf rộng 0), `caps`/`smallCaps` (small caps vẽ như caps), giãn chữ `w:spacing`. **Cố ý chưa vẽ** `rPr/shd`: WPS ghi `shd fill=FFFFFF` dưới chữ trắng trên nền màu (doc_test) — cần ảnh tham chiếu Word trước khi quyết định) (D-l): `rPr/shd`, `caps/smallCaps`, `spacing` (giãn chữ, twips), `position` (nâng/hạ), `vanish` (ẩn).
 - [x] **D12. Số trang trong footer trống** (26/09 — placeholder "1" khi field PAGE/NUMPAGES trong header/footer không có kết quả cache; LeafView thay bằng số trang thật) — render thấy "Trang  • Internal Dev Doc" thiếu số: field `PAGE` dạng
   `fldChar begin / instrText PAGE / separate / end` **không có run kết quả** giữa separate và end (WPS ghi vậy) → reader
   phải tự tạo leaf số trang (`setFontPageNumberType`) khi gặp instrText `PAGE`/`NUMPAGES` dù không có kết quả cache. Xem `processRun` quanh `fldChar`.
@@ -405,8 +405,25 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 27/09/2026 | Realtime edit: E-X1, E-X2, E-X4, E-X5 + tích hợp app | Nút ✎ trong `ReadDocumentActivity` mở thanh sửa theo loại file (Excel live, PowerPoint live, Word lưu rồi mở lại). App đã cài lên SM-A165F. |
 | 27/09/2026 | Word realtime: E-D0, E-D1, E-D2, E-D3~ | Định dạng + chèn/xóa/thay trong đoạn hiện ngay; `LiveDocxSessionTest` (2 case) + `DocxEditorTest` + `PptxEditSessionTest` pass. |
 | 27/09/2026 | **Zoom Excel giật** | Pinch cũ nhảy bậc 10% và vẽ lại cả sheet mỗi bậc (20ms TB, 35ms max/frame). Giờ phóng ảnh frame cuối theo ngón tay, vẽ thật 1 lần khi nhả (7.5ms TB, 11ms max). `PinchZoomTest`. |
+| 27/09/2026 | E-P3, E-D8 (undo 200), C6, D13 `contextualSpacing` | Sửa chữ shape PPTX giữ định dạng từng run (`Retext`); giới hạn undo; không ngắt dòng giữa emoji; bỏ khoảng cách giữa đoạn cùng style. Hồi quy 27 test thư viện pass. |
+| 27/09/2026 | **E-D6 header/footer** | Tầng file (lưu vào `header1.xml`/`footer1.xml`) + live (chạm vào header/footer để đặt con trỏ, gõ/định dạng/undo hiện ngay). Test thư viện 23/23, app 13/13 pass. |
+| 27/09/2026 | D10 | `w:position` (nâng/hạ chữ) và `w:vanish` (chữ ẩn: rộng 0, không vẽ); test `hiddenAndRaisedText`, đã xem ảnh. |
 
-### Khi làm tiếp — phần đọc còn lại (theo thứ tự đề xuất)
+### Tiến độ tổng (cập nhật 27/09/2026)
+Khoảng **85–90%** roadmap đã xong. Còn lại:
+
+**A. Việc nhỏ đang làm (không cần ảnh tham chiếu)** — theo thứ tự:
+1. ~~**D10** `position`/`vanish`~~ (xong 27/09). (`rPr/shd` của WPS vẫn để chờ ảnh tham chiếu.)
+2. **X8** ảnh Excel `twoCellAnchor` nằm trên vùng dòng ẩn (sheet3 dòng 118→137) bị co/mất.
+3. **P7** ảnh PPTX lớn (tới 6.9 MB): decode theo kích thước hiển thị (`inSampleSize`).
+4. **P4** `spAutoFit`: hộp chữ PPTX cao theo nội dung (nhất là khi gõ thêm chữ).
+5. Nhỏ khác: G0.5 test JVM reader, G0.6 debug overlay (tùy chọn), small caps đúng cỡ, D7 `tblW`/fixed layout.
+
+**B. Cần ảnh tham chiếu từ WPS/Office (G0.3 — người dùng xuất giúp)**: X7/X11 chart (màu pie, "Series 1"), D15 khoảng trắng TOC rỗng, P5/P6/P8 ảnh custGeom + group scale + tiêu đề Bahianita, D11/X9 kiểm tra hồi quy bằng mắt, `rPr/shd` WPS.
+
+**C. Realtime edit còn thiếu**: text box Word; header trang đầu/chẵn (`first`/`even`, reader mới hiện `default`); dán giữ định dạng (E-D5); PPTX định dạng theo vùng chọn trong shape; relayout mức đoạn (E-D8); Excel: dời pivot/conditional formatting khi chèn/xóa dòng-cột.
+
+### Khi làm tiếp — ghi chú cũ — phần đọc còn lại (theo thứ tự đề xuất)
 Các mục còn lại **cần ảnh tham chiếu (G0.3) để quyết định**, không nên sửa mù: X11 tiêu đề chart ("Series 1"), `rPr/shd` của WPS, D15 khoảng trắng TOC rỗng. Ít ảnh hưởng: P4 `spAutoFit` (chỉ khác khi hộp có nền/viền), D7 `tblW`/fixed layout, small caps đúng cỡ, shape trong bảng bị chia nhiều trang.
 0. ~~Shape neo trong ô bảng~~ (27/09 — xong: `PositionLayoutKit.pageY/columnLeft` cộng vị trí ô/dòng/bảng, cột = vùng chữ của ô; bảng căn trái được đặt x trước khi layout các dòng; test `shapeInTable`). ~~Lưới dòng trong text box~~ (27/09 — **giữ** lưới trong text box với pitch gốc: text box "References" của doc_test cao 164.6pt = 10 dòng × 15.6pt + lề trong, tức WPS có bắt lưới; chỉ thân trang mới giãn pitch — chuyển từ `fillPageAttr` sang `WPLayouter.stretchLinePitch`). Còn: shape trong bảng bị chia qua nhiều trang, bảng căn giữa/phải (x vẫn dịch sau khi layout).
 1. **G0.3** ảnh tham chiếu (xuất PDF/PNG 3 file mẫu từ WPS) — cần để chốt X11, D15, X4 và spacing.

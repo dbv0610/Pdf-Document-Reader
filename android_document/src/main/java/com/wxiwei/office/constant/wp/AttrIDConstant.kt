@@ -49,6 +49,10 @@ object AttrIDConstant {
     const val FONT_SPACING_ID: Short = (FONT_ENCLOSE_CHARACTER_TYPE_ID + 1).toShort() // 0x0011
     // 1 = all caps, 2 = small caps (DOCX w:caps / w:smallCaps, PPTX cap="all"/"small")
     const val FONT_CAPS_ID: Short = (FONT_SPACING_ID + 1).toShort() // 0x0012
+    // raised (+) or lowered (-) text, half points (DOCX w:position)
+    const val FONT_POSITION_ID: Short = (FONT_CAPS_ID + 1).toShort() // 0x0013
+    // hidden text, 1 = hidden (DOCX w:vanish)
+    const val FONT_HIDDEN_ID: Short = (FONT_POSITION_ID + 1).toShort() // 0x0014
 
     /* ========== 段落属性 =========== */
     // 段落样式

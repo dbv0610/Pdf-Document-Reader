@@ -3384,6 +3384,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         // all caps / small caps (w:val="0" switches them off)
         rPr.element("caps")?.let { am.setFontCaps(attr, if (isOnOff(it)) 1 else 0) }
         rPr.element("smallCaps")?.let { if (isOnOff(it)) am.setFontCaps(attr, 2) }
+        // raised/lowered text (half points) and hidden text
+        rPr.element("position")?.attributeValue("val")?.toIntOrNull()?.let { am.setFontPosition(attr, it) }
+        rPr.element("vanish")?.let { am.setFontHidden(attr, isOnOff(it)) }
         // character spacing, twips -> hundredths of a point
         rPr.element("spacing")?.attributeValue("val")?.toIntOrNull()?.let { am.setFontSpacing(attr, it * 5) }
         // highlight

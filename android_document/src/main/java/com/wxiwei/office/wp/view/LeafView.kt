@@ -126,6 +126,8 @@ open class LeafView : AbstractView {
             paint.textSize = charAttr.fontSizeF * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
         }
 
+        // hidden text: no width, nothing drawn; its characters keep their model offsets
+        if (charAttr.isHidden) paint.textSize = HIDDEN_TEXT_SIZE
         // character spacing: Paint wants ems of the text size; the paint is scaled with the zoom,
         // so ems keep the spacing proportional
         if (charAttr.spacingPt != 0f && charAttr.fontSizeF > 0f) {
@@ -286,6 +288,8 @@ open class LeafView : AbstractView {
 
         val oldFontSize = paint.textSize
         paint.textSize = oldFontSize * zoom
+        // raised or lowered text (w:position)
+        if (charAttr.positionPt != 0f) dY -= charAttr.positionPt * MainConstant.POINT_TO_PIXEL * zoom
         // 下标
         if (charAttr.subSuperScriptType.toInt() == 1) {
             dY -= Math.ceil((paint.descent() - paint.ascent()).toDouble()).toInt()
@@ -498,5 +502,10 @@ open class LeafView : AbstractView {
         charAttr = null
         drawWidths = null
         alternateDrawWidths = null
+    }
+
+    companion object {
+        // a text size that measures and draws as nothing (0 is not a valid size)
+        private const val HIDDEN_TEXT_SIZE = 0.001f
     }
 }

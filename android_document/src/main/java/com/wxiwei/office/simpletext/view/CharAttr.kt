@@ -34,6 +34,14 @@ class CharAttr {
     @JvmField
     var caps = 0
 
+    // raised (+) or lowered (-) by this many points
+    @JvmField
+    var positionPt = 0f
+
+    // hidden text: takes no room and is not drawn
+    @JvmField
+    var isHidden = false
+
     // 字体
     @JvmField
     var fontIndex = 0

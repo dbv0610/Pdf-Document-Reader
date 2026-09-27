@@ -96,6 +96,27 @@ class AttrManage {
         attr!!.setAttribute(AttrIDConstant.FONT_CAPS_ID, caps)
     }
 
+    fun setFontPosition(attr: IAttributeSet?, halfPoints: Int) {
+        attr!!.setAttribute(AttrIDConstant.FONT_POSITION_ID, halfPoints)
+    }
+
+    /** Raise (+) or lowering (-) of the text in half points. */
+    fun getFontPosition(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_POSITION_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_POSITION_ID) ?: Int.MIN_VALUE
+        return if (a == Int.MIN_VALUE) 0 else a
+    }
+
+    fun setFontHidden(attr: IAttributeSet?, hidden: Boolean) {
+        attr!!.setAttribute(AttrIDConstant.FONT_HIDDEN_ID, if (hidden) 1 else 0)
+    }
+
+    fun getFontHidden(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Boolean {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_HIDDEN_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_HIDDEN_ID) ?: Int.MIN_VALUE
+        return a == 1
+    }
+
     fun getFontCaps(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
         var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_CAPS_ID)
         if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_CAPS_ID) ?: Int.MIN_VALUE
@@ -1505,6 +1526,8 @@ class AttrManage {
         charAttr.fontSizeF = getFontSizeF(paraAttr, leafAttr)
         charAttr.spacingPt = getFontSpacing(paraAttr, leafAttr) / 100f
         charAttr.caps = getFontCaps(paraAttr, leafAttr)
+        charAttr.positionPt = getFontPosition(paraAttr, leafAttr) / 2f
+        charAttr.isHidden = getFontHidden(paraAttr, leafAttr)
         charAttr.fontSize = Math.round(charAttr.fontSizeF)
         charAttr.fontScale = getFontScale(paraAttr, leafAttr)
         charAttr.fontColor = getFontColor(paraAttr, leafAttr)
