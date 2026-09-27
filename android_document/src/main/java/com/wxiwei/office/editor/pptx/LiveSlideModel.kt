@@ -36,6 +36,8 @@ interface LiveSlideDisplay {
     /** The shape's text as the view has it, for [restoreText]; null when not shown live. */
     fun saveText(slideIndex: Int, id: Int): Any? = null
     fun restoreText(slideIndex: Int, id: Int, token: Any): Boolean = false
+    /** Height in EMU of the shape's text as laid out now, with the box's insets; null when not shown. */
+    fun textHeight(slideIndex: Int, id: Int): Long? = null
     /** Current bounds, or null when the shape is not in the model. */
     fun shapeRect(slideIndex: Int, id: Int): Rect?
     fun moveShape(slideIndex: Int, id: Int, rectEmu: Rect): Boolean
@@ -162,6 +164,27 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         box.rootView?.dispose()
         box.rootView = null
         box.element = buildSection(requireNotNull(box.bounds), built, section.getAttribute()?.clone())
+    }
+
+    override fun textHeight(slideIndex: Int, id: Int): Long? {
+        val p = presentation ?: return null
+        val box = slide(slideIndex)?.let { find(it, id) }?.filterIsInstance<TextBox>()?.firstOrNull() ?: return null
+        val section = box.element ?: return null
+        // lay the text out now, as SlideDrawKit would on the next draw, and keep that layout
+        val root = box.rootView ?: com.wxiwei.office.simpletext.view.STRoot(p.getEditor(), p.getRenderersDoc()).also {
+            p.getRenderersDoc()!!.appendSection(section)
+            it.setWrapLine(box.isWrapLine)
+            it.doLayout()
+            box.rootView = it
+        }
+        var bottom = 0
+        var view = root.getChildView()
+        while (view != null) {
+            bottom = maxOf(bottom, view.getY() + view.getLayoutSpan(com.wxiwei.office.constant.wp.WPViewConstant.Y_AXIS))
+            view = view.getNextView()
+        }
+        val insetBottom = AttrManage.instance().getPageMarginBottom(section.getAttribute()) * MainConstant.TWIPS_TO_PIXEL
+        return emu(Math.round(bottom + insetBottom))
     }
 
     private class SavedText(val box: TextBox, val section: SectionElement?)

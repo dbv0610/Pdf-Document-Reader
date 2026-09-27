@@ -273,7 +273,7 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
 - [x] **X6. Freeze pane 2 chiều** (27/09 — vẽ đè 3 dải cố định trong `SheetView.drawFrozenPanes`; `Sheet.getFrozenPane()`; `getPaneInformation()` vẫn null để bộ cuộn không bỏ dòng) — ⚠️ `Sheet.getPaneInformation()` đang **trả `null` cố định** (`ss/model/baseModel/Sheet.kt`, comment `/*paneInformation*/`) → freeze pane bị tắt hoàn toàn; tìm lý do tắt (có thể lỗi vẽ) trước khi bật lại.: kiểm tra sheet3 (`xSplit=1 ySplit=5`, `topLeftCell=B19`) cuộn đúng, đường freeze đúng vị trí.
 - [x] **X0. Màu sai do palette** (26/09 — `Workbook.addColor(argb)` tái dùng slot palette 0..65; `indexedColors` trong styles.xml (đọc SAU theme/font/fill) ghi đè slot đó → nền chart `bg1` và chữ trắng hóa **xanh lá 008000**. Giờ màu động luôn ở index ≥ 66.)
 - [ ] **X7. Chart** (X-f): kiểm tra 4 chart với ảnh tham chiếu; ưu tiên: màu `schemeClr + lumMod/lumOff` trên `dPt` pie, data label `showVal/showPercent`, tiêu đề chart rich text, `manualLayout` plot area.
-- [ ] **X8. Ảnh qua vùng dòng ẩn** (X-g): khi tính `twoCellAnchor` bỏ qua dòng hidden theo `editAs` (mặc định `twoCell` → ảnh co theo; nếu ≈0 thì dùng `a:ext` làm kích thước).
+- [x] **X8. Ảnh qua vùng dòng ẩn** (27/09 — kiểm tra: ảnh sheet3 neo dòng 119–138, các dòng ẩn (lọc) nằm phía trên, ảnh vẽ đúng chỗ/tỉ lệ (`SampleRenderTest.xlsxPictureBelowHiddenRows`); vùng neo toàn dòng ẩn thì Excel cũng co ảnh — không sửa) (X-g): khi tính `twoCellAnchor` bỏ qua dòng hidden theo `editAs` (mặc định `twoCell` → ảnh co theo; nếu ≈0 thì dùng `a:ext` làm kích thước).
 - [x] **X10. Test render Excel** (27/09 — dùng `SheetView.drawRegion(sheet, 0, 0, 1f)`, luôn từ A1) (đã thử `setZoom(1f)`, `scrollTo(0,0)`, `invalidateTiles()` — chưa ăn; khả năng view con có scroll Android riêng) — `SampleRenderTest.xlsx` chụp sheet ở vị trí cuộn khác nhau giữa các lần chạy; cần cuộn về `topLeftCell` (hoặc A1) trước khi chụp.
 - [ ] **X11. Tiêu đề chart** — chart 3/4 có `<c:title>` **không có text** và series không tên → "Series 1" có thể đúng như Excel; chỉ sửa sau khi có ảnh tham chiếu (G0.3).
 - [ ] **X9. Kiểm tra lại**: merge + căn giữa + wrapText (dashboard B5:C5…), chiều cao dòng customHeight, độ rộng cột theo *max digit width* của font mặc định (Calibri 11 → 7px @96dpi), numFmt 41–44 accounting, `%`.
@@ -285,10 +285,10 @@ Thứ tự đề xuất: D1 → D2 → D3 → D4 → D5 (P0), rồi D6… (P1/P2
 - [x] **P1. Đậm kép Canva** (26/09, cùng C2/C5 — ảnh slide 2 không đổi, không bị đậm kép) (P-a) — xong cùng C2/C5. Kiểm tra slide 2–8.
 - [x] **P2. Khoảng cách dòng/đoạn chính xác** (26/09) (P-b): `ParaAttr.kt:363, 382, 405` đổi `val.toInt() / 100` → `val.toFloat() / 100f`.
 - [x] **P3. Cỡ chữ lẻ** (26/09, cùng C3) (P-c) — cùng C3 (`RunAttr.kt:310`, và nhánh `:586`).
-- [ ] **P4. `spAutoFit`** (P-d): khi box có `spAutoFit`, chiều cao hiển thị = chiều cao text đã layout (tối thiểu `ext cy`), vẫn giữ `anchor`. Không đổi file.
+- [x] **P4. `spAutoFit`** (27/09 — khi đổi chữ của hộp `spAutoFit`: dàn chữ ngay (`LiveSlideModel.textHeight`), đặt chiều cao hộp = chữ + lề trong, giữ mép trên, cùng 1 bước undo, ghi cả `xfrm` trong file; test `autoFitBoxFollowsText`. Lúc mở file vẫn dùng `ext` đã lưu như PowerPoint) (P-d): khi box có `spAutoFit`, chiều cao hiển thị = chiều cao text đã layout (tối thiểu `ext cy`), vẫn giữ `anchor`. Không đổi file.
 - [ ] **P5. Ảnh trong custGeom** (P-e): so slide 2 (3 ảnh cover-crop, `fillRect` âm) và slide 9 (custGeom `cubicBezTo`) với ảnh tham chiếu; sửa `AutoShapeDataKit` nếu `fillRect` âm bị hiểu thành co ảnh.
 - [ ] **P6. Group scale**: kiểm tra `ReaderKit.getChildShapeAnchor` với `chExt ≠ ext` (slide 2: `ext 5511800×3454400`, `chExt 1325326×830619`, tỷ lệ ~4.16) — viền/độ dày nét cũng phải scale.
-- [ ] **P7. Ảnh lớn**: decode với `inSampleSize` theo kích thước hiển thị × zoom tối đa; cache theo slide; thumbnail dùng ảnh nhỏ hơn nữa.
+- [x] **P7. Ảnh lớn** (27/09 — trên màn hình decode ~1.5× kích thước đang vẽ (tính cả crop), phóng to vượt 1.2× thì decode lại; ảnh 3976×2652 trong cache còn 1988×1326, 10 MB thay vì 41 MB; test `LargePictureTest` (cần `adb push` bản PPTX gốc 34 MB)): decode với `inSampleSize` theo kích thước hiển thị × zoom tối đa; cache theo slide; thumbnail dùng ảnh nhỏ hơn nữa.
 - [ ] **P8. Kiểm tra**: tiêu đề "LỘ TRÌNH KHÁM PHÁ XUYÊN VIỆT" (Bahianita 151.71pt, `lnSpc` 212.4pt, căn giữa) nằm đúng dòng như ảnh tham chiếu (lỗi font = tiêu đề xuống 3 dòng).
 
 ---
@@ -408,16 +408,15 @@ chuyển khi chèn/xóa trong khi `DocxEditor` dùng **offset gốc**; (c) nhậ
 | 27/09/2026 | E-P3, E-D8 (undo 200), C6, D13 `contextualSpacing` | Sửa chữ shape PPTX giữ định dạng từng run (`Retext`); giới hạn undo; không ngắt dòng giữa emoji; bỏ khoảng cách giữa đoạn cùng style. Hồi quy 27 test thư viện pass. |
 | 27/09/2026 | **E-D6 header/footer** | Tầng file (lưu vào `header1.xml`/`footer1.xml`) + live (chạm vào header/footer để đặt con trỏ, gõ/định dạng/undo hiện ngay). Test thư viện 23/23, app 13/13 pass. |
 | 27/09/2026 | D10 | `w:position` (nâng/hạ chữ) và `w:vanish` (chữ ẩn: rộng 0, không vẽ); test `hiddenAndRaisedText`, đã xem ảnh. |
+| 27/09/2026 | X8, P7, P4 | X8 kiểm tra không lỗi; ảnh lớn decode theo cỡ hiển thị (41 → 10 MB/ảnh); hộp `spAutoFit` cao theo chữ khi sửa. Test PPTX 4/4 pass. |
 
 ### Tiến độ tổng (cập nhật 27/09/2026)
 Khoảng **85–90%** roadmap đã xong. Còn lại:
 
 **A. Việc nhỏ đang làm (không cần ảnh tham chiếu)** — theo thứ tự:
 1. ~~**D10** `position`/`vanish`~~ (xong 27/09). (`rPr/shd` của WPS vẫn để chờ ảnh tham chiếu.)
-2. **X8** ảnh Excel `twoCellAnchor` nằm trên vùng dòng ẩn (sheet3 dòng 118→137) bị co/mất.
-3. **P7** ảnh PPTX lớn (tới 6.9 MB): decode theo kích thước hiển thị (`inSampleSize`).
-4. **P4** `spAutoFit`: hộp chữ PPTX cao theo nội dung (nhất là khi gõ thêm chữ).
-5. Nhỏ khác: G0.5 test JVM reader, G0.6 debug overlay (tùy chọn), small caps đúng cỡ, D7 `tblW`/fixed layout.
+2. ~~**X8**~~ (không lỗi), ~~**P7**~~ ảnh lớn, ~~**P4**~~ `spAutoFit` — xong 27/09.
+3. Nhỏ khác: G0.5 test JVM reader, G0.6 debug overlay (tùy chọn), small caps đúng cỡ, D7 `tblW`/fixed layout.
 
 **B. Cần ảnh tham chiếu từ WPS/Office (G0.3 — người dùng xuất giúp)**: X7/X11 chart (màu pie, "Series 1"), D15 khoảng trắng TOC rỗng, P5/P6/P8 ảnh custGeom + group scale + tiêu đề Bahianita, D11/X9 kiểm tra hồi quy bằng mắt, `rPr/shd` WPS.
 

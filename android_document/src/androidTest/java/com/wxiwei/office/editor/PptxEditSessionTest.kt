@@ -19,8 +19,8 @@ import java.io.File
 class PptxEditSessionTest {
     private val out = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "render").apply { mkdirs() }
 
-    private suspend fun shot(reader: com.wxiwei.office.reader.OfficeReader, name: String) {
-        val bitmap = reader.thumbnails!!.render(2, 1280) ?: return
+    private suspend fun shot(reader: com.wxiwei.office.reader.OfficeReader, name: String, page: Int = 2) {
+        val bitmap = reader.thumbnails!!.render(page, 1280) ?: return
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 90, it) }
     }
 
@@ -141,6 +141,33 @@ class PptxEditSessionTest {
         val bold = xml.lastIndexOf("<a:rPr ", xml.indexOf("<a:t>in ch</a:t>"))
         assertTrue("bold run kept", bold >= 0 && xml.substring(bold, xml.indexOf("<a:t>in ch</a:t>")).contains("b=\"1\""))
         assertTrue("first run changed", xml.contains("<a:t>Y</a:t>"))
+    }
+
+    /** A box that fits its text (spAutoFit) grows with more lines, shrinks back on undo, and is saved grown. */
+    @Test
+    fun autoFitBoxFollowsText() {
+        val source = OpenDocument.copySample("ppt2.pptx", "pptx_autofit.pptx")
+        val saved = OpenDocument.output("pptx_autofit_saved.pptx")
+        var grown: Rect? = null
+        OpenDocument.open(source, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, source) }
+            val before = onMain { session.listShapes(9) }.first { it.id == 8 }
+            val lines = before.text + "\nDòng thêm một\nDòng thêm hai"
+            assertTrue(session.lastError?.toString(), onMain { session.setShapeText(9, 8, lines) })
+            grown = onMain { session.listShapes(9) }.first { it.id == 8 }.rectEmu
+            Log.i("PptxEditTest", "autofit ${before.rectEmu} -> $grown")
+            // at least three lines of 33.59pt (lnSpc spcPts 3359): the old text and two new lines
+            assertTrue("taller: ${before.rectEmu.height} -> ${grown!!.height}", grown!!.height > before.rectEmu.height && grown!!.height >= 12700L * 99)
+            assertEquals("top kept", before.rectEmu.y, grown!!.y)
+            assertTrue(onMain { session.undo() })
+            assertEquals(before.rectEmu, onMain { session.listShapes(9) }.first { it.id == 8 }.rectEmu)
+            assertTrue(onMain { session.redo() })
+            assertEquals(grown, onMain { session.listShapes(9) }.first { it.id == 8 }.rectEmu)
+            assertTrue(!session.needsReopen)
+            shot(reader, "pptx_autofit", 10)
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        assertEquals(grown, PptxEditor(saved).listShapes(9).first { it.id == 8 }.rectEmu)
     }
 
     /** id, kind, bounds, rotation and text of every shape of a slide as the view has it. */

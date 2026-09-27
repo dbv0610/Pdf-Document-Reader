@@ -48,9 +48,12 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
      * Every session call queues exactly one [PptxEditor] op, so undo drops the last queued op
      * ([PptxEditor.undoLast]) and redo queues it again; the display layer reverts on its own.
      */
-    private fun record(redoFile: () -> Boolean, redoLive: () -> Boolean, undoLive: () -> Boolean) = push(Step(
+    private fun record(redoFile: () -> Boolean, redoLive: () -> Boolean, undoLive: () -> Boolean) = record(1, redoFile, redoLive, undoLive)
+
+    /** Same for a step that queues [fileOps] file operations. */
+    private fun record(fileOps: Int, redoFile: () -> Boolean, redoLive: () -> Boolean, undoLive: () -> Boolean) = push(Step(
         redo = { redoFile().also { if (it) live(redoLive()) } },
-        undo = { editor.undoLast().also { if (it) live(undoLive()) } }))
+        undo = { (0 until fileOps).all { editor.undoLast() }.also { if (it) live(undoLive()) } }))
 
     /** Returns the new shape id, or -1 ([lastError] says why). */
     fun addTextBox(slideIndex: Int, rectEmu: Rect, text: String, sizePt: Float = 18f, rgbHex: String = "000000", bold: Boolean = false): Int {
@@ -80,9 +83,25 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         val before = display.saveText(slideIndex, shapeId)
         val show = { display.setShapeText(slideIndex, shapeId, text, where) }
         live(show())
-        record({ editor.setShapeText(slideIndex, shapeId, text) }, show) {
-            if (before != null) display.restoreText(slideIndex, shapeId, before)
-            else old != null && display.setShapeText(slideIndex, shapeId, old, where)
+        // a box that fits its text (spAutoFit) takes the height of the new text, top kept, like PowerPoint
+        var fitted: Rect? = null
+        // the file's box: the view's is rounded to pixels
+        val oldRect = where ?: display.shapeRect(slideIndex, shapeId)
+        if (oldRect != null && editor.autoFits(slideIndex, shapeId)) {
+            val height = display.textHeight(slideIndex, shapeId)
+            val box = oldRect
+            if (height != null && height > 0 && Math.abs(height - box.height) > LiveSlideModel.EMU_PER_PX) {
+                fitted = Rect(box.x, box.y, box.width, height)
+                if (editor.moveShape(slideIndex, shapeId, fitted)) live(display.moveShape(slideIndex, shapeId, fitted)) else fitted = null
+            }
+        }
+        val resize = fitted
+        record(if (resize != null) 2 else 1,
+            { editor.setShapeText(slideIndex, shapeId, text) && (resize == null || editor.moveShape(slideIndex, shapeId, resize)) },
+            { show() && (resize == null || display.moveShape(slideIndex, shapeId, resize)) }) {
+                (resize == null || oldRect == null || display.moveShape(slideIndex, shapeId, oldRect)) &&
+                    if (before != null) display.restoreText(slideIndex, shapeId, before)
+                    else old != null && display.setShapeText(slideIndex, shapeId, old, where)
         }
         return true
     }

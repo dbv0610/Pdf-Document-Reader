@@ -232,6 +232,10 @@ class PptxEditor(private val source: File) {
             (body.content() as MutableList<Any?>).add(at + i, p)
         }
     }
+    /** True when the shape's box grows or shrinks with its text (a:bodyPr/a:spAutoFit). */
+    fun autoFits(slideIndex: Int, shapeId: Int): Boolean = read(false) { pkg ->
+        find(pkg, slideIndex, shapeId).first.firstChild(P, "txBody")?.firstChild(A, "bodyPr")?.firstChild(A, "spAutoFit") != null
+    }
     /** Formats every run (and paragraph for [TextFormat.align]) of a shape's text. */
     /** Bold/italic/underline of the shape's first text run as written in the slide (null: no text). */
     fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = read(null) { pkg ->
