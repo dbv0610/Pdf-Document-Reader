@@ -89,6 +89,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("Xóa", color = 0xFFC00000.toInt()) { op { e, r -> e.deleteText(r.first, r.last + 1) } },
             button("↵ Xuống dòng") { op { e, r -> e.insertText(r.first, "\n") } },
             button("• Đầu dòng") { paraOp { e, r -> e.setBullets(r.first, r.last + 1, !e.hasBullet(r.first)) } },
+            button("1. Đánh số") { paraOp { e, r -> e.setNumbering(r.first, r.last + 1, !e.hasNumbering(r.first)) } },
             button("⇤") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "left") } },
             button("↔") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "center") } },
             button("⇥") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "right") } },

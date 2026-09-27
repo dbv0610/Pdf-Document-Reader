@@ -364,6 +364,35 @@ class LiveDocxSessionTest {
     }
 
     @Test
+    fun newListsInDocumentWithoutNumbering() {
+        val source = OpenDocument.copySample("shape_in_table.docx", "live_docx_lists.docx")
+        val saved = OpenDocument.output("live_docx_lists_saved.docx")
+        var bulletId = -1
+        var numberId = -1
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val p2 = offsetOf(source.absolutePath, "Paragraph 2")
+            val p3 = offsetOf(source.absolutePath, "Paragraph 3")
+            val p4 = offsetOf(source.absolutePath, "Paragraph 4")
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            // numbering first: its id must still match what save writes
+            assertTrue(session.lastError?.toString(), onMain { session.setNumbering(p3, p4 + 1, true) })
+            assertTrue(session.lastError?.toString(), onMain { session.setBullets(p2, p2 + 1, true) })
+            numberId = onMain { session.listAt(p3) }
+            bulletId = onMain { session.listAt(p2) }
+            assertTrue(numberId >= 0 && bulletId >= 0 && numberId != bulletId)
+            assertEquals(numberId, onMain { session.listAt(p4) })
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val session = onMain { LiveDocxSession(reader.control!!, saved) }
+            assertEquals("numbered list id saved", numberId, onMain { session.listAt(offsetOf(saved.absolutePath, "Paragraph 3")) })
+            assertEquals("bullet list id saved", bulletId, onMain { session.listAt(offsetOf(saved.absolutePath, "Paragraph 2")) })
+            assertTrue(onMain { session.hasNumbering(offsetOf(saved.absolutePath, "Paragraph 4")) })
+        }
+    }
+
+    @Test
     fun paragraphFormattingLive() {
         val source = OpenDocument.copySample("sample.docx", "live_docx_para.docx")
         val saved = OpenDocument.output("live_docx_para_saved.docx")

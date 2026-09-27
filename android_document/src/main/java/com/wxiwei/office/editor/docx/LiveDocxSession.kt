@@ -130,31 +130,47 @@ class LiveDocxSession(control: IControl, private val source: File) {
     }
 
     /** Bullets on or off for the paragraphs touching [start, end). */
-    fun setBullets(start: Long, end: Long, on: Boolean): Boolean {
-        val id = editor.bulletListId
+    fun setBullets(start: Long, end: Long, on: Boolean) = setList(start, end, on, bullet = true)
+
+    /** Numbering (1. 2. 3.) on or off for the paragraphs touching [start, end). */
+    fun setNumbering(start: Long, end: Long, on: Boolean) = setList(start, end, on, bullet = false)
+
+    private fun setList(start: Long, end: Long, on: Boolean, bullet: Boolean): Boolean {
+        val id = if (bullet) editor.bulletListId else editor.numberingListId
         if (on && id < 0) return refuse("Cannot read the document's lists")
-        if (on) ensureBulletList(id)
-        return paragraphFormat(start, end, { e, s, t -> e.setBullets(s, t, on) }) {
+        if (on) ensureList(id, bullet)
+        val fileOp: (DocxEditor, Long, Long) -> Boolean =
+            if (bullet) { e, s, t -> e.setBullets(s, t, on) } else { e, s, t -> e.setNumbering(s, t, on) }
+        return paragraphFormat(start, end, fileOp) {
             // -1 also hides a list the paragraph style would give, like numId 0 in the file
             am.setParaListID(it, if (on) id else -1)
             am.setParaListLevel(it, 0)
         }
     }
 
+    /** List id of the paragraph at [offset] (-1: none). */
+    fun listAt(offset: Long): Int = word.getDocument().getParagraph(offset)?.let { am.getParaListID(it.getAttribute()) } ?: -1
+
     /** True when the paragraph at [offset] shows a bullet or number. */
-    fun hasBullet(offset: Long): Boolean = word.getDocument().getParagraph(offset)?.let { am.getParaListID(it.getAttribute()) >= 0 } == true
+    fun hasBullet(offset: Long): Boolean = listAt(offset) >= 0
+
+    /** True when the paragraph at [offset] is in the numbered list [setNumbering] uses. */
+    fun hasNumbering(offset: Long): Boolean = listAt(offset).let { it >= 0 && it == editor.numberingListId }
 
     /** The view draws a list from its ListData: add the one save will write when it is new. */
-    private fun ensureBulletList(id: Int) {
+    private fun ensureList(id: Int, bullet: Boolean) {
         val lists = word.getControl().getSysKit().getListManage()
         if (lists.getListData(id) != null) return
         val bullets = charArrayOf('\u25CF', '\u25CB', '\u25A0')
+        val formats = intArrayOf(0, 4, 2) // decimal, lowerLetter, lowerRoman
         lists.putListData(id, com.wxiwei.office.common.bulletnumber.ListData().apply {
             listID = id
             levels = Array(9) { i ->
                 com.wxiwei.office.common.bulletnumber.ListLevel().apply {
                     startAt = 1
-                    numberText = charArrayOf(bullets[i % bullets.size])
+                    // a char below 9 stands for the number of that level ("%1." in the file)
+                    numberText = if (bullet) charArrayOf(bullets[i % bullets.size]) else charArrayOf(i.toChar(), '.')
+                    numberFormat = if (bullet) 0 else formats[i % formats.size]
                     textIndent = 720 * (i + 1)
                     specialIndent = -360
                 }

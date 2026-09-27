@@ -11,6 +11,7 @@ import kotlin.math.roundToInt
 
 private const val REL_NUMBERING = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"
 private val BULLETS = listOf("\u25CF", "\u25CB", "\u25A0")
+private val NUMBER_FORMATS = listOf("decimal", "lowerLetter", "lowerRoman")
 
 /** Queued operations use ORIGINAL UTF-16 model offsets, with exclusive ends.
  * Queue order is preserved, including overlapping formatting. Inserted text has no original offsets.
@@ -57,14 +58,25 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     fun setLineSpacing(start: Long, end: Long, multiple: Float): Boolean =
         if (multiple in 0.25f..10f) queue(Op(start, end, "pline", Math.round(multiple * 240).toString())) else invalid("Bad line spacing")
     /** Bullets ("●" list, level 0) on or off for every paragraph touching [start, end). */
-    fun setBullets(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "pnum", if (on) "1" else "0"))
+    fun setBullets(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "pnum", if (on) "bullet" else "0"))
+    /** Numbering ("1." list, level 0) on or off for every paragraph touching [start, end). */
+    fun setNumbering(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "pnum", if (on) "decimal" else "0"))
 
     /**
      * w:abstractNumId of the list [setBullets] uses: the document's first bullet list, else the
      * one save will add. The live view shows bullets with the list of this id.
      */
-    val bulletListId: Int by lazy {
-        try { bulletList(OoxmlPackage.open(source), create = false).first } catch (e: Exception) { -1 }
+    val bulletListId: Int by lazy { listIds.first }
+    /** Same for [setNumbering]. */
+    val numberingListId: Int by lazy { listIds.second }
+    private val listIds: Pair<Int, Int> by lazy {
+        try {
+            val pkg = OoxmlPackage.open(source)
+            val bullet = listOf(pkg, "bullet", create = false).first
+            // a new numbered list would come right after a new bullet list
+            val decimal = listOf(pkg, "decimal", create = false, reserved = setOf(bullet)).first
+            bullet to decimal
+        } catch (e: Exception) { -1 to -1 }
     }
 
     private fun numberingPart(pkg: OoxmlPackage, create: Boolean): String? {
@@ -78,20 +90,23 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         return part
     }
 
-    /** (abstractNumId, numId) of a bullet list; with [create], added to the package when missing. */
-    private fun bulletList(pkg: OoxmlPackage, create: Boolean): Pair<Int, String> {
+    /**
+     * (abstractNumId, numId) of a list whose first level has [format] (bullet, decimal); with
+     * [create], added to the package when missing. [reserved] ids are taken by lists still to add.
+     */
+    private fun listOf(pkg: OoxmlPackage, format: String, create: Boolean, reserved: Set<Int> = emptySet()): Pair<Int, String> {
         val root = numberingPart(pkg, create)?.let { pkg.xml(it).rootElement }
         val abstracts = root?.childrenNamed(W, "abstractNum").orEmpty()
         val nums = root?.childrenNamed(W, "num").orEmpty()
         fun Element.w(name: String) = attributeValue(QName(name, W))
         for (a in abstracts) {
             val lvl = a.childrenNamed(W, "lvl").firstOrNull { it.w("ilvl") == "0" } ?: continue
-            if (lvl.firstChild(W, "numFmt")?.w("val") != "bullet") continue
+            if (lvl.firstChild(W, "numFmt")?.w("val") != format) continue
             val id = a.w("abstractNumId") ?: continue
             val num = nums.firstOrNull { it.firstChild(W, "abstractNumId")?.w("val") == id } ?: continue
             return (id.toIntOrNull() ?: continue) to (num.w("numId") ?: continue)
         }
-        val abstractId = (abstracts.mapNotNull { it.w("abstractNumId")?.toIntOrNull() }.maxOrNull() ?: -1) + 1
+        val abstractId = ((abstracts.mapNotNull { it.w("abstractNumId")?.toIntOrNull() } + reserved).maxOrNull() ?: -1) + 1
         val numId = ((nums.mapNotNull { it.w("numId")?.toIntOrNull() }.maxOrNull() ?: 0) + 1).toString()
         if (!create || root == null) return abstractId to numId
         val abstract = newElement(W, "abstractNum").apply {
@@ -100,8 +115,8 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             for (i in 0..8) addElement(QName("lvl", W))!!.apply {
                 addAttribute(QName("ilvl", W), i.toString())
                 addElement(QName("start", W))!!.addAttribute(QName("val", W), "1")
-                addElement(QName("numFmt", W))!!.addAttribute(QName("val", W), "bullet")
-                addElement(QName("lvlText", W))!!.addAttribute(QName("val", W), BULLETS[i % BULLETS.size])
+                addElement(QName("numFmt", W))!!.addAttribute(QName("val", W), if (format == "bullet") "bullet" else NUMBER_FORMATS[i % NUMBER_FORMATS.size])
+                addElement(QName("lvlText", W))!!.addAttribute(QName("val", W), if (format == "bullet") BULLETS[i % BULLETS.size] else "%${i + 1}.")
                 addElement(QName("lvlJc", W))!!.addAttribute(QName("val", W), "left")
                 addElement(QName("pPr", W))!!.addElement(QName("ind", W))!!
                     .addAttribute(QName("left", W), (720 * (i + 1)).toString())!!.addAttribute(QName("hanging", W), "360")
@@ -161,7 +176,12 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         val insertionEnds = HashMap<Long, Element>()
         val deletedSeparators = HashSet<Long>()
         val opaqueSpans = HashMap<Int, LongRange>()
-        val bulletNumId: String by lazy { bulletList(pkg, create = true).second }
+        val listNumIds = HashMap<String, String>()
+        fun listNumId(format: String): String = listNumIds.getOrPut(format) {
+            // lists are added in the same order the view reserved their ids: bullets first
+            if (format == "decimal" && bulletListId >= 0 && numberingListId == bulletListId + 1 && "bullet" !in listNumIds) listNumId("bullet")
+            listOf(pkg, format, create = true).second
+        }
         init {
             body.elements()!!.filterIsInstance<Element>().filter { it.namespaceURI == W.uRI && it.name in setOf("p", "tbl", "sdt") }.forEach { child ->
                 walk(child) { if (it.namespaceURI == W.uRI) when (it.name) { "r" -> runs.add(it); "p" -> paragraphs.add(it) } }
@@ -241,7 +261,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                     pPr.firstChild(W, "numPr")?.let { pPr.remove(it) }
                     val numPr = newElement(W, "numPr")
                     numPr.addElement(QName("ilvl", W))!!.addAttribute(QName("val", W), "0")
-                    numPr.addElement(QName("numId", W))!!.addAttribute(QName("val", W), if (op.value == "1") bulletNumId else "0")
+                    numPr.addElement(QName("numId", W))!!.addAttribute(QName("val", W), if (op.value == "0") "0" else listNumId(op.value))
                     insertInPPr(pPr, numPr)
                     continue
                 }
