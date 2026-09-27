@@ -67,6 +67,8 @@ class ReadDocumentActivity :
     BaseActivity<ActivityReadDocumentBinding>(ActivityReadDocumentBinding::inflate) {
     private val viewModel: ReadDocumentViewModel by viewModel()
     private val documentViewModel: DocumentViewModel by viewModel()
+    override val hideKeyboardWhenTouch: Boolean
+        get() = false
 
     private var document: RecentDocument? = null
     private val processDialog by lazy { DialogProcess(this) }

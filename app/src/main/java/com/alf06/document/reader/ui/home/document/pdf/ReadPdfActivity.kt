@@ -55,6 +55,8 @@ import org.koin.androidx.viewmodel.ext.android.viewModel
 import java.io.File
 
 class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBinding::inflate) {
+    override val hideKeyboardWhenTouch: Boolean
+        get() = false
     private val viewModel: ReadPdfViewModel by viewModel()
     private val documentViewModel: DocumentViewModel by viewModel()
 

@@ -36,6 +36,7 @@ abstract class BaseActivity<VB : ViewBinding>(
     open val fullStatus: Boolean = false
     open val fragmentContainerId: Int = View.NO_ID
     open val navGraph: NavGraph? = null
+    open val hideKeyboardWhenTouch : Boolean = true
 
     val binding: VB by lazy { bindingFactory(layoutInflater) }
     override val hostScope: CoroutineScope get() = lifecycleScope
@@ -231,7 +232,9 @@ abstract class BaseActivity<VB : ViewBinding>(
     fun showKeyboard() = showKeyboard(binding.root)
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        hideKeyboardIfTouchedOutsideFocusedEditText(currentFocus, ev) { hideKeyboard() }
+        if(hideKeyboardWhenTouch){
+            hideKeyboardIfTouchedOutsideFocusedEditText(currentFocus, ev) { hideKeyboard() }
+        }
         return super.dispatchTouchEvent(ev)
     }
 
