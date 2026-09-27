@@ -180,7 +180,7 @@ Mức: **P0** = làm sai rõ trên file mẫu · **P1** = sai lệch vị trí/k
   - Lệnh: `cd DataExtractor/docx && zip -X -r ../sample.docx '[Content_Types].xml' _rels docProps word` (tương tự cho xlsx/pptx).
 - [ ] **G0.3 Ảnh tham chiếu.** Xuất PDF + PNG từ WPS/Office cho 3 file → `android_document/src/androidTest/assets/reference/`. Ghi rõ phần mềm/phiên bản dùng để xuất.
 - [x] **G0.4 Render test.** (26/09 — `SampleRenderTest`, máy SM-A165F) Viết instrumented test: mở file qua `IControl` headless → vẽ trang 1 DOCX, slide 2 + slide 9 PPTX, sheet "Tổng quan" + "Dữ liệu chi tiết" XLSX ra PNG. Chưa cần so sánh tự động, chỉ cần sinh ảnh để xem trước/sau mỗi task.
-- [ ] **G0.5 Test JVM reader.** Thêm test cho các hàm parse thuần (vd. `EmbeddedFontReader.extractFontData` với 5 file `.fntdata`, `parseHexColor`, sau này là numFmt/đơn vị).
+- [x] **G0.5 Test JVM reader.** (27/09 — `EmbeddedFontReaderTest` (2 font Canva trong `src/test/resources/fonts`, 400/700, MTX/XOR), `ParseHexColorTest`, `BuiltinFormatsTest`; cùng `RetextTest`, `RefShifterTest`, `FontKitClusterTest`: 28 test JVM) Thêm test cho các hàm parse thuần (vd. `EmbeddedFontReader.extractFontData` với 5 file `.fntdata`, `parseHexColor`, sau này là numFmt/đơn vị).
 - [ ] **G0.6 Debug overlay** (tùy chọn nhưng rất đáng): cờ debug vẽ khung bounding box của paragraph/line/cell/shape để soi lệch vị trí.
 
 ---
@@ -416,7 +416,7 @@ Khoảng **85–90%** roadmap đã xong. Còn lại:
 **A. Việc nhỏ đang làm (không cần ảnh tham chiếu)** — theo thứ tự:
 1. ~~**D10** `position`/`vanish`~~ (xong 27/09). (`rPr/shd` của WPS vẫn để chờ ảnh tham chiếu.)
 2. ~~**X8**~~ (không lỗi), ~~**P7**~~ ảnh lớn, ~~**P4**~~ `spAutoFit` — xong 27/09.
-3. ~~small caps đúng cỡ~~ (xong 27/09). Nhỏ khác: G0.5 test JVM reader, G0.6 debug overlay (tùy chọn), D7 `tblW`/fixed layout.
+3. ~~small caps đúng cỡ~~ (xong 27/09). ~~G0.5~~ (xong). Nhỏ khác: G0.6 debug overlay (tùy chọn), D7 `tblW`/fixed layout.
 
 **B. Cần ảnh tham chiếu từ WPS/Office (G0.3 — người dùng xuất giúp)**: X7/X11 chart (màu pie, "Series 1"), D15 khoảng trắng TOC rỗng, P5/P6/P8 ảnh custGeom + group scale + tiêu đề Bahianita, D11/X9 kiểm tra hồi quy bằng mắt, `rPr/shd` WPS.
 
