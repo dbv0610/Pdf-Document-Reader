@@ -122,6 +122,21 @@ class WordSelection(private val word: Word) {
     }
 
     /**
+     * Bottom of the text area of the page holding [offset] (above its bottom margin and footer),
+     * in Word view coordinates; null when that page is not laid out or shown.
+     */
+    fun bodyBottomAt(offset: Long): Int? {
+        val root = root() ?: return null
+        val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), false) ?: return null
+        var page: IView? = line
+        while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
+        page ?: return null
+        val (_, dy) = shift(root, line) ?: return null
+        val pageRect = com.wxiwei.office.wp.view.WPViewKit.instance().getAbsoluteCoordinate(page, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
+        return floor((pageRect.y + page.getHeight() - page.getBottomIndent()) * word.getZoom() + dy).toInt()
+    }
+
+    /**
      * Scrolls the page view so the caret before [offset] is at least [margin] px inside the
      * visible area, which ends [visibleBottom] px below the top of the Word view (above a keyboard
      * or toolbar covering it). Only the page view scrolls; returns true when it moved.

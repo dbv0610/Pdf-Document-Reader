@@ -623,9 +623,60 @@ class ReadDocumentEditTest {
             Thread.sleep(800)
             scenario.onActivity {
                 val doc = (viewer.control!!.getView() as com.wxiwei.office.wp.control.Word).getDocument()
-                assertEquals("Vẫn gõ được\n", doc.getText(0, doc.getAreaEnd(0)))
+                assertTrue(doc.getText(0, doc.getAreaEnd(0)).endsWith("Vẫn gõ được\n"))
             }
         }
+    }
+
+    @Test
+    fun wordClickAndType() {
+        val file = File(context.filesDir, "edit-test-click.docx").apply { delete() }
+        assertTrue(com.wxiwei.office.editor.DocumentCreator.create(context, com.wxiwei.office.editor.DocumentCreator.Format.WORD, file) is com.wxiwei.office.editor.EditResult.Ok)
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(2000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            // the middle of the empty page
+            var point = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val o = IntArray(2); viewer.getLocationOnScreen(o)
+                point = floatArrayOf(o[0] + viewer.width / 2f, o[1] + viewer.height * 0.45f)
+            }
+            val t = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
+            inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], t)
+            Thread.sleep(1500)
+            instrumentation.runOnMainSync {
+                lateinit var typing: EditText
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("Giữa trang", 1)
+            }
+            Thread.sleep(800)
+            screenshot("word_click_and_type")
+            var typedY = 0
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val doc = word.getDocument()
+                val text = doc.getText(0, doc.getAreaEnd(0))
+                assertTrue(text, text.endsWith("Giữa trang\n") && text.startsWith("\n\n"))
+                val at = text.indexOf("Giữa").toLong()
+                assertEquals("centred", com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt(),
+                    com.wxiwei.office.simpletext.model.AttrManage.instance().getParaHorizontalAlign(doc.getParagraph(at)!!.getAttribute()))
+                val r = com.wxiwei.office.editor.word.WordSelection(word).caretRect(at)!!
+                val o = IntArray(2); word.getLocationOnScreen(o)
+                typedY = o[1] + r.centerY()
+            }
+            assertTrue("text where tapped: $typedY vs ${point[1]}", Math.abs(typedY - point[1]) < viewerLine(scenario))
+        }
+    }
+
+    private fun viewerLine(scenario: ActivityScenario<ReadDocumentActivity>): Float {
+        var h = 0f
+        scenario.onActivity { h = it.resources.displayMetrics.density * 40 }
+        return h
     }
 }
 

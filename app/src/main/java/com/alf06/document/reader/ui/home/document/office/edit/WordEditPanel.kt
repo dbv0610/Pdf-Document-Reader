@@ -131,7 +131,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
                     // a tap ends any selection and puts the caret there; the handles extend a selection
                     val offset = selection.offsetAtScreen(event.rawX, event.rawY)
                     if (offset < 0) return@gesture false
-                    startTyping(offset)
+                    clickAndType(selection, offset, event.rawX, event.rawY) || startTyping(offset)
                 }
                 else -> false
             }
@@ -162,6 +162,41 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         reader.removeView(caret)
         reader.removeView(handles)
         clearSelection()
+    }
+
+    /**
+     * Word's "click and type": a tap on the empty page below the last paragraph adds empty
+     * paragraphs down to it, aligned left, centre or right by where the tap was.
+     */
+    private fun clickAndType(sel: WordSelection, offset: Long, rawX: Float, rawY: Float): Boolean {
+        val w = reader.control?.getView() as? com.wxiwei.office.wp.control.Word ?: return false
+        val end = w.getDocument().getAreaEnd(0) - 1 // before the document's last paragraph mark
+        if (offset != end) return false
+        val origin = IntArray(2)
+        w.getLocationOnScreen(origin)
+        val x = rawX - origin[0]
+        val y = rawY - origin[1]
+        val last = sel.caretRect(end) ?: return false
+        if (y < last.bottom + last.height() / 2) return false // on or next to the last line
+        val bottom = sel.bodyBottomAt(end) ?: return false
+        val target = minOf(y, bottom.toFloat())
+        val s = session() ?: return false
+        stopTyping()
+        // one paragraph first: its height, with the paragraph spacing, tells how many are needed
+        if (!s.insertText(end, "\n")) return false
+        var at = end + 1
+        val next = sel.caretRect(at)
+        if (next != null) {
+            val pitch = (next.top - last.top).coerceAtLeast(1)
+            val more = Math.ceil(((target - next.bottom) / pitch).toDouble()).toInt().coerceIn(0, 80)
+            if (more > 0 && s.insertText(at, "\n".repeat(more))) at += more
+        }
+        when {
+            x > w.width * 2f / 3 -> s.setAlignment(at, at + 1, "right")
+            x > w.width / 3f -> s.setAlignment(at, at + 1, "center")
+        }
+        reader.thumbnails?.invalidateAll()
+        return startTyping(at)
     }
 
     /** Puts the caret before [offset] and opens the keyboard. */
