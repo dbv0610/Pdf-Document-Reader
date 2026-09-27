@@ -94,6 +94,18 @@ class SampleRenderTest {
         renderPages(reader, "docx", 1240) { it.layout != null }
     }
 
+    /** sample.docx page 1 with the layout boxes outlined (DebugBounds): paragraphs, lines, cells. */
+    @Test
+    fun docxBounds() = withReader("sample.docx") { reader ->
+        com.wxiwei.office.wp.view.DebugBounds.enabled = true
+        try {
+            stablePageCount(reader) { it.layout != null }
+            reader.thumbnails!!.render(1, 1240)?.let { save(it, "docx_bounds_01.png") }
+        } finally {
+            com.wxiwei.office.wp.view.DebugBounds.enabled = false
+        }
+    }
+
     /** Thesis template: nearly every page item is a floating text box or picture (wps/wpg). */
     @Test
     fun docTest() = withReader("doc_test.docx") { reader ->

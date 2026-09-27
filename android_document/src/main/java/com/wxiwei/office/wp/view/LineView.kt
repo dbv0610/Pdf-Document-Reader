@@ -274,6 +274,7 @@ class LineView : AbstractView {
     }
 
     override fun draw(canvas: Canvas, originX: Int, originY: Int, zoom: Float) {
+        DebugBounds.draw(canvas, this, originX, originY, zoom, DebugBounds.LINE)
         canvas.save()
         val word = getContainer() as IWord?
         val dX = (x * zoom).toInt() + originX

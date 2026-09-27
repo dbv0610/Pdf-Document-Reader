@@ -35,6 +35,7 @@ class CellView(elem: IElement) : AbstractView() {
     }
 
     override fun draw(canvas: Canvas, originX: Int, originY: Int, zoom: Float) {
+        DebugBounds.draw(canvas, this, originX, originY, zoom, DebugBounds.CELL)
         super.draw(canvas, originX, originY, zoom)
     }
 

@@ -122,6 +122,7 @@ open class ParagraphView(elem: IElement) : AbstractView(), IMemObj {
     }
 
     override fun draw(canvas: Canvas, originX: Int, originY: Int, zoom: Float) {
+        DebugBounds.draw(canvas, this, originX, originY, zoom, DebugBounds.PARAGRAPH)
         if (getChildView() == null) {
             buildLine()
         }
