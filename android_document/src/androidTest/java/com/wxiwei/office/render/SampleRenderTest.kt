@@ -136,6 +136,24 @@ class SampleRenderTest {
     @Test
     fun customTableStyle() = renderSheets("custom_table_style.xlsx", "customtable")
 
+    /** "Trùng ngày song song" at 30%: the picture anchored on rows 119-138, below hidden rows 111-116. */
+    @Test
+    fun xlsxPictureBelowHiddenRows() = withReader("sample.xlsx") { reader ->
+        val excel = findExcelView(reader.documentView!!)!!
+        instrumentation.runOnMainSync { excel.showSheet(2) }
+        delay(2500)
+        lateinit var bitmap: Bitmap
+        instrumentation.runOnMainSync {
+            val sheet = excel.getSpreadsheet()!!.getWorkbook()!!.getSheet(2)!!
+            bitmap = Bitmap.createBitmap(1080, 1800, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE)
+            val canvas = Canvas(bitmap)
+            canvas.clipRect(0, 0, 1080, 1800)
+            excel.getSheetView()!!.drawRegion(sheet, 0, 0, 0.3f, canvas)
+        }
+        save(bitmap, "xlsx_picture_rows.png")
+    }
+
     private fun renderSheets(sample: String, prefix: String) = withReader(sample) { reader ->
         val excel = findExcelView(reader.documentView!!)!!
         var sheets = 0

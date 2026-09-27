@@ -272,6 +272,11 @@ private constructor() {
             // shared cache: full-size decodes there evicted the pictures on screen, which then
             // vanished while flinging and were decoded again on the UI thread.
             val offscreen = forceDrawOnThread.get() === Boolean.TRUE
+            // the cached copy was decoded smaller than the file: decode it again when zoomed in past it
+            if (sBitmap != null && !offscreen && (sampledOnScreen[path] ?: 1) > 1 &&
+                needLongSide(canvas, destWidth, destHeight, effectInfor) > max(sBitmap.width, sBitmap.height) * 1.2f) {
+                sBitmap = null
+            }
             if (sBitmap == null) {
                 if (!this.isDrawPictrue) {
                     return null
@@ -318,7 +323,13 @@ private constructor() {
                     try {
                         sBitmap = if (offscreen)
                             decodeSampled(path, canvas, destWidth, destHeight)
-                        else
+                        else if (options == null) {
+                            // on screen: 1.5 times the drawn size (whole picture, before any crop) leaves
+                            // room to zoom in; a large photo is no longer decoded at full size
+                            val crop = cropFraction(effectInfor)
+                            decodeSampled(path, canvas, destWidth * ON_SCREEN_HEADROOM / crop.first,
+                                destHeight * ON_SCREEN_HEADROOM / crop.second) { sampledOnScreen[path] = it }
+                        } else
                             decodeFile(path, options)
                         if (sBitmap == null) {
                             //load fail, so call library to convert it to normal png image
@@ -685,7 +696,8 @@ private constructor() {
             path: String?,
             canvas: Canvas,
             destWidth: Float,
-            destHeight: Float
+            destHeight: Float,
+            onSample: (Int) -> Unit = {}
         ): Bitmap? {
             val bounds = BitmapFactory.Options()
             bounds.inJustDecodeBounds = true
@@ -716,7 +728,33 @@ private constructor() {
             }
             val options = BitmapFactory.Options()
             options.inSampleSize = sample
+            onSample(sample)
             return decodeFile(path, options)
+        }
+
+        /** Headroom of an on-screen decode over the size drawn now. */
+        private const val ON_SCREEN_HEADROOM = 1.5f
+
+        /** Paths whose cached bitmap was decoded with this inSampleSize (> 1: smaller than the file). */
+        private val sampledOnScreen = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+        /** Share (width, height) of the picture that is shown after its crop. */
+        private fun cropFraction(effect: PictureEffectInfo?): Pair<Float, Float> {
+            val c = effect?.pictureCroppedInfor ?: return 1f to 1f
+            val w = (1f - c.leftOff - c.rightOff).coerceIn(0.05f, 10f)
+            val h = (1f - c.topOff - c.bottomOff).coerceIn(0.05f, 10f)
+            return w to h
+        }
+
+        /** Long side in device pixels the whole (uncropped) picture needs to be drawn sharp now. */
+        @Suppress("deprecation")
+        private fun needLongSide(canvas: Canvas, destWidth: Float, destHeight: Float, effect: PictureEffectInfo?): Float {
+            val m = FloatArray(9)
+            canvas.getMatrix().getValues(m)
+            val crop = cropFraction(effect)
+            val w = destWidth / crop.first * hypot(m[Matrix.MSCALE_X].toDouble(), m[Matrix.MSKEW_Y].toDouble()).toFloat()
+            val h = destHeight / crop.second * hypot(m[Matrix.MSKEW_X].toDouble(), m[Matrix.MSCALE_Y].toDouble()).toFloat()
+            return max(w, h)
         }
     }
 }
