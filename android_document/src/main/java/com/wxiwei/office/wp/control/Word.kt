@@ -1,5 +1,6 @@
 package com.wxiwei.office.wp.control
 
+import com.wxiwei.office.constant.wp.WPModelConstant
 import com.wxiwei.office.system.*
 
 import android.content.Context
@@ -271,6 +272,8 @@ class Word : LinearLayout, IWord {
      * pages before it keep their layout, which keeps typing fast in long documents.
      */
     fun relayoutContent(fromOffset: Long = -1) {
+        // a header or footer shows on every page: lay out from the first page
+        if (fromOffset >= 0 && (fromOffset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return relayoutContent(0)
         when (currentRootType) {
             WPViewConstant.PAGE_ROOT.toInt() -> {
                 val old = pageRoot ?: return

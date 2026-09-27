@@ -93,6 +93,54 @@ class LiveDocxSessionTest {
         sb.take(len).toString()
     }
 
+    /** Offset of [needle] in the header or footer ([area]) from the source map. */
+    private fun storyOffsetOf(path: String, area: Long, needle: String): Long {
+        val map = DocxSourceMap.get(path)!!
+        val leaves = (0 until map.size).map { map.leaf(it) }.filter { (it.start and com.wxiwei.office.constant.wp.WPModelConstant.AREA_MASK) == area }
+        val base = leaves.minOf { it.start }
+        val chars = CharArray((leaves.maxOf { it.end } - base).toInt()) { ' ' }
+        for (l in leaves) l.text.forEachIndexed { i, c -> chars[(l.start - base + i).toInt()] = c }
+        return String(chars).indexOf(needle).let { if (it < 0) -1 else base + it }
+    }
+
+    /** Typing in the footer shows at once, does not move body offsets (nor body typing footer ones), and saves. */
+    @Test
+    fun editFooterLive() {
+        val footer = com.wxiwei.office.constant.wp.WPModelConstant.FOOTER
+        val source = OpenDocument.copySample("sample.docx", "live_docx_footer.docx")
+        val saved = OpenDocument.output("live_docx_footer_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val f = storyOffsetOf(source.absolutePath, footer, "Internal Dev Doc")
+            val body = offsetOf(source.absolutePath, "MidiConverter parse")
+            assertTrue(f >= 0 && body >= 0)
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(body, "Bộ ") })
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(f, "Mật — ") })
+            assertEquals("Mật — Internal", modelText(reader, f, 14))
+            // bold the typed footer text, delete "Dev " after it
+            assertTrue(session.lastError?.toString(), onMain { session.setBold(f, f + 3, true) })
+            val dev = f + "Mật — Internal ".length
+            assertTrue(session.lastError?.toString(), onMain { session.deleteText(dev, dev + 4) })
+            assertEquals("Mật — Internal Doc", modelText(reader, f, 18))
+            assertEquals("Bộ MidiConverter", modelText(reader, body, 16))
+            assertTrue("footer bold live", bold(reader, f + 1))
+            // undo the delete, redo it
+            assertTrue(onMain { session.undo() })
+            assertEquals("Mật — Internal Dev Doc", modelText(reader, f, 22))
+            assertTrue(onMain { session.redo() })
+            delay(1500)
+            shot(reader, "docx_live_footer")
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val f = storyOffsetOf(saved.absolutePath, footer, "Mật — Internal Doc")
+            assertTrue("footer saved", f >= 0)
+            assertTrue("footer bold saved", bold(reader, f + 1))
+            assertTrue("body saved", offsetOf(saved.absolutePath, "Bộ MidiConverter") >= 0)
+        }
+    }
+
     @Test
     fun typeDeleteReplaceLive() {
         val source = OpenDocument.copySample("sample.docx", "live_docx_text.docx")

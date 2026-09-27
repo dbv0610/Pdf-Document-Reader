@@ -372,6 +372,60 @@ class ReadDocumentEditTest {
     }
 
     /** Bold "CHƠI CÙNG" from the toolbar; returns its offset. */
+    /** A tap on the header text of page 1 puts the caret in the header; typing shows there and is saved to header1.xml. */
+    @Test
+    fun wordTapAndTypeInHeader() {
+        val file = sample("sample.docx")
+        launch(file, DocumentType.Doc).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(500)
+            var header = -1L
+            var screen = floatArrayOf(0f, 0f)
+            scenario.onActivity {
+                val word = viewer.control!!.getView() as com.wxiwei.office.wp.control.Word
+                val map = com.wxiwei.office.editor.docx.DocxSourceMap.get(file.absolutePath)!!
+                for (i in 0 until map.size) {
+                    val l = map.leaf(i); val k = l.text.indexOf("Chơi cùng")
+                    if (k >= 0 && l.start >= com.wxiwei.office.constant.wp.WPModelConstant.HEADER) { header = l.start + k; break }
+                }
+                assertTrue("header text mapped", header > 0)
+                val sel = com.wxiwei.office.editor.word.WordSelection(word).apply { storyPage = 0 }
+                val r = sel.rectsFor(header, header + 1).first()
+                val o = IntArray(2); word.getLocationOnScreen(o)
+                // the left half of "C": the caret goes before it
+                screen = floatArrayOf(o[0] + r.left + r.width() * 0.25f, o[1] + r.exactCenterY())
+            }
+            val down = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, screen[0], screen[1], down)
+            inject(android.view.MotionEvent.ACTION_UP, screen[0], screen[1], down)
+            Thread.sleep(1200)
+            instrumentation.runOnMainSync {
+                lateinit var typing: EditText
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                assertTrue("typing field focused", typing.hasFocus())
+                typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("Học ", 1)
+            }
+            Thread.sleep(1500)
+            screenshot("word_header_typed")
+            scenario.onActivity {
+                val doc = (viewer.control!!.getView() as com.wxiwei.office.wp.control.Word).getDocument()
+                val text = doc.getText(header, header + 13)
+                assertTrue(text, text == "Học Chơi cùng")
+            }
+            scenario.onActivity { a ->
+                find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
+            }
+            Thread.sleep(2000)
+        }
+        val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/header1.xml")).readBytes().toString(Charsets.UTF_8) }
+        val plain = Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>").findAll(xml).joinToString("") { it.groupValues[1] }
+        assertTrue(plain, plain.contains("PianoLearn — Học Chơi cùng MIDI"))
+    }
+
     private fun boldTitle(scenario: ActivityScenario<ReadDocumentActivity>, viewer: OfficeDocumentView, file: File): Long {
         var start = -1L
         scenario.onActivity {

@@ -1,5 +1,6 @@
 package com.wxiwei.office.editor.docx
 
+import com.wxiwei.office.constant.wp.WPModelConstant
 import android.graphics.Color
 import com.wxiwei.office.editor.EditResult
 import com.wxiwei.office.editor.UndoStack
@@ -70,18 +71,22 @@ class LiveDocxSession(control: IControl, private val source: File) {
 
     /** A live text change, in current offsets at the time it was made. */
     private sealed class Edit {
-        class Insert(val at: Long, var length: Long) : Edit()
-        class Delete(val at: Long, val length: Long) : Edit()
+        abstract val at: Long
+        class Insert(override val at: Long, var length: Long) : Edit()
+        class Delete(override val at: Long, val length: Long) : Edit()
     }
     private val edits = ArrayList<Edit>()
     /** The queued file insert of each live insert, whose text is taken from the view on save. */
     private val handles = java.util.IdentityHashMap<Edit.Insert, Any>()
     private fun track(edit: Edit.Insert) { editor.lastOp()?.let { handles[edit] = it } }
 
+    /** The story (body, header, footer) of an offset: edits in one never move offsets of another. */
+    private fun area(offset: Long) = offset and WPModelConstant.AREA_MASK
+
     /** Current model offset -> original file offset (the start of typed text for positions inside it). */
     private fun toOriginal(offset: Long): Long {
         var x = offset
-        for (e in edits.asReversed()) when (e) {
+        for (e in edits.asReversed()) if (area(e.at) == area(offset)) when (e) {
             is Edit.Insert -> if (x >= e.at + e.length) x -= e.length else if (x > e.at) x = e.at
             is Edit.Delete -> if (x > e.at) x += e.length
         }
@@ -92,7 +97,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
     private fun touchesTyped(start: Long, end: Long): Boolean {
         var s = start
         var e = end
-        for (edit in edits.asReversed()) when (edit) {
+        for (edit in edits.asReversed()) if (area(edit.at) == area(start)) when (edit) {
             is Edit.Insert -> {
                 val a = edit.at
                 val b = edit.at + edit.length
@@ -248,7 +253,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
             ownError = null
             if (text.isEmpty()) return refuse("Nothing to insert")
             // after the last paragraph mark there is no paragraph to hold the text
-            if (offset < 0 || offset >= word.getDocument().getAreaEnd(0)) return refuse("Cannot insert after the end of the document")
+            if (offset < 0 || offset >= word.getDocument().getAreaEnd(offset)) return refuse("Cannot insert after the end of the document")
+            if ((word.getDocument() as? WPDocument)?.isEditableArea(offset) != true) return refuse("Only the body, header and footer are editable")
             val lines = text.replace("\r\n", "\n").replace('\r', '\n')
             if (lines.length > 1 && lines.contains('\n')) {
                 var at = offset
@@ -559,7 +565,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
     /** True when the character at [pos] was inserted in this session (typed, pasted, an Enter). */
     private fun insertedAt(pos: Long): Boolean {
         var x = pos
-        for (edit in edits.asReversed()) when (edit) {
+        for (edit in edits.asReversed()) if (area(edit.at) == area(pos)) when (edit) {
             is Edit.Insert -> {
                 if (x >= edit.at && x < edit.at + edit.length) return true
                 if (x >= edit.at + edit.length) x -= edit.length
@@ -638,7 +644,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             // where that text is now
             var s = edit.at
             var e = edit.at + edit.length
-            for (later in edits.subList(k + 1, edits.size)) when (later) {
+            for (later in edits.subList(k + 1, edits.size)) if (area(later.at) == area(edit.at)) when (later) {
                 is Edit.Insert -> if (later.at < s) { s += later.length; e += later.length } else if (later.at <= e) e += later.length
                 is Edit.Delete -> {
                     val a = later.at

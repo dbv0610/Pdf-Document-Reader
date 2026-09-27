@@ -6,7 +6,11 @@ import com.wxiwei.office.java.awt.Rectangle
 import com.wxiwei.office.system.IControl
 import com.wxiwei.office.system.beans.pagelist.APageListItem
 import com.wxiwei.office.wp.control.Word
+import com.wxiwei.office.constant.wp.WPModelConstant
 import com.wxiwei.office.wp.view.PageRoot
+import com.wxiwei.office.wp.view.PageView
+import com.wxiwei.office.wp.view.TitleView
+import com.wxiwei.office.wp.view.WPViewKit
 import com.wxiwei.office.simpletext.view.IView
 import java.text.BreakIterator
 import kotlin.math.ceil
@@ -17,6 +21,64 @@ class WordSelection(private val word: Word) {
     constructor(control: IControl) : this(control.getView() as? Word ?: error("Open a Word document first"))
     private val printMode get() = word.getCurrentRootType() == WPViewConstant.PRINT_ROOT.toInt()
     private fun root(): IView? = if (printMode) word.getPrintWord().getListView().model as? PageRoot else word.getRoot(word.getCurrentRootType())
+
+    /**
+     * Index of the page whose header or footer is being edited. One header view is laid out and
+     * shared by every page, so the caret needs to know which page to show it on; a tap in a
+     * header or footer sets it.
+     */
+    var storyPage = 0
+
+    private fun area(offset: Long) = offset and WPModelConstant.AREA_MASK
+    private fun isStory(offset: Long) = area(offset) == WPModelConstant.HEADER || area(offset) == WPModelConstant.FOOTER
+    private fun title(page: PageView, offset: Long): TitleView? = if (area(offset) == WPModelConstant.HEADER) page.getHeader() else page.getFooter()
+
+    /** Offset in the header or footer of [page] under the page-local point ([x], [y]), or -1. */
+    private fun storyOffsetAt(page: PageView, x: Int, y: Int): Long {
+        for (title in listOf(page.getHeader(), page.getFooter())) {
+            title ?: continue
+            val ty = y - title.getY()
+            if (ty < 0 || ty >= title.getLayoutSpan(WPViewConstant.Y_AXIS)) continue
+            val para = WPViewKit.instance().nearestChild(title.getChildView(), ty) { it.getHeight() } ?: continue
+            val offset = para.viewToModel(x - title.getX(), ty, false)
+            if (offset < 0) continue
+            storyPage = page.getPageNumber() - 1
+            return offset
+        }
+        return -1
+    }
+
+    /** Where [view] (inside [title]) is on the page: the offsets of its parents up to the title, and the title's. */
+    private fun inPage(view: IView?, title: TitleView): Pair<Int, Int> {
+        var x = title.getX(); var y = title.getY()
+        var v = view
+        while (v != null && v !== title) { x += v.getX(); y += v.getY(); v = v.getParentView() }
+        return x to y
+    }
+
+    /** A laid-out caret position: its line, the caret x and line top in page-root coordinates, and its page. */
+    private class Spot(val line: IView, val x: Int, val top: Int, val left: Int, val page: IView?)
+
+    private fun locate(offset: Long, isBack: Boolean): Spot? {
+        val root = root() ?: return null
+        if (isStory(offset)) {
+            val page = (root as? PageRoot)?.getPageView(storyPage) ?: return null
+            val title = title(page, offset) ?: return null
+            val para = title.getView(offset, WPViewConstant.PARAGRAPH_VIEW.toInt(), isBack) ?: return null
+            val line = para.getView(offset, WPViewConstant.LINE_VIEW.toInt(), isBack) ?: return null
+            // ParagraphView.modelToView is relative to the paragraph's parent
+            val r = para.modelToView(offset, Rectangle(), isBack) ?: return null
+            val (px, py) = inPage(para.getParentView(), title)
+            val (lx, ly) = inPage(line, title)
+            return Spot(line, page.getX() + px + r.x, page.getY() + ly, page.getX() + lx, page)
+        }
+        val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), isBack) ?: return null
+        val a = word.modelToView(offset, Rectangle(), isBack)
+        val lineRect = WPViewKit.instance().getAbsoluteCoordinate(line, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
+        var page: IView? = line
+        while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
+        return Spot(line, a.x, lineRect.y, lineRect.x, page)
+    }
     /**
      * Offset of the caret for a touch at ([viewX], [viewY]) in Word view coordinates, or -1. A
      * touch right of a paragraph's last line (or below the text) puts it before that paragraph's
@@ -24,7 +86,7 @@ class WordSelection(private val word: Word) {
      */
     fun offsetAt(viewX: Float, viewY: Float): Long {
         val raw = rawOffsetAt(viewX, viewY)
-        if (raw <= 0 || (raw and com.wxiwei.office.constant.wp.WPModelConstant.AREA_MASK) != com.wxiwei.office.constant.wp.WPModelConstant.MAIN) return raw
+        if (raw <= 0 || area(raw) != WPModelConstant.MAIN) return raw
         val doc = word.getDocument()
         var o = minOf(raw, doc.getAreaEnd(0) - 1).coerceAtLeast(0)
         if (o > 0 && doc.getText(o - 1, o) == "\n") {
@@ -45,9 +107,21 @@ class WordSelection(private val word: Word) {
             val item = (0 until list.childCount).map { list.getChildAt(it) }.filterIsInstance<APageListItem>()
                 .firstOrNull { x >= it.left && x < it.right && y >= it.top && y < it.bottom } ?: return -1
             val page = (root() as? PageRoot)?.getPageView(item.pageIndex) ?: return -1
-            return word.viewToModel(((x - item.left) / z).toInt() + page.getX(), ((y - item.top) / z).toInt() + page.getY(), false)
+            val px = ((x - item.left) / z).toInt(); val py = ((y - item.top) / z).toInt()
+            storyOffsetAt(page, px, py).let { if (it >= 0) return it }
+            return word.viewToModel(px + page.getX(), py + page.getY(), false)
         }
-        return word.viewToModel(((viewX + word.scrollX) / z).toInt(), ((viewY + word.scrollY) / z).toInt(), false)
+        val vx = ((viewX + word.scrollX) / z).toInt(); val vy = ((viewY + word.scrollY) / z).toInt()
+        // a tap in a page's header or footer box edits it
+        (root() as? PageRoot)?.let { pages ->
+            for (i in 0 until pages.getPageCount()) {
+                val page = pages.getPageView(i) ?: continue
+                if (vy < page.getY() || vy >= page.getY() + page.getHeight()) continue
+                storyOffsetAt(page, vx - page.getX(), vy - page.getY()).let { if (it >= 0) return it }
+                break
+            }
+        }
+        return word.viewToModel(vx, vy, false)
     }
     fun offsetAt(viewX: Int, viewY: Int) = offsetAt(viewX.toFloat(), viewY.toFloat())
 
@@ -67,35 +141,32 @@ class WordSelection(private val word: Word) {
         val result = ArrayList<Rect>(); val z = word.getZoom()
         var at = start
         while (at < end) {
-            val line = root.getView(at, WPViewConstant.LINE_VIEW.toInt(), false) ?: break
+            val spot = locate(at, false) ?: break
+            val line = spot.line
             val stop = minOf(end, line.getEndOffset(null))
             if (stop <= at) break
-            val a = word.modelToView(at, Rectangle(), false)
-            val b = word.modelToView(stop, Rectangle(), true)
+            val bx = locate(stop, true)?.takeIf { it.line === line }?.x ?: (spot.left + line.getWidth())
             // Match Highlight.draw's line height and paragraph top/bottom spacing.
-            val lineRect = com.wxiwei.office.wp.view.WPViewKit.instance().getAbsoluteCoordinate(line, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
-            var top = lineRect.y
+            var top = spot.top
             var height = line.getLayoutSpan(WPViewConstant.Y_AXIS)
             line.getParentView()?.let { p ->
                 if (line.getPreView() == null) { top -= p.getTopIndent(); height += p.getTopIndent() }
                 if (line.getNextView() == null) height += p.getBottomIndent()
             }
-            val shift = shift(root, line)
+            val shift = shift(root, spot.page)
             if (shift != null) {
                 val (dx, dy) = shift
-                result.add(Rect(floor(a.x * z + dx).toInt(), floor(top * z + dy).toInt(),
-                    ceil(maxOf(a.x, b.x) * z + dx).toInt(), ceil((top + height) * z + dy).toInt()))
+                result.add(Rect(floor(spot.x * z + dx).toInt(), floor(top * z + dy).toInt(),
+                    ceil(maxOf(spot.x, bx) * z + dx).toInt(), ceil((top + height) * z + dy).toInt()))
             }
             at = stop
         }
         return result
     }
-    /** View offset of model coordinates (times zoom) on [line]'s page, or null when that page is not shown. */
-    private fun shift(root: IView, line: IView): Pair<Float, Float>? {
+    /** View offset of model coordinates (times zoom) on [page], or null when that page is not shown. */
+    private fun shift(root: IView, page: IView?): Pair<Float, Float>? {
         if (!printMode) return -word.scrollX.toFloat() to -word.scrollY.toFloat()
         val list = word.getPrintWord().getListView()
-        var page: IView? = line
-        while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
         page ?: return null
         val item = (0 until list.childCount).map { list.getChildAt(it) }.filterIsInstance<APageListItem>().firstOrNull {
             (root as PageRoot).getPageView(it.pageIndex) === page
@@ -112,13 +183,11 @@ class WordSelection(private val word: Word) {
      */
     fun caretRect(offset: Long): Rect? {
         val root = root() ?: return null
-        val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), false) ?: return null
-        val a = word.modelToView(offset, Rectangle(), false)
-        val lineRect = com.wxiwei.office.wp.view.WPViewKit.instance().getAbsoluteCoordinate(line, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
-        val (dx, dy) = shift(root, line) ?: return null
+        val spot = locate(offset, false) ?: return null
+        val (dx, dy) = shift(root, spot.page) ?: return null
         val z = word.getZoom()
-        val x = floor(a.x * z + dx).toInt()
-        return Rect(x, floor(lineRect.y * z + dy).toInt(), x, ceil((lineRect.y + line.getLayoutSpan(WPViewConstant.Y_AXIS)) * z + dy).toInt())
+        val x = floor(spot.x * z + dx).toInt()
+        return Rect(x, floor(spot.top * z + dy).toInt(), x, ceil((spot.top + spot.line.getLayoutSpan(WPViewConstant.Y_AXIS)) * z + dy).toInt())
     }
 
     /**
@@ -126,12 +195,13 @@ class WordSelection(private val word: Word) {
      * in Word view coordinates; null when that page is not laid out or shown.
      */
     fun bodyBottomAt(offset: Long): Int? {
+        if (isStory(offset)) return null
         val root = root() ?: return null
         val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), false) ?: return null
         var page: IView? = line
         while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
         page ?: return null
-        val (_, dy) = shift(root, line) ?: return null
+        val (_, dy) = shift(root, page) ?: return null
         val pageRect = com.wxiwei.office.wp.view.WPViewKit.instance().getAbsoluteCoordinate(page, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
         return floor((pageRect.y + page.getHeight() - page.getBottomIndent()) * word.getZoom() + dy).toInt()
     }

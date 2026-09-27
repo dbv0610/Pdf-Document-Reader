@@ -187,6 +187,12 @@ class WPDocument : STDocument() {
      * Moves every main-text element after [at] by [delta]: an element that starts after [at]
      * moves, one that contains it grows (or shrinks). [skip] is left alone (already updated).
      */
+    /** The body, the header and the footer can be edited live (not text boxes, notes). */
+    fun isEditableArea(offset: Long): Boolean = (offset and WPModelConstant.AREA_MASK).let {
+        it == WPModelConstant.MAIN || it == WPModelConstant.HEADER || it == WPModelConstant.FOOTER
+    }
+
+    /** Elements of the story of [at] (body, header or footer) after [at] move by [delta]. */
     private fun shiftMain(at: Long, delta: Long, skip: IElement?) {
         fun move(e: IElement?) {
             if (e == null || e === skip) return
@@ -198,15 +204,15 @@ class WPDocument : STDocument() {
                 e.setEndOffset(en + delta)
             }
         }
-        root?.get(0)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
-        para?.get(0)?.let { c ->
+        getRootCollection(at)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
+        getParaCollection(at)?.let { c ->
             for (i in 0 until c.size()) {
                 val p = c.getElementForIndex(i)
                 move(p)
                 if (p is ParagraphElement) for (j in 0 until p.leafCount()) move(p.getElementForIndex(j))
             }
         }
-        table?.get(0)?.let { c ->
+        getTableCollection(at)?.let { c ->
             for (i in 0 until c.size()) {
                 val t = c.getElementForIndex(i) as? TableElement ?: continue
                 move(t)
@@ -224,7 +230,7 @@ class WPDocument : STDocument() {
      * Returns false when [offset] is not inside a plain text run (shape, field, other area).
      */
     fun insertMainText(offset: Long, text: String): Boolean {
-        if (text.isEmpty() || (offset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
+        if (text.isEmpty() || !isEditableArea(offset)) return false
         if (text.any { it == '\n' || it == '\r' || it == '\u0007' || it == '\u000C' }) return false
         val paragraph = getParagraph(offset) as? ParagraphElement ?: return false
         val leaf = paragraph.getLeaf(offset) as? LeafElement ?: return false
@@ -242,7 +248,7 @@ class WPDocument : STDocument() {
      * mark, and covers plain text runs only. Returns false otherwise (nothing changed).
      */
     fun deleteMainText(start: Long, end: Long): Boolean {
-        if (end <= start || (start and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
+        if (end <= start || !isEditableArea(start)) return false
         val paragraph = getParagraph(start) as? ParagraphElement ?: return false
         if (end > paragraph.getEndOffset() - 1) return false // the paragraph mark stays
         // only plain runs in the range
@@ -277,15 +283,15 @@ class WPDocument : STDocument() {
             if (s >= end) { e.setStartOffset(s - delta); e.setEndOffset(en - delta) }
             else if (en > start) e.setEndOffset(maxOf(start, en - delta))
         }
-        root?.get(0)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
-        para?.get(0)?.let { c ->
+        getRootCollection(start)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
+        getParaCollection(start)?.let { c ->
             for (i in 0 until c.size()) {
                 val p = c.getElementForIndex(i)
                 move(p)
                 if (p is ParagraphElement) for (j in 0 until p.leafCount()) move(p.getElementForIndex(j))
             }
         }
-        table?.get(0)?.let { c ->
+        getTableCollection(start)?.let { c ->
             for (i in 0 until c.size()) {
                 val t = c.getElementForIndex(i) as? TableElement ?: continue
                 move(t)
@@ -306,8 +312,8 @@ class WPDocument : STDocument() {
      * [offset] is not in a plain run of a main-text paragraph.
      */
     fun splitMainParagraph(offset: Long): Boolean {
-        if ((offset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
-        val paragraphs = para?.get(0) ?: return false
+        if (!isEditableArea(offset)) return false
+        val paragraphs = getParaCollection(offset) ?: return false
         val p = getParagraph(offset) as? ParagraphElement ?: return false
         if (p is TableElement || offset < p.getStartOffset() || offset >= p.getEndOffset()) return false
         val index = paragraphs.indexOf(p)
@@ -339,8 +345,8 @@ class WPDocument : STDocument() {
      * Backspace at a paragraph start). Returns false when that is not two plain main paragraphs.
      */
     fun joinMainParagraph(markOffset: Long): Boolean {
-        if ((markOffset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return false
-        val paragraphs = para?.get(0) ?: return false
+        if (!isEditableArea(markOffset)) return false
+        val paragraphs = getParaCollection(markOffset) ?: return false
         val p = getParagraph(markOffset) as? ParagraphElement ?: return false
         if (p is TableElement || p.getEndOffset() != markOffset + 1) return false
         val index = paragraphs.indexOf(p)
@@ -379,15 +385,15 @@ class WPDocument : STDocument() {
             val en = e.getEndOffset()
             if (s > at) { e.setStartOffset(s - 1); e.setEndOffset(en - 1) } else if (en > at) e.setEndOffset(en - 1)
         }
-        root?.get(0)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
-        para?.get(0)?.let { c ->
+        getRootCollection(at)?.let { c -> for (i in 0 until c.size()) move(c.getElementForIndex(i)) }
+        getParaCollection(at)?.let { c ->
             for (i in 0 until c.size()) {
                 val p = c.getElementForIndex(i)
                 move(p)
                 if (p is ParagraphElement) for (j in 0 until p.leafCount()) move(p.getElementForIndex(j))
             }
         }
-        table?.get(0)?.let { c ->
+        getTableCollection(at)?.let { c ->
             for (i in 0 until c.size()) {
                 val t = c.getElementForIndex(i) as? TableElement ?: continue
                 move(t)
