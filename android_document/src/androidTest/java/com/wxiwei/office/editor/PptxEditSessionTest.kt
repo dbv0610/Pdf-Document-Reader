@@ -78,4 +78,77 @@ class PptxEditSessionTest {
         assertTrue(titleXml, titleXml.contains("b=\"1\"") && titleXml.contains("sz=\"6000\"") && titleXml.contains("C00000") && titleXml.contains("algn=\"r\""))
         OpenDocument.open(saved, { it.pageCount >= 10 }) { reader -> shot(reader, "pptx_edit_reopened") }
     }
+
+    /** id, kind, bounds, rotation and text of every shape of a slide as the view has it. */
+    private fun snapshot(reader: com.wxiwei.office.reader.OfficeReader, slide: Int): List<String> = onMain {
+        val p = reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation
+        val out = ArrayList<String>()
+        fun visit(shapes: Array<com.wxiwei.office.common.shape.IShape>) {
+            for (sh in shapes) {
+                val b = sh.bounds
+                val text = (sh as? com.wxiwei.office.common.shape.TextBox)?.element?.getText(null)?.trim() ?: ""
+                if (sh.shapeID > 0) out.add("${sh.shapeID}:${sh.javaClass.simpleName}:${b?.x},${b?.y},${b?.width},${b?.height}:r${sh.rotation}:$text")
+                if (sh is com.wxiwei.office.common.shape.GroupShape) visit(sh.getShapes())
+            }
+        }
+        visit(p.getSlide(slide)!!.getShapes())
+        out.sorted()
+    }
+
+    /** Random text, moves, resizes, rotations, formats, new and deleted boxes, undo/redo; the saved deck reopens as shown. */
+    @Test
+    fun randomEditsSaveAsShown() {
+        for (seed in listOf(1L, 2L, 3L)) {
+            val source = OpenDocument.copySample("ppt2.pptx", "pptx_fuzz_$seed.pptx")
+            val saved = OpenDocument.output("pptx_fuzz_saved_$seed.pptx")
+            var shown = emptyList<String>()
+            val log = StringBuilder()
+            val slide = seed.toInt() % 3
+            OpenDocument.open(source, { it.pageCount >= 3 }) { reader ->
+                val session = onMain { LivePptxSession(reader.control!!, source) }
+                val rnd = java.util.Random(seed)
+                repeat(50) { step ->
+                    val shapes = onMain { session.listShapes(slide) }.filter { it.kind.name != "GROUP" }
+                    val target = if (shapes.isEmpty()) null else shapes[rnd.nextInt(shapes.size)]
+                    val kind = rnd.nextInt(9)
+                    val wasReopen = session.needsReopen
+                    val ok = onMain {
+                        when {
+                            kind == 0 && target != null && target.kind.name == "TEXT" -> session.setShapeText(slide, target.id, "chữ $step")
+                            kind == 1 && target != null -> target.rectEmu.let { r -> session.moveShape(slide, target.id, Rect(r.x + 91440L * (rnd.nextInt(5) - 2), r.y + 91440L * (rnd.nextInt(5) - 2), r.width, r.height)) }
+                            kind == 2 && target != null -> target.rectEmu.let { r -> session.moveShape(slide, target.id, Rect(r.x, r.y, r.width * 3 / 4 + 1, r.height + 45720)) }
+                            kind == 3 && target != null -> session.rotateShape(slide, target.id, 15f * rnd.nextInt(24))
+                            kind == 4 && target != null && target.kind.name == "TEXT" -> session.setTextFormat(slide, target.id, com.wxiwei.office.editor.pptx.TextFormat(bold = rnd.nextBoolean(), sizePt = 12f + rnd.nextInt(30)))
+                            kind == 5 -> session.addTextBox(slide, Rect(914400L * rnd.nextInt(8), 914400L * rnd.nextInt(4), 1828800, 457200), "hộp $step", 18f) > 0
+                            kind == 6 && target != null && rnd.nextInt(3) == 0 -> session.deleteShape(slide, target.id)
+                            kind == 7 -> session.undo()
+                            kind == 8 -> session.redo()
+                            else -> false
+                        }
+                    }
+                    log.append("$step:$kind:${target?.id}(${target?.kind}):$ok${if (!wasReopen && session.needsReopen) " REOPEN" else ""} ")
+                }
+                assertTrue("all edits shown live: $log", !session.needsReopen)
+                shown = snapshot(reader, slide)
+                val result = onMain { session.save(saved) }
+                assertTrue(result.toString(), result is EditResult.Ok)
+            }
+            OpenDocument.open(saved, { it.pageCount >= 3 }) { reader ->
+                val reread = snapshot(reader, slide)
+                // the view rounds EMU to pixels; allow one pixel
+                fun norm(s: String) = s.split(":").let { f -> f[0] + ":" + f[1] + ":" + f.drop(3).joinToString(":") }
+                fun near(a: String, b: String): Boolean {
+                    val x = a.split(":")[2].split(",").mapNotNull { it.toIntOrNull() }
+                    val y = b.split(":")[2].split(",").mapNotNull { it.toIntOrNull() }
+                    return x.size == y.size && x.zip(y).all { (u, v) -> Math.abs(u - v) <= 1 }
+                }
+                val ok = shown.size == reread.size && shown.zip(reread).all { (a, b) -> norm(a) == norm(b) && near(a, b) }
+                if (!ok) {
+                    val diff = (shown - reread.toSet()).take(5) to (reread - shown.toSet()).take(5)
+                    throw AssertionError("seed $seed slide $slide: shown-only=${diff.first} saved-only=${diff.second} ops=$log")
+                }
+            }
+        }
+    }
 }
+

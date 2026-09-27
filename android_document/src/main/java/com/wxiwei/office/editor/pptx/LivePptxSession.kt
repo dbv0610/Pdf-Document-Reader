@@ -73,10 +73,11 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
 
     fun setShapeText(slideIndex: Int, shapeId: Int, text: String): Boolean {
         val old = display.shapeText(slideIndex, shapeId) ?: listShapes(slideIndex).firstOrNull { it.id == shapeId }?.text
+        val where = listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rectEmu
         if (!editor.setShapeText(slideIndex, shapeId, text)) return false
-        val show = { display.setShapeText(slideIndex, shapeId, text) }
+        val show = { display.setShapeText(slideIndex, shapeId, text, where) }
         live(show())
-        record({ editor.setShapeText(slideIndex, shapeId, text) }, show) { old != null && display.setShapeText(slideIndex, shapeId, old) }
+        record({ editor.setShapeText(slideIndex, shapeId, text) }, show) { old != null && display.setShapeText(slideIndex, shapeId, old, where) }
         return true
     }
 

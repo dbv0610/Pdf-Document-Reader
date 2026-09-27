@@ -50,6 +50,18 @@ open class GroupShape : AbstractShape() {
         if (shape != null) this.shapes.add(shape)
     }
 
+    /** Removes [shape]; returns its index, or -1 when it is not a direct child. */
+    fun removeShape(shape: IShape): Int {
+        val index = shapes.indexOfFirst { it === shape }
+        if (index >= 0) shapes.removeAt(index)
+        return index
+    }
+
+    /** Puts [shape] back at [index] (see [removeShape]). */
+    fun insertShape(index: Int, shape: IShape) {
+        shapes.add(index.coerceIn(0, shapes.size), shape)
+    }
+
     /**
      * get all shapes of this slide
      */

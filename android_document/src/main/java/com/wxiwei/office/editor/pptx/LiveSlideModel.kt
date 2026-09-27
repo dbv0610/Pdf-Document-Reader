@@ -31,7 +31,8 @@ interface LiveSlideDisplay {
     fun addImage(slideIndex: Int, id: Int, rectEmu: Rect, imageFile: File): Boolean
     /** Current text of a shape, or null when it has no text body in the model. */
     fun shapeText(slideIndex: Int, id: Int): String?
-    fun setShapeText(slideIndex: Int, id: Int, text: String): Boolean
+    /** [where]: the shape's box, for a shape the view does not draw yet (an empty text box). */
+    fun setShapeText(slideIndex: Int, id: Int, text: String, where: Rect? = null): Boolean
     /** Current bounds, or null when the shape is not in the model. */
     fun shapeRect(slideIndex: Int, id: Int): Rect?
     fun moveShape(slideIndex: Int, id: Int, rectEmu: Rect): Boolean
@@ -158,15 +159,15 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         return box.element?.getText(null)?.removeSuffix("\n")
     }
 
-    override fun setShapeText(slideIndex: Int, id: Int, text: String): Boolean {
+    override fun setShapeText(slideIndex: Int, id: Int, text: String, where: Rect?): Boolean {
         val slide = slide(slideIndex) ?: return false
         val shapes = find(slide, id)
         val box = shapes.filterIsInstance<TextBox>().firstOrNull()
         if (box == null) {
             // A shape without a text body in the model: add one over its bounds
-            val owner = shapes.firstOrNull() ?: return false
+            val bounds = shapes.firstOrNull()?.bounds ?: where?.let { rectangle(it) } ?: return false
             val created = TextBox()
-            created.bounds = owner.bounds
+            created.bounds = bounds
             created.shapeID = id
             created.isWrapLine = true
             setText(created, text, null, null, null)
@@ -195,8 +196,9 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
 
     override fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? {
         val slide = slide(slideIndex) ?: return null
-        val box = find(slide, id).filterIsInstance<TextBox>().firstOrNull() ?: return null
-        val section = box.element ?: return null
+        // no text drawn (an empty or undrawn text box): nothing to show
+        val box = find(slide, id).filterIsInstance<TextBox>().firstOrNull() ?: return FormatToken(null, emptyList())
+        val section = box.element ?: return FormatToken(null, emptyList())
         val am = AttrManage.instance()
         val saved = ArrayList<Pair<com.wxiwei.office.simpletext.model.IElement, IAttributeSet>>()
         val count = section.getParaCollection()?.size() ?: 0
@@ -226,12 +228,12 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         return FormatToken(box, saved)
     }
 
-    private class FormatToken(val box: TextBox, val saved: List<Pair<com.wxiwei.office.simpletext.model.IElement, IAttributeSet>>)
+    private class FormatToken(val box: TextBox?, val saved: List<Pair<com.wxiwei.office.simpletext.model.IElement, IAttributeSet>>)
 
     override fun restoreFormat(slideIndex: Int, token: Any): Boolean {
         val t = token as? FormatToken ?: return false
         for ((element, attr) in t.saved) element.setAttribute(attr.clone())
-        relayout(t.box)
+        t.box?.let { relayout(it) }
         return true
     }
 
@@ -250,7 +252,7 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     override fun moveShape(slideIndex: Int, id: Int, rectEmu: Rect): Boolean {
         val slide = slide(slideIndex) ?: return false
         val shapes = find(slide, id)
-        if (shapes.isEmpty()) return false
+        if (shapes.isEmpty()) return true // not drawn (an empty text box): nothing to show
         val target = rectangle(rectEmu)
         for (shape in shapes) {
             val old = shape.bounds
@@ -278,7 +280,9 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     // groups are not rotated live: their children carry their own drawing rotation
     override fun rotateShape(slideIndex: Int, id: Int, degrees: Float): Boolean {
         val shapes = slide(slideIndex)?.let { find(it, id) } ?: return false
-        if (shapes.isEmpty() || shapes.any { it is GroupShape }) return false
+        // not drawn at all (an empty text box): nothing to show
+        if (shapes.isEmpty()) return true
+        if (shapes.any { it is GroupShape }) return false
         val normalized = (degrees % 360f + 360f) % 360f
         shapes.forEach { it.rotation = normalized }
         repaint()
@@ -299,21 +303,31 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         }
     }
 
-    private class Removed(val entries: List<Pair<Int, IShape>>)
+    private class Removed(val entries: List<Triple<GroupShape?, Int, IShape>>)
 
     override fun removeShape(slideIndex: Int, id: Int): Any? {
         val slide = slide(slideIndex) ?: return null
-        // Only top-level shapes can be removed from the model; a group child needs a reopen
-        val entries = slide.getShapes().filter { it.shapeID == id }.map { shape -> slide.removeShape(shape) to shape }
-        if (entries.isEmpty()) return null
-        repaint()
-        return Removed(entries)
+        // top-level shapes and group children, each with where it was
+        val entries = ArrayList<Triple<GroupShape?, Int, IShape>>()
+        fun visit(group: GroupShape?, shapes: Array<IShape>) {
+            for (shape in shapes) {
+                if (shape.shapeID == id) entries.add(Triple(group, -1, shape))
+                else if (shape is GroupShape) visit(shape, shape.getShapes())
+            }
+        }
+        visit(null, slide.getShapes())
+        val removed = entries.map { (group, _, shape) -> Triple(group, group?.removeShape(shape) ?: slide.removeShape(shape), shape) }
+        // not drawn at all (an empty text box): nothing to take away
+        if (removed.isNotEmpty()) repaint()
+        return Removed(removed)
     }
 
     override fun restoreShape(slideIndex: Int, token: Any): Boolean {
         val slide = slide(slideIndex) ?: return false
         val removed = token as? Removed ?: return false
-        for ((index, shape) in removed.entries.reversed()) slide.insertShape(index, shape)
+        for ((group, index, shape) in removed.entries.reversed()) {
+            if (group != null) group.insertShape(index, shape) else slide.insertShape(index, shape)
+        }
         repaint()
         return true
     }
