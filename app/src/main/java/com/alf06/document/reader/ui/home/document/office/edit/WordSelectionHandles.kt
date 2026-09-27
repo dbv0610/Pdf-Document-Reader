@@ -31,7 +31,7 @@ internal class WordSelectionHandles(
     private var downX = 0f
     private var downY = 0f
     private val density = context.resources.displayMetrics.density
-    private val radius = 9 * density
+    private val radius = 12 * density
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1A73E8.toInt() }
     // handle tips (the text line bottom) in this view's coordinates, or null when not shown
     private var startTip: Pair<Float, Float>? = null

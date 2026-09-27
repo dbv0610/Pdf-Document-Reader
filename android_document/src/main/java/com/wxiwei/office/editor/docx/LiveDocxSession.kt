@@ -62,6 +62,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
     }
     fun setFontSize(start: Long, end: Long, pt: Float) = format(start, end, { e, s, t -> e.setFontSize(s, t, pt) }) { am.setFontSize(it, pt) }
     fun highlight(start: Long, end: Long, rgbHex: String = "FFFF00"): Boolean {
+        // "none" takes the highlight away
+        if (rgbHex == "none") return format(start, end, { e, s, t -> e.highlight(s, t, "none") }) { am.setFontHighLight(it, -1) }
         val rgb = rgbHex.removePrefix("#")
         val color = rgb.toIntOrNull(16)?.let { (0xFF shl 24) or it } ?: Color.YELLOW
         return format(start, end, { e, s, t -> e.highlight(s, t, rgb) }) { am.setFontHighLight(it, color) }
@@ -576,6 +578,27 @@ class LiveDocxSession(control: IControl, private val source: File) {
             is Edit.Delete -> if (x >= edit.at) x += edit.length
         }
         return false
+    }
+
+    /**
+     * A picture at [offset], [widthPx] x [heightPx] (96 dpi). It is written to the file; the view shows
+     * it after the file is read again ([needsReopen]).
+     */
+    fun insertImage(offset: Long, image: File, widthPx: Int, heightPx: Int): Boolean = synchronized(layoutLock) {
+        ownError = null
+        if (!editor.insertImage(toOriginal(offset), image, widthPx, heightPx)) return false
+        needsReopen = true
+        undoStack.add(Step({ editor.undoLast() }, { editor.insertImage(toOriginal(offset), image, widthPx, heightPx) })); redoStack.clear()
+        true
+    }
+
+    /** A [rows] x [cols] table after the paragraph at [offset]; shown after the file is read again ([needsReopen]). */
+    fun insertTable(offset: Long, rows: Int, cols: Int): Boolean = synchronized(layoutLock) {
+        ownError = null
+        if (!editor.insertTable(toOriginal(offset), rows, cols)) return false
+        needsReopen = true
+        undoStack.add(Step({ editor.undoLast() }, { editor.insertTable(toOriginal(offset), rows, cols) })); redoStack.clear()
+        true
     }
 
     /** Text with its character formatting, copied with [copyFormatted] to paste with [pasteFormatted]. */

@@ -134,6 +134,36 @@ class DocxEditorTest {
         }
     }
 
+    /** A 3 x 2 table after the paragraph "1. Tổng quan tính năng": saved as a bordered table, reopened as one. */
+    @Test
+    fun insertTable() {
+        val source = OpenDocument.copySample("sample.docx", "docx_table_source.docx")
+        val saved = OpenDocument.output("docx_table_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { _ ->
+            val at = text(source.absolutePath).indexOf("Tổng quan tính năng").toLong()
+            assertTrue(at > 0)
+            val editor = DocxEditor(source, DocxSourceMap.get(source.absolutePath)!!)
+            assertTrue(editor.lastError?.toString(), editor.insertTable(at, 3, 2))
+            assertTrue(editor.save(saved) is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val heading = xml.indexOf("Tổng quan tính năng")
+        val table = xml.indexOf("<w:tbl>", heading)
+        assertTrue("table after the heading", table > heading && xml.indexOf("<w:p", heading) > 0)
+        val tbl = xml.substring(table, xml.indexOf("</w:tbl>", table))
+        assertEquals(3, Regex("<w:tr>").findAll(tbl).count())
+        assertEquals(6, Regex("<w:tc>").findAll(tbl).count())
+        assertTrue(tbl.contains("<w:insideH "))
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val tables = onMain {
+                val doc = (reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument
+                doc.getTableCollection(0)?.size() ?: 0
+            }
+            // sample.docx had 5 tables
+            assertEquals(6, tables)
+        }
+    }
+
     @Test
     fun editSaveReopen() {
         val source = OpenDocument.copySample("sample.docx", "docx_edit_source.docx")

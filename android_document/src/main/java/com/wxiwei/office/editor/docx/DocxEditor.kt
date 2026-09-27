@@ -165,6 +165,9 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         if (widthPx <= 0 || heightPx <= 0 || !imageFile.isFile) invalid("Image file and positive dimensions required")
         else queue(Op(offset, offset, "image", image = imageFile, width = widthPx, height = heightPx))
     fun appendParagraph(text: String) = queue(Op(0, 0, "append", text))
+    /** A [rows] x [cols] table with thin borders after the body paragraph holding [offset]. */
+    fun insertTable(offset: Long, rows: Int, cols: Int): Boolean =
+        if (rows !in 1..200 || cols !in 1..63) invalid("Bad table size") else queue(Op(offset, offset, "table", width = rows, height = cols))
     /** Drops the last queued operation (undo of a live edit). */
     fun undoLast(): Boolean = if (ops.isEmpty()) false else { ops.removeAt(ops.lastIndex); true }
     /** Number of queued operations. */
@@ -256,6 +259,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                         delete(op.start, op.end)
                     }
                     "pjc", "pind", "pline", "pnum", "plvl" -> paragraphFormat(op)
+                    "table" -> table(op)
                     else -> format(op)
                 }
             }
@@ -442,6 +446,43 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 next.detach()
                 deletedSeparators.add(leaf.start)
             }
+        }
+        fun table(op: Op) {
+            val para = paras.firstOrNull { op.start >= it.start && op.start < it.end } ?: fail(Reason.INVALID_ARGUMENT, "No paragraph at offset")
+            val p = paragraphs.getOrNull(para.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
+            if (p.parent !== body) fail(Reason.INVALID_ARGUMENT, "A table goes between paragraphs of the body")
+            // the text width of the page, split evenly
+            val sect = body.firstChild(W, "sectPr")
+            fun twips(e: Element?, k: String) = e?.attributeValue(QName(k, W))?.toIntOrNull()
+            val page = twips(sect?.firstChild(W, "pgSz"), "w") ?: 12240
+            val margins = (twips(sect?.firstChild(W, "pgMar"), "left") ?: 1440) + (twips(sect?.firstChild(W, "pgMar"), "right") ?: 1440)
+            val width = maxOf(1440, page - margins) / op.height * op.height
+            val colWidth = width / op.height
+            fun Element.w(name: String, vararg attrs: Pair<String, String>): Element =
+                addElement(QName(name, W))!!.also { e -> attrs.forEach { (k, v) -> e.addAttribute(QName(k, W), v) } }
+            val tbl = newElement(W, "tbl")
+            tbl.w("tblPr").apply {
+                w("tblW", "w" to width.toString(), "type" to "dxa")
+                w("tblBorders").apply {
+                    for (side in listOf("top", "left", "bottom", "right", "insideH", "insideV"))
+                        w(side, "val" to "single", "sz" to "4", "space" to "0", "color" to "auto")
+                }
+                w("tblLayout", "type" to "fixed")
+            }
+            tbl.w("tblGrid").apply { repeat(op.height) { w("gridCol", "w" to colWidth.toString()) } }
+            repeat(op.width) {
+                val tr = tbl.w("tr")
+                repeat(op.height) {
+                    val tc = tr.w("tc")
+                    tc.w("tcPr").w("tcW", "w" to colWidth.toString(), "type" to "dxa")
+                    tc.w("p")
+                }
+            }
+            val siblings = body.elements()!!.filterIsInstance<Element>()
+            val next = siblings.getOrNull(siblings.indexOf(p) + 1)
+            addBefore(body, next, tbl)
+            // Word wants a paragraph after a table
+            if (next == null || next.name != "p") addBefore(body, next, newElement(W, "p"))
         }
         fun append(text: String) { text.split('\n').forEach { part ->
             val p = newElement(W, "p"); p.add(textRun(part, null)); addBefore(body, body.firstChild(W, "sectPr"), p)

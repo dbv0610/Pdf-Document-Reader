@@ -38,7 +38,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     // [base] on; every change of the buffer is replayed on the document at base + its index.
     private var base = -1L
     private var muted = false
-    private val caret = WordCaretOverlay(context, { reader.control?.getView() }) {
+    private val caret = WordCaretOverlay(context, { docView() }) {
         if (base < 0) null else selection()?.caretRect(base + typing.selectionEnd.coerceAtLeast(0))
     }
     private val typing: EditText = object : EditText(context) {
@@ -79,10 +79,12 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("B", bold = true) { op { e, r -> e.setBold(r.first, r.last + 1, !e.isBold(r.first)) } },
             button("I") { op { e, r -> e.setItalic(r.first, r.last + 1, !e.isItalic(r.first)) } },
             button("U") { op { e, r -> e.setUnderline(r.first, r.last + 1, !e.isUnderlined(r.first)) } },
-            button("Chữ đỏ") { op { e, r -> e.setTextColor(r.first, r.last + 1, "C00000") } },
-            button("Chữ xanh") { op { e, r -> e.setTextColor(r.first, r.last + 1, "1F4E79") } },
-            button("Cỡ 16") { op { e, r -> e.setFontSize(r.first, r.last + 1, 16f) } },
-            button("Tô vàng") { op { e, r -> e.highlight(r.first, r.last + 1, "FFFF00") } },
+            button("Màu chữ") { needSelection { pickColor("Màu chữ") { c -> c?.let { op { e, r -> e.setTextColor(r.first, r.last + 1, it) } } } } },
+            button("Cỡ chữ") { needSelection { pickSize { pt -> op { e, r -> e.setFontSize(r.first, r.last + 1, pt) } } } },
+            button("Tô màu") { needSelection { pickColor("Tô màu", none = "Bỏ tô") { c -> op { e, r -> e.highlight(r.first, r.last + 1, c ?: "none") } } } },
+            button("Chọn từ") { selectAround { sel, at -> sel.wordAt(at) } },
+            button("Chọn đoạn") { selectAround { _, at -> paragraphAt(at) } },
+            button("Chọn hết") { selectAround { _, _ -> wholeDocument() } },
             button("Chép") { copy() },
             button("Cắt") { copy(); op { e, r -> e.deleteText(r.first, r.last + 1) } },
             button("Dán") { paste() },
@@ -108,8 +110,117 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("↶") { stopTyping(); session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },
             button("↷") { stopTyping(); session?.let { if (!it.redo()) toast("Không còn gì để làm lại") } },
             button("Bỏ chọn") { clearSelection() },
+            button("+ Ảnh") { pickImage() },
+            button("+ Bảng") { askTable() },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
+            button("Lưu bản sao") { stopTyping(); saveCopy() },
         ))
+    }
+
+    // the file the view and the session work on: the original, or a working copy in the cache after
+    // an edit that needed a reopen (a picture, a table); Save writes it over the original
+    private var working = file
+    private var workingChanged = false
+
+    /** Where the caret or the selection starts, or -1. */
+    private fun here(): Long = selection()?.selection()?.first ?: if (base >= 0) base + typing.selectionStart.coerceAtLeast(0) else -1L
+
+    private fun needSelection(action: () -> Unit) {
+        if (selection()?.selection() == null) return toast("Chọn chữ trước (nhấn giữ một từ, hoặc Chọn từ/đoạn)")
+        action()
+    }
+
+    /** Selects the range [pick] gives around the caret (or the current selection). */
+    private fun selectAround(pick: (WordSelection, Long) -> LongRange) {
+        val sel = selection() ?: return
+        val at = here()
+        if (at < 0) return toast("Chạm vào chữ trước")
+        stopTyping()
+        val range = pick(sel, at)
+        if (range.isEmpty()) return toast("Không có chữ ở đây")
+        anchor = range
+        select(sel, range)
+    }
+
+    private fun paragraphAt(offset: Long): LongRange {
+        val w = docView() as? com.wxiwei.office.wp.control.Word ?: return LongRange.EMPTY
+        val p = w.getDocument().getParagraph(offset) ?: return LongRange.EMPTY
+        // without its paragraph mark
+        return p.getStartOffset() until maxOf(p.getStartOffset(), p.getEndOffset() - 1)
+    }
+
+    private fun wholeDocument(): LongRange {
+        val w = docView() as? com.wxiwei.office.wp.control.Word ?: return LongRange.EMPTY
+        return 0L until maxOf(0L, w.getDocument().getAreaEnd(0) - 1)
+    }
+
+    private fun pickImage() {
+        val at = here()
+        if (at < 0) return toast("Chạm vào chỗ muốn chèn ảnh trước")
+        var launcher: androidx.activity.result.ActivityResultLauncher<String>? = null
+        launcher = activity.activityResultRegistry.register("word-image-" + System.nanoTime(),
+            androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+            launcher?.unregister()
+            if (uri != null) insertImage(at, uri)
+        }
+        launcher.launch("image/*")
+    }
+
+    private fun insertImage(at: Long, uri: android.net.Uri) {
+        val type = context.contentResolver.getType(uri) ?: "image/jpeg"
+        val ext = when { type.contains("png") -> "png"; type.contains("gif") -> "gif"; type.contains("bmp") -> "bmp"; else -> "jpeg" }
+        val image = File(context.cacheDir, "word-image-" + System.nanoTime() + "." + ext)
+        try {
+            context.contentResolver.openInputStream(uri)!!.use { input -> image.outputStream().use { input.copyTo(it) } }
+        } catch (e: Exception) {
+            return toast("Không đọc được ảnh")
+        }
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(image.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return toast("Không đọc được ảnh")
+        // at most 6 inches wide (576 px at 96 dpi), keeping its proportions
+        val w = minOf(576, bounds.outWidth)
+        val h = maxOf(1, w * bounds.outHeight / bounds.outWidth)
+        val s = session() ?: return
+        stopTyping()
+        if (!s.insertImage(at, image, w, h)) return toast(s.lastError?.message ?: "Không chèn được ảnh")
+        reloadWorking()
+    }
+
+    private fun askTable() {
+        val at = here()
+        if (at < 0) return toast("Chạm vào đoạn muốn chèn bảng phía sau trước")
+        val rows = input("Số hàng").apply { inputType = InputType.TYPE_CLASS_NUMBER; setText("3") }
+        val cols = input("Số cột").apply { inputType = InputType.TYPE_CLASS_NUMBER; setText("3") }
+        val form = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(label("Số hàng")); addView(rows); addView(label("Số cột")); addView(cols)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(context).setTitle("Chèn bảng").setView(form)
+            .setPositiveButton("Chèn") { _, _ ->
+                val r = rows.text.toString().toIntOrNull() ?: 0
+                val c = cols.text.toString().toIntOrNull() ?: 0
+                val s = session() ?: return@setPositiveButton
+                stopTyping()
+                if (!s.insertTable(at, r, c)) toast(s.lastError?.message ?: "Không chèn được bảng") else reloadWorking()
+            }
+            .setNegativeButton("Hủy", null).show()
+    }
+
+    /** Writes every edit to a working copy in the cache and shows it; the original waits for Save. */
+    private fun reloadWorking() {
+        val s = session ?: return
+        val next = workingCopy()
+        val result = s.save(next)
+        if (result !is com.wxiwei.office.editor.EditResult.Ok) return report(result, "")
+        val previous = working
+        working = next
+        workingChanged = true
+        session = null
+        anchor = null
+        selectionLabel.text = HINT
+        reopen(next) { if (previous != file) previous.delete() }
     }
 
     init {
@@ -137,7 +248,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
 
     private val handles = WordSelectionHandles(
         context,
-        source = { reader.control?.getView() },
+        source = { docView() },
         range = { selection()?.selection() },
         caret = { offset -> selection()?.caretRect(offset) },
         offsetAt = { x, y -> selection()?.offsetAtScreen(x, y) ?: -1 },
@@ -176,7 +287,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
      * paragraphs down to it, aligned left, centre or right by where the tap was.
      */
     private fun clickAndType(sel: WordSelection, offset: Long, rawX: Float, rawY: Float): Boolean {
-        val w = reader.control?.getView() as? com.wxiwei.office.wp.control.Word ?: return false
+        val w = docView() as? com.wxiwei.office.wp.control.Word ?: return false
         val end = w.getDocument().getAreaEnd(0) - 1 // before the document's last paragraph mark
         if (offset != end) return false
         val origin = IntArray(2)
@@ -306,7 +417,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     /** Keeps the caret above the keyboard and inside the screen. */
     private fun revealCaret() {
         if (base < 0) return
-        val word = reader.control?.getView() ?: return
+        val word = docView() ?: return
         selection()?.revealCaret(base + typing.selectionEnd.coerceAtLeast(0), dp(24), visibleBottom(word))
     }
 
@@ -336,7 +447,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     private fun session(): LiveDocxSession? {
         session?.let { return it }
         val control = reader.control ?: return null
-        return runCatching { LiveDocxSession(control, file) }.getOrElse {
+        return runCatching { LiveDocxSession(control, working) }.getOrElse {
             toast("Tài liệu chưa sẵn sàng để sửa")
             null
         }?.also { session = it }
@@ -380,17 +491,24 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         selection()?.let { select(it, at until at + t.length) }
     }
 
-    override fun hasChanges() = session?.hasChanges() == true
+    override fun hasChanges() = session?.hasChanges() == true || workingChanged
 
-    override fun writeTo(target: File) = session!!.save(target)
+    override fun writeTo(target: File): com.wxiwei.office.editor.EditResult {
+        session?.takeIf { it.hasChanges() }?.let { return it.save(target) }
+        working.copyTo(target, overwrite = true)
+        return com.wxiwei.office.editor.EditResult.Ok(target)
+    }
 
     override fun onSaved() {
         session = null
         anchor = null
         stopTyping()
         selectionLabel.text = HINT
-        // show the saved text: reopen the document
-        reader.open(file.absolutePath)
+        if (working != file) working.delete()
+        working = file
+        workingChanged = false
+        // show the saved text: reopen the document (the panel stays open)
+        reopen(file) {}
     }
 
     private companion object {

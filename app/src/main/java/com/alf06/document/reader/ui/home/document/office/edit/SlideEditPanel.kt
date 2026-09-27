@@ -68,7 +68,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         ))
     }
 
-    private val overlay = SlideSelectionOverlay(context) { reader.control?.getView() as? Presentation }
+    private val overlay = SlideSelectionOverlay(context) { docView() as? Presentation }
 
     init {
         reader.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -95,7 +95,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             setTextColor(0xFF111111.toInt())
             setBackgroundColor(0xF0FFFFFF.toInt())
             // the shape's own look, at the slide's zoom (points at 96 dpi, then the view zoom)
-            val p = reader.control?.getView() as? Presentation
+            val p = docView() as? Presentation
             session.textStyle(slide(), s.id)?.let { st ->
                 val zoom = p?.getZoom() ?: 1f
                 setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (st.sizePt * 96f / 72f * zoom).coerceIn(dp(12).toFloat(), dp(48).toFloat()))
@@ -191,7 +191,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     /** Selects the top shape under a screen point, or clears the selection. */
     private fun tapAt(rawX: Float, rawY: Float): Boolean {
-        val p = reader.control?.getView() as? Presentation ?: return false
+        val p = docView() as? Presentation ?: return false
         val origin = IntArray(2)
         p.getLocationOnScreen(origin)
         val point = SlideGeometry.viewToEmu(p, rawX - origin[0], rawY - origin[1])
@@ -394,7 +394,7 @@ internal class SlideEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         reopen(next) {
             session = LivePptxSession(reader.control!!, next)
             if (previous != file) previous.delete()
-            (reader.control?.getView() as? Presentation)?.showSlide(slideIndex, false)
+            (docView() as? Presentation)?.showSlide(slideIndex, false)
             reader.invalidateThumbnail(slideIndex + 1)
         }
     }

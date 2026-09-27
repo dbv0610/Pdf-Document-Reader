@@ -143,6 +143,9 @@ internal abstract class OfficeEditPanel(
         }
     }
 
+    /** The document's view, or null while the viewer (re)opens a document. */
+    protected fun docView(): View? = if (reopening) null else runCatching { reader.control?.getView() }.getOrNull()
+
     /** A new file for a working copy in the cache: edits live there until Save writes the original. */
     protected fun workingCopy(): File =
         File(File(context.cacheDir, "edit-work").apply { mkdirs() }, "work-" + System.nanoTime() + "." + file.extension)
@@ -163,7 +166,10 @@ internal abstract class OfficeEditPanel(
         if (on && !watching) observer.addOnPreDrawListener(imeWatcher)
         if (!on && watching && observer.isAlive) observer.removeOnPreDrawListener(imeWatcher)
         watching = on
-        if (!on) (view.parent as? View)?.translationY = 0f
+        if (!on) {
+            (view.parent as? View)?.translationY = 0f
+            if (reader.paddingBottom != 0) reader.setPadding(reader.paddingLeft, reader.paddingTop, reader.paddingRight, 0)
+        }
     }
 
     private fun liftAboveKeyboard() {
@@ -172,12 +178,20 @@ internal abstract class OfficeEditPanel(
         val ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
         val location = IntArray(2)
         container.getLocationInWindow(location)
-        val bottom = location[1] - container.translationY + container.height
+        // where the toolbar sits when not lifted
+        val restingTop = location[1] - container.translationY
+        val bottom = restingTop + container.height
         val lift = if (ime <= 0) 0f else maxOf(0f, bottom - (container.rootView.height - ime))
         if (container.translationY != -lift) {
             container.translationY = -lift
             onKeyboardMoved()
         }
+        // the toolbar (and the keyboard under it) cover the bottom of the document: let it scroll
+        // that far, so its end can come above them
+        val readerAt = IntArray(2)
+        reader.getLocationInWindow(readerAt)
+        val overlap = maxOf(0, (readerAt[1] + reader.height - (restingTop - lift)).toInt())
+        if (reader.paddingBottom != overlap) reader.setPadding(reader.paddingLeft, reader.paddingTop, reader.paddingRight, overlap)
     }
 
     /** The toolbar moved with the keyboard; the visible part of the document changed. */
