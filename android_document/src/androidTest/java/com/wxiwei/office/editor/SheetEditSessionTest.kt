@@ -168,5 +168,69 @@ class SheetEditSessionTest {
             assertTrue("moved up", onMain { shape.bounds!!.y } < before.y)
         }
     }
+
+    /** Formula or shown text of every cell in the first rows/columns of [sheet]. */
+    private fun grid(book: Workbook, sheet: Int): String {
+        val s = book.getSheet(sheet)!!
+        val sb = StringBuilder()
+        for (r in 0 until 60) {
+            val row = s.getRow(r)
+            for (c in 0 until 14) {
+                val cell = row?.getCell(c)
+                val v = cell?.let { it.formula?.let { f -> "=$f" } ?: com.wxiwei.office.ss.util.ModelUtil.instance().getFormatContents(book, it) } ?: ""
+                sb.append(v).append('|')
+            }
+            sb.append('\n')
+        }
+        return sb.toString()
+    }
+
+    /** Random values, formulas, rows/columns in and out, undo/redo; the saved file reads back the same. */
+    @Test
+    fun randomEditsSaveAsShown() {
+        val args = androidx.test.platform.app.InstrumentationRegistry.getArguments()
+        for (seed in args.getString("fuzzSeed")?.let { listOf(it.toLong()) } ?: listOf(1L, 2L, 3L)) {
+            val source = OpenDocument.copySample("sample.xlsx", "xlsx_fuzz_$seed.xlsx")
+            val saved = OpenDocument.output("xlsx_fuzz_saved_$seed.xlsx")
+            var shown = ""
+            val sheet = 1
+            val log = StringBuilder()
+            OpenDocument.open(source) { reader ->
+                loadAll(reader)
+                val session = onMain { SheetEditSession(reader.control!!, source) }
+                val rnd = java.util.Random(seed)
+                repeat(args.getString("fuzzOps")?.toInt() ?: 60) { step ->
+                    val r = rnd.nextInt(40); val c = rnd.nextInt(10)
+                    val kind = rnd.nextInt(10)
+                    val ok = onMain {
+                        when (kind) {
+                            0, 1, 2 -> session.setCellInput(sheet, r, c, (rnd.nextInt(1000) / 10.0).toString())
+                            3 -> session.setCellInput(sheet, r, c, listOf("xin chào", "Đà Nẵng", "abc").let { it[rnd.nextInt(it.size)] })
+                            4 -> session.setCellInput(sheet, r, c, "=SUM(A1:B${1 + rnd.nextInt(20)})+1")
+                            5 -> session.insertRows(sheet, r, 1 + rnd.nextInt(2))
+                            6 -> session.deleteRows(sheet, r, 1)
+                            7 -> session.insertColumns(sheet, c, 1)
+                            8 -> session.undo()
+                            else -> session.redo()
+                        }
+                    }
+                    log.append("$step:$kind@$r,$c:$ok ")
+                }
+                delay(500)
+                shown = onMain { grid(book(reader), sheet) }
+                val result = onMain { session.save(saved) }
+                assertTrue(result.toString(), result is EditResult.Ok)
+            }
+            OpenDocument.open(saved) { reader ->
+                loadAll(reader)
+                val reread = onMain { grid(book(reader), sheet) }
+                if (reread != shown) {
+                    val a = shown.lines(); val b = reread.lines()
+                    val i = a.indices.first { it >= b.size || a[it] != b[it] }
+                    throw AssertionError("seed $seed row $i: shown='${a[i]}' saved='${b.getOrNull(i)}' ops=$log")
+                }
+            }
+        }
+    }
 }
 

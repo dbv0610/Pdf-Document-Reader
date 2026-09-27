@@ -163,7 +163,8 @@ class SheetEditSession internal constructor(
             refreshFormulas()
         }
         val revert = {
-            structure.remove(write)
+            // by identity: an equal earlier change must stay where it is
+            structure.indexOfLast { it === write }.takeIf { it >= 0 }?.let { structure.removeAt(it) }
             for ((shape, r) in placed) shape.bounds = Rectangle(r.x, r.y, r.width, r.height)
             if (rows) {
                 sheet.shiftRows(at, -count) // the inverse change; deleted rows come back below
