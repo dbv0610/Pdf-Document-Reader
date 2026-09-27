@@ -544,18 +544,20 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 return true
             }
             if (!redoFile()) return false
-            val targets = leaves(start, end)
-            val before = targets.map { it.getAttribute().clone() }
-            targets.forEach { apply(it.getAttribute()) }
-            val after = targets.map { it.getAttribute().clone() }
-            word.relayoutContent(start)
-            fun restore(states: List<IAttributeSet>) {
-                targets.forEachIndexed { i, leaf -> leaf.setAttribute(states[i].clone()) }
+            // by offsets, not leaf objects: undoing and redoing text before this step makes new leaves
+            val before = leaves(start, end).map { Triple(it.getStartOffset(), it.getEndOffset(), it.getAttribute().clone()) }
+            fun applyNow() {
+                leaves(start, end).forEach { apply(it.getAttribute()) }
                 word.relayoutContent(start)
             }
+            fun restoreBefore() {
+                for ((s, e, attr) in before) leaves(s, e).forEach { it.setAttribute(attr.clone()) }
+                word.relayoutContent(start)
+            }
+            applyNow()
             undoStack.add(Step(
-                undo = { fileOps.asReversed().all { it.second() }.also { restore(before) } },
-                redo = { redoFile().also { if (it) restore(after) } },
+                undo = { fileOps.asReversed().all { it.second() }.also { restoreBefore() } },
+                redo = { redoFile().also { if (it) applyNow() } },
             ))
             redoStack.clear()
             return true
@@ -573,6 +575,66 @@ class LiveDocxSession(control: IControl, private val source: File) {
             is Edit.Delete -> if (x >= edit.at) x += edit.length
         }
         return false
+    }
+
+    /** Text with its character formatting, copied with [copyFormatted] to paste with [pasteFormatted]. */
+    class FormattedText(val text: String, val spans: List<Span>) {
+        /** Formatting of chars [from, to); [highlight] is an ARGB fill or null. */
+        data class Span(val from: Int, val to: Int, val bold: Boolean, val italic: Boolean, val underline: Boolean,
+                        val rgb: Int, val sizePt: Float, val highlight: Int?)
+    }
+
+    /** The text of [start, end) with the formatting shown on it. */
+    fun copyFormatted(start: Long, end: Long): FormattedText = synchronized(layoutLock) {
+        val doc = word.getDocument()
+        val spans = ArrayList<FormattedText.Span>()
+        var pos = start
+        while (pos < end) {
+            val para = doc.getParagraph(pos) ?: break
+            val leaf = doc.getLeaf(pos) ?: break
+            val stop = minOf(end, leaf.getEndOffset()).let { if (it <= pos) pos + 1 else it }
+            val p = para.getAttribute(); val l = leaf.getAttribute()
+            val fill = am.getFontHighLight(p, l).takeIf { it != -1 && it != Int.MIN_VALUE && (it ushr 24) != 0 }
+            spans.add(FormattedText.Span((pos - start).toInt(), (stop - start).toInt(), am.getFontBold(p, l), am.getFontItalic(p, l),
+                am.getFontUnderline(p, l) > 0, am.getFontColor(p, l) and 0xFFFFFF, am.getFontSizeF(p, l), fill))
+            pos = stop
+        }
+        FormattedText(doc.getText(start, end), spans)
+    }
+
+    /**
+     * Puts [clip] over [start, end) (an insert when empty) with its formatting, as one undo step.
+     * Only what differs from how the pasted text shows is set.
+     */
+    fun pasteFormatted(start: Long, end: Long, clip: FormattedText): Boolean = grouped {
+        if (clip.text.isEmpty()) return@grouped refuse("Nothing to paste")
+        val placed = if (end > start) replaceText(start, end, clip.text) else insertText(start, clip.text)
+        placed && clip.spans.all { s ->
+            val a = start + s.from
+            val b = start + s.to
+            // the paragraph marks of a multi-paragraph paste carry no text formatting
+            if (clip.text.substring(s.from, s.to).all { it == '\n' }) return@all true
+            (isBold(a) == s.bold || setBold(a, b, s.bold)) &&
+                (isItalic(a) == s.italic || setItalic(a, b, s.italic)) &&
+                (isUnderlined(a) == s.underline || setUnderline(a, b, s.underline)) &&
+                (colorAt(a) == s.rgb || setTextColor(a, b, "%06X".format(s.rgb))) &&
+                (Math.abs(sizeAt(a) - s.sizePt) < 0.01f || setFontSize(a, b, s.sizePt)) &&
+                (s.highlight == null || highlight(a, b, "%06X".format(s.highlight and 0xFFFFFF)))
+        }
+    }
+
+    private fun colorAt(offset: Long): Int {
+        val doc = word.getDocument()
+        val para = doc.getParagraph(offset) ?: return -1
+        val leaf = doc.getLeaf(offset) ?: return -1
+        return am.getFontColor(para.getAttribute(), leaf.getAttribute()) and 0xFFFFFF
+    }
+
+    private fun sizeAt(offset: Long): Float {
+        val doc = word.getDocument()
+        val para = doc.getParagraph(offset) ?: return 0f
+        val leaf = doc.getLeaf(offset) ?: return 0f
+        return am.getFontSizeF(para.getAttribute(), leaf.getAttribute())
     }
 
     /** Runs [block] as one undo step, whatever steps it records. */

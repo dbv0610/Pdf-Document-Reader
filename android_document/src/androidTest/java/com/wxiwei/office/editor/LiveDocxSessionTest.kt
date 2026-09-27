@@ -120,6 +120,45 @@ class LiveDocxSessionTest {
         return out
     }
 
+    /** Copy "MidiConverter parse" with "Midi" bold and "parse" red, paste it elsewhere: formatting kept, one undo, saved. */
+    @Test
+    fun pasteKeepsFormatting() {
+        val source = OpenDocument.copySample("sample.docx", "live_docx_paste_fmt.docx")
+        val saved = OpenDocument.output("live_docx_paste_fmt_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val from = offsetOf(source.absolutePath, "MidiConverter parse")
+            val to = offsetOf(source.absolutePath, "Map mỗi MIDI note")
+            assertTrue(from >= 0 && to > from)
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(onMain { session.setBold(from, from + 4, true) })
+            assertTrue(onMain { session.setTextColor(from + 14, from + 19, "C00000") })
+            val clip = onMain { session.copyFormatted(from, from + 19) }
+            assertEquals("MidiConverter parse", clip.text)
+            // "Map mỗi" moved by nothing: the formatting above changed no text
+            assertTrue(session.lastError?.toString(), onMain { session.pasteFormatted(to, to, clip) })
+            assertEquals("MidiConverter parseMap", modelText(reader, to, 22))
+            assertTrue("pasted bold", bold(reader, to + 1))
+            assertFalse("pasted plain after bold", bold(reader, to + 6))
+            assertEquals(0xC00000, onMain {
+                val doc = (reader.control!!.getView() as Word).getDocument()
+                AttrManage.instance().getFontColor(doc.getParagraph(to + 15)!!.getAttribute(), doc.getLeaf(to + 15)!!.getAttribute()) and 0xFFFFFF
+            })
+            assertFalse("text after the paste keeps its look", bold(reader, to + 20))
+            // one undo takes the whole paste away
+            assertTrue(onMain { session.undo() })
+            assertEquals("Map mỗi MIDI", modelText(reader, to, 12))
+            assertTrue(onMain { session.redo() })
+            assertTrue("redo", bold(reader, to + 1))
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val at = offsetOf(saved.absolutePath, "MidiConverter parseMap")
+            assertTrue("saved", at >= 0)
+            assertTrue("saved bold", bold(reader, at + 1))
+            assertFalse("saved plain", bold(reader, at + 6))
+        }
+    }
+
     /** Cell widths in percent (tcW type="pct", fiftieths of a percent) of a table without a grid. */
     @Test
     fun percentCellWidthsWithoutGrid() {

@@ -257,17 +257,43 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
 
     private val clipboard get() = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
+    /** What was last copied from this document, with its formatting (see [paste]). */
+    private var formattedClip: com.wxiwei.office.editor.docx.LiveDocxSession.FormattedText? = null
+
     private fun copy() {
-        val t = selection()?.let { if (it.selection() != null) it.selectedText() else null }
+        val sel = selection()
+        val range = sel?.selection()
+        val t = if (range != null) sel.selectedText() else null
         if (t.isNullOrEmpty()) return toast("Chọn chữ trước")
+        formattedClip = session()?.copyFormatted(range!!.first, range.last + 1)
         clipboard.setPrimaryClip(ClipData.newPlainText("text", t))
         toast("Đã chép")
     }
 
-    /** Pastes plain text at the caret while typing, else over the selection. */
+    /** The formatted copy when the clipboard still holds its text (nothing else was copied since). */
+    private fun formattedFor(text: String) = formattedClip?.takeIf { it.text.replace('\r', '\n') == text.replace('\r', '\n') }
+
+    /**
+     * Pastes at the caret while typing, else over the selection: text copied from this document
+     * keeps its formatting, other text is pasted plain.
+     */
     private fun paste() {
         val t = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
         if (t.isNullOrEmpty()) return toast("Bộ nhớ tạm trống")
+        val formatted = formattedFor(t)
+        if (formatted != null) {
+            val s = session() ?: return
+            if (base >= 0) {
+                val at = base + typing.selectionStart.coerceAtLeast(0)
+                val until = base + typing.selectionEnd.coerceAtLeast(0)
+                stopTyping()
+                if (!s.pasteFormatted(minOf(at, until), maxOf(at, until), formatted)) return toast(s.lastError?.message ?: "Không dán được")
+                reader.thumbnails?.invalidateAll()
+                startTyping(minOf(at, until) + formatted.text.length)
+                return
+            }
+            return op { e, r -> e.pasteFormatted(r.first, r.last + 1, formatted) }
+        }
         if (base >= 0) {
             // through the typing buffer, so it stays in step with the document
             val at = typing.selectionEnd.coerceAtLeast(0)
