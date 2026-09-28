@@ -103,7 +103,8 @@ class PdfReaderToolsTest {
     private fun menu(scenario: ActivityScenario<ReadPdfActivity>, item: Int) {
         scenario.onActivity { it.findViewById<View>(R.id.icPdfTools).performClick() }
         Thread.sleep(500)
-        onView(withText(s(item))).inRoot(isDialog()).perform(click())
+        // the lower items of the menu are below the fold
+        onView(withText(s(item))).inRoot(isDialog()).perform(androidx.test.espresso.action.ViewActions.scrollTo(), click())
         Thread.sleep(500)
     }
 
@@ -217,6 +218,44 @@ class PdfReaderToolsTest {
             assertTrue("rectangle and note in the file: $subtypes", subtypes.contains(1) && subtypes.contains(13))
         } finally {
             pdfium.closeDocument(doc)
+        }
+    }
+
+    /** Every dialog of the tools menu opens (no text of it is broken), then is closed. */
+    @Test
+    fun everyToolDialogOpens() {
+        launchReader(pdf("tools-dialogs.pdf", 2)) { scenario, _ ->
+            val dialogs = listOf(R.string.pdf_page_numbers, R.string.pdf_watermark, R.string.pdf_compress, R.string.pdf_password,
+                R.string.pdf_flatten, R.string.export_images, R.string.pdf_bookmarks, R.string.pdf_reading_colors)
+            for (item in dialogs) {
+                menu(scenario, item)
+                screenshot("dialog_" + context.resources.getResourceEntryName(item))
+                androidx.test.espresso.Espresso.pressBack()
+                Thread.sleep(300)
+            }
+        }
+    }
+
+    @Test
+    fun selectionHandlesShow() {
+        launchReader(pdf("tools-select.pdf", 1)) { scenario, view ->
+            var page = android.graphics.RectF()
+            scenario.onActivity { page = view.pageViewRect(0)!! }
+            // a long press on a word of the second line
+            val x = page.left + page.width() * 0.3f; val y = page.top + page.height() * (130f / 842f)
+            val down = SystemClock.uptimeMillis()
+            scenario.onActivity { a ->
+                val loc = IntArray(2); view.getLocationInWindow(loc)
+                a.window.decorView.dispatchTouchEvent(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x + loc[0], y + loc[1], 0))
+            }
+            Thread.sleep(900)
+            scenario.onActivity { a ->
+                val loc = IntArray(2); view.getLocationInWindow(loc)
+                a.window.decorView.dispatchTouchEvent(MotionEvent.obtain(down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x + loc[0], y + loc[1], 0))
+            }
+            Thread.sleep(600)
+            scenario.onActivity { assertTrue("text selected", view.hasTextSelection()) }
+            screenshot("11_selection_handles")
         }
     }
 

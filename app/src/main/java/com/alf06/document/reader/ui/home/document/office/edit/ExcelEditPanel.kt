@@ -441,7 +441,7 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         val ss = excel.getSpreadsheet() ?: return false
         val sv = ss.getSheetView() ?: return false
         val p = sheetPoint(event.rawX, event.rawY)
-        val selected = sv.selectedShape?.takeIf { session.isAddedPicture(it) && sv.getCurrentSheet()?.getShapes()?.contains(it) == true }
+        val selected = sv.selectedShape?.takeIf { session.isMovablePicture(it) && sv.getCurrentSheet()?.getShapes()?.contains(it) == true }
         val box = selected?.let { sv.shapeRect(it) }
         val reach = dp(24).toFloat()
         // corners: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right
@@ -449,7 +449,7 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             listOf(b.left to b.top, b.right to b.top, b.left to b.bottom, b.right to b.bottom)
                 .indexOfFirst { (x, y) -> Math.hypot((p.x - x).toDouble(), (p.y - y).toDouble()) <= reach }
         } ?: -1
-        val shape = if (corner >= 0) selected!! else sv.shapeAt(p.x, p.y) { session.isAddedPicture(it) }
+        val shape = if (corner >= 0) selected!! else sv.shapeAt(p.x, p.y) { session.isMovablePicture(it) }
         if (shape == null) {
             if (sv.selectedShape != null) { sv.selectedShape = null; ss.postInvalidate() }
             return false
@@ -493,7 +493,7 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     /** "Xóa ô": the selected picture, or else the cell. */
     private fun deleteSelection() {
         val sv = excel.getSpreadsheet()?.getSheetView()
-        val picture = sv?.selectedShape?.takeIf { session.isAddedPicture(it) }
+        val picture = sv?.selectedShape?.takeIf { session.isMovablePicture(it) }
         if (picture != null) {
             if (session.removePicture(picture)) sv.selectedShape = null
             else toast(session.lastError?.message ?: "Không xóa được ảnh")

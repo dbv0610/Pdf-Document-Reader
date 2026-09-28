@@ -74,7 +74,8 @@ internal class PdfReaderTools(
     private val prefs = PdfReadingPrefs(activity)
     private val signatures = SignatureStore(activity)
     private val runner = PdfTaskRunner(activity)
-    private fun str(id: Int, vararg args: Any) = activity.getString(id, *args)
+    // without arguments the text is not formatted: "%1$d" in it stays as it is (the page numbers template)
+    private fun str(id: Int, vararg args: Any): String = if (args.isEmpty()) activity.getString(id) else activity.getString(id, *args)
     private fun toast(text: CharSequence) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), activity.resources.displayMetrics).toInt()
 

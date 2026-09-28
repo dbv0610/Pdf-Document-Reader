@@ -408,8 +408,10 @@ class SheetEditSessionTest {
             shapes0 = onMain { sheet.getShapeCount() }
             assertTrue(onMain { session.addPicture(0, 2, 1, png, 120, 80) })
             val shape = onMain { sheet.getShape(shapes0)!! }
-            assertTrue("added here", session.isAddedPicture(shape))
-            assertFalse("file shapes stay put", shapes0 > 0 && session.isAddedPicture(onMain { sheet.getShape(0) }))
+            assertTrue("added here", session.isMovablePicture(shape))
+            // charts of the file are not pictures: they stay put
+            val charts = onMain { sheet.getShapes().filter { it !is com.wxiwei.office.common.shape.PictureShape } }
+            assertTrue(charts.none { session.isMovablePicture(it) })
             val start = onMain { shape.bounds!!.let { com.wxiwei.office.java.awt.Rectangle(it.x, it.y, it.width, it.height) } }
             // into column D + 7 px, row 6 + 5 px, twice as big
             val x = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueX(sheet, 3, 7).toInt() }
@@ -438,6 +440,110 @@ class SheetEditSessionTest {
         OpenDocument.open(saved) { reader ->
             loadAll(reader)
             assertEquals("read back", shapes0 + 1, onMain { book(reader).getSheet(0)!!.getShapeCount() })
+        }
+    }
+
+    /**
+     * A picture added, moved and saved, then the file opened again: the picture can be selected,
+     * moved again and saved (by its drawing id); a picture that came with the file is deleted.
+     */
+    @Test
+    fun movePictureAfterReopen() {
+        val source = OpenDocument.copySample("sample.xlsx", "picture_reopen_source.xlsx")
+        val first = OpenDocument.output("picture_reopen_1.xlsx")
+        val second = OpenDocument.output("picture_reopen_2.xlsx")
+        val png = java.io.File(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "sheet_pic_reopen.png")
+        android.graphics.Bitmap.createBitmap(60, 40, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.GREEN) }
+            .let { b -> png.outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) } }
+        fun pictures(book: Workbook) = book.getSheet(0)!!.getShapes().filterIsInstance<com.wxiwei.office.common.shape.PictureShape>()
+        var filePictures = 0
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            filePictures = onMain { pictures(book(reader)).size }
+            assertTrue(onMain { session.addPicture(0, 2, 1, png, 120, 80) })
+            val shape = onMain { pictures(book(reader)).last() }
+            val x = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueX(book(reader).getSheet(0)!!, 3, 0).toInt() }
+            val y = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueY(book(reader).getSheet(0)!!, 6, 0).toInt() }
+            assertTrue(onMain { session.setPictureBounds(shape, com.wxiwei.office.java.awt.Rectangle(x, y, 120, 80)) })
+            assertTrue(onMain { session.save(first) } is EditResult.Ok)
+        }
+        var movedTo = 0 to 0
+        OpenDocument.open(first) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, first) }
+            val all = onMain { pictures(book(reader)) }
+            assertEquals(filePictures + 1, all.size)
+            // every picture of the file can be picked up now
+            assertTrue(all.all { onMain { session.isMovablePicture(it) } })
+            val ours = all.last()
+            val sheet = onMain { book(reader).getSheet(0)!! }
+            val x = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueX(sheet, 5, 10).toInt() }
+            val y = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueY(sheet, 12, 4).toInt() }
+            movedTo = 12 to 5
+            assertTrue(onMain { session.setPictureBounds(ours, com.wxiwei.office.java.awt.Rectangle(x, y, 200, 100)) })
+            if (filePictures > 0) assertTrue(onMain { session.removePicture(all.first()) })
+            assertTrue(onMain { session.save(second) } is EditResult.Ok)
+        }
+        OpenDocument.open(second) { reader ->
+            loadAll(reader)
+            val all = onMain { pictures(book(reader)) }
+            assertEquals("the file's first picture deleted", filePictures + 1 - (if (filePictures > 0) 1 else 0), all.size)
+            val sheet = onMain { book(reader).getSheet(0)!! }
+            val b = onMain { all.last().bounds!! }
+            val x = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueX(sheet, movedTo.second, 10) }
+            val y = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueY(sheet, movedTo.first, 4) }
+            assertEquals("moved again: $b", x, b.x.toFloat(), 2f)
+            assertEquals("moved again: $b", y, b.y.toFloat(), 2f)
+            assertEquals(200f, b.width.toFloat(), 2f)
+        }
+    }
+
+    /** The picture that came with the file (sheet 3): moved and saved, then deleted and saved; undo brings it back. */
+    @Test
+    fun moveAndDeleteFilePicture() {
+        val source = OpenDocument.copySample("sample.xlsx", "file_picture_source.xlsx")
+        val moved = OpenDocument.output("file_picture_moved.xlsx")
+        val deleted = OpenDocument.output("file_picture_deleted.xlsx")
+        fun pictures(book: Workbook) = book.getSheet(2)!!.getShapes().filterIsInstance<com.wxiwei.office.common.shape.PictureShape>()
+        var size = 0 to 0
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            val pic = onMain { pictures(book(reader)) }.single()
+            assertTrue(onMain { session.isMovablePicture(pic) })
+            size = onMain { pic.bounds!!.width to pic.bounds!!.height }
+            val sheet = onMain { book(reader).getSheet(2)!! }
+            val x = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueX(sheet, 7, 0).toInt() }
+            val y = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueY(sheet, 20, 0).toInt() }
+            assertTrue(onMain { session.setPictureBounds(pic, com.wxiwei.office.java.awt.Rectangle(x, y, size.first, size.second)) })
+            assertTrue(onMain { session.save(moved) } is EditResult.Ok)
+        }
+        java.util.zip.ZipFile(moved).use { z ->
+            val xml = z.getInputStream(z.getEntry("xl/drawings/drawing2.xml")).readBytes().toString(Charsets.UTF_8)
+            val from = Regex("<xdr:from>(.*?)</xdr:from>").findAll(xml).map { it.groupValues[1] }.toList()
+            // rows 21..108 of this sheet are hidden: the anchor names the first row shown there
+            assertTrue("anchored in column H: $from", from.single().contains("<xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff>"))
+            assertFalse("moved from row 119", from.single().contains("<xdr:row>118</xdr:row>"))
+        }
+        OpenDocument.open(moved) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, moved) }
+            val pic = onMain { pictures(book(reader)) }.single()
+            val sheet = onMain { book(reader).getSheet(2)!! }
+            assertEquals("kept its place", onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueX(sheet, 7, 0) }, pic.bounds!!.x.toFloat(), 2f)
+            assertEquals("kept its place", onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueY(sheet, 20, 0) }, pic.bounds!!.y.toFloat(), 2f)
+            assertEquals("kept its size", size.first.toFloat(), pic.bounds!!.width.toFloat(), 2f)
+            assertTrue(onMain { session.removePicture(pic) })
+            assertTrue(onMain { pictures(book(reader)) }.isEmpty())
+            assertTrue(onMain { session.undo() })
+            assertEquals("back after undo", 1, onMain { pictures(book(reader)) }.size)
+            assertTrue(onMain { session.redo() })
+            assertTrue(onMain { session.save(deleted) } is EditResult.Ok)
+        }
+        OpenDocument.open(deleted) { reader ->
+            loadAll(reader)
+            assertTrue("deleted for good", onMain { pictures(book(reader)) }.isEmpty())
         }
     }
 

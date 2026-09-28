@@ -72,7 +72,25 @@ class SheetEditSession internal constructor(
 
     fun canUndo() = undoStack.isNotEmpty()
     fun canRedo() = redoStack.isNotEmpty()
-    fun hasChanges() = undoStack.isNotEmpty() || sizes.isNotEmpty() || dirty.isNotEmpty() || formats.values.any { it.isNotEmpty() } || structure.isNotEmpty() || addedSheets.isNotEmpty() || pictures.isNotEmpty()
+    fun hasChanges() = undoStack.isNotEmpty() || sizes.isNotEmpty() || dirty.isNotEmpty() || formats.values.any { it.isNotEmpty() } || structure.isNotEmpty() || addedSheets.isNotEmpty() || pictures.isNotEmpty() ||
+        movedPictures.isNotEmpty() || deletedPictures.isNotEmpty()
+
+    /** Pictures of the file deleted, or moved (to where they are now; a move undone writes the same place back). */
+    private fun pictureEdits(): List<PictureEdit> {
+        val edits = deletedPictures.map { (sheet, id) -> PictureEdit(sheet, id, delete = true) }.toMutableList()
+        for ((sheetIndex, shape) in movedPictures) {
+            val sheet = book.getSheet(sheetIndex) ?: continue
+            val id = sheet.pictureId(shape) ?: continue
+            if (sheetIndex to id in deletedPictures) continue
+            val b = shape.bounds ?: continue
+            val (r1, dy1, c1, dx1) = cellOffset(sheet, b.x, b.y)
+            val (r2, dy2, c2, dx2) = cellOffset(sheet, b.x + b.width, b.y + b.height)
+            edits += PictureEdit(sheetIndex, id,
+                from = CellPoint(r1, c1, dx1 * EMU_PER_PX, dy1 * EMU_PER_PX), to = CellPoint(r2, c2, dx2 * EMU_PER_PX, dy2 * EMU_PER_PX),
+                xEmu = b.x * EMU_PER_PX, yEmu = b.y * EMU_PER_PX, cxEmu = b.width * EMU_PER_PX, cyEmu = b.height * EMU_PER_PX)
+        }
+        return edits
+    }
 
     /** Sheets added in this session (after the file's last one), in order: save writes them first. */
     private val addedSheets = ArrayList<Sheet>()
@@ -434,6 +452,9 @@ class SheetEditSession internal constructor(
     private class NewPicture(val sheet: Int, val shape: com.wxiwei.office.common.shape.PictureShape, val file: File)
     /** Pictures added in this session, in order: [save] writes them into the sheets' drawings where they are then. */
     private val pictures = ArrayList<NewPicture>()
+    /** Pictures of the file moved or resized ([save] writes where they are then), or deleted, by sheet. */
+    private val movedPictures = LinkedHashSet<Pair<Int, IShape>>()
+    private val deletedPictures = LinkedHashSet<Pair<Int, Int>>()
 
     /**
      * Puts [image] (png, jpeg, gif, bmp) on the sheet with its top-left corner at the cell, [widthPx]
@@ -455,6 +476,8 @@ class SheetEditSession internal constructor(
             setWidth(widthPx); setHeight(heightPx)
         }
         shape.bounds = com.wxiwei.office.ss.util.ModelUtil.instance().getCellAnchor(sheet, anchor)
+        // its id in the drawing from now on: saved with it, it stays movable in the next session
+        sheet.setPictureId(shape, sheet.maxDrawingId + 1)
         val added = NewPicture(sheetIndex, shape, image)
         fun add() { sheet.appendShapes(shape); pictures.add(added); repaint() }
         fun remove() { sheet.removeShape(shape); pictures.remove(added); repaint() }
@@ -464,30 +487,57 @@ class SheetEditSession internal constructor(
         return true
     }
 
-    /** True for a picture added in this session: it can be moved, resized and removed. */
-    fun isAddedPicture(shape: IShape?): Boolean = shape != null && pictures.any { it.shape === shape }
+    /** The sheet index of a picture that can be moved, resized and deleted (added now, or of the file's drawing), or -1. */
+    private fun pictureSheet(shape: IShape?): Int {
+        if (shape == null) return -1
+        pictures.firstOrNull { it.shape === shape }?.let { return it.sheet }
+        for (i in 0 until book.getSheetCount()) {
+            val sheet = book.getSheet(i) ?: continue
+            if (sheet.pictureId(shape) != null && sheet.indexOfShape(shape) >= 0) return i
+        }
+        return -1
+    }
 
-    /** Moves and/or resizes a picture added in this session to [bounds] (sheet pixels at 100%); one undoable step. */
+    /** True for a picture that can be moved, resized and deleted: added in this session, or a picture of the file. */
+    fun isMovablePicture(shape: IShape?): Boolean = pictureSheet(shape) >= 0
+
+    /** Moves and/or resizes a picture to [bounds] (sheet pixels at 100%); one undoable step. */
     fun setPictureBounds(shape: IShape, bounds: Rectangle): Boolean {
-        if (!isAddedPicture(shape)) return fail(Reason.INVALID_ARGUMENT, "Not a picture added in this session")
+        val sheetIndex = pictureSheet(shape)
+        if (sheetIndex < 0) return fail(Reason.INVALID_ARGUMENT, "Not a picture that can be moved")
         if (bounds.width <= 0 || bounds.height <= 0) return fail(Reason.INVALID_ARGUMENT, "Bad picture size")
         val before = shape.bounds!!.let { Rectangle(it.x, it.y, it.width, it.height) }
         val after = Rectangle(maxOf(0, bounds.x), maxOf(0, bounds.y), bounds.width, bounds.height)
         if (before == after) { lastError = null; return true }
         fun place(r: Rectangle) { shape.bounds = Rectangle(r.x, r.y, r.width, r.height); repaint() }
+        if (pictures.none { it.shape === shape }) movedPictures += sheetIndex to shape
         place(after)
         undoStack.add(Step.Structure(apply = { place(after) }, revert = { place(before) })); redoStack.clear()
         lastError = null
         return true
     }
 
-    /** Takes a picture added in this session off its sheet; one undoable step. */
+    /** Takes a picture off its sheet; one undoable step. */
     fun removePicture(shape: IShape): Boolean {
-        val added = pictures.firstOrNull { it.shape === shape } ?: return fail(Reason.INVALID_ARGUMENT, "Not a picture added in this session")
+        val added = pictures.firstOrNull { it.shape === shape } ?: return removeFilePicture(shape)
         val sheet = book.getSheet(added.sheet) ?: return fail(Reason.NOT_FOUND, "Sheet ${added.sheet} not found")
         val at = pictures.indexOf(added)
         fun remove() { sheet.removeShape(shape); pictures.remove(added); repaint() }
         fun add() { sheet.appendShapes(shape); pictures.add(at.coerceAtMost(pictures.size), added); repaint() }
+        remove()
+        undoStack.add(Step.Structure(apply = { remove() }, revert = { add() })); redoStack.clear()
+        lastError = null
+        return true
+    }
+
+    /** A picture of the file taken off: [save] deletes its anchor. */
+    private fun removeFilePicture(shape: IShape): Boolean {
+        val sheetIndex = pictureSheet(shape)
+        val sheet = book.getSheet(sheetIndex) ?: return fail(Reason.INVALID_ARGUMENT, "Not a picture that can be deleted")
+        val id = sheet.pictureId(shape) ?: return fail(Reason.INVALID_ARGUMENT, "Not a picture that can be deleted")
+        val at = sheet.indexOfShape(shape)
+        fun remove() { sheet.removeShape(shape); deletedPictures += sheetIndex to id; repaint() }
+        fun add() { sheet.insertShape(at, shape); deletedPictures -= sheetIndex to id; repaint() }
         remove()
         undoStack.add(Step.Structure(apply = { remove() }, revert = { add() })); redoStack.clear()
         lastError = null
@@ -699,8 +749,9 @@ class SheetEditSession internal constructor(
                     val sheet = book.getSheet(p.sheet) ?: return@mapNotNull null
                     val b = p.shape.bounds ?: return@mapNotNull null
                     val (row, dy, col, dx) = cellOffset(sheet, b.x, b.y)
-                    PictureWrite(p.sheet, row, col, b.width * EMU_PER_PX, b.height * EMU_PER_PX, p.file, dx * EMU_PER_PX, dy * EMU_PER_PX)
-                })
+                    PictureWrite(p.sheet, row, col, b.width * EMU_PER_PX, b.height * EMU_PER_PX, p.file, dx * EMU_PER_PX, dy * EMU_PER_PX,
+                        id = sheet.pictureId(p.shape) ?: 0)
+                }, pictureEdits())
         return if (result is EditResult.Ok) result.copy(warnings = warnings) else result
     }
 

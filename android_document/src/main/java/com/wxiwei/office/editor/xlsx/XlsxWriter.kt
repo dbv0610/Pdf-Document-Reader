@@ -29,9 +29,23 @@ data class StructureWrite(val sheetIndex: Int, val rows: Boolean, val at: Int, v
 
 private val XDR: com.wxiwei.office.fc.dom4j.Namespace = com.wxiwei.office.fc.dom4j.Namespace.get("xdr", "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing")!!
 
-/** A picture put on a sheet: top-left corner [colOffEmu], [rowOffEmu] into cell [row], [col], [cxEmu] x [cyEmu] in size. */
+/**
+ * A picture put on a sheet: top-left corner [colOffEmu], [rowOffEmu] into cell [row], [col],
+ * [cxEmu] x [cyEmu] in size; [id] its cNvPr id (0: the next free one).
+ */
 data class PictureWrite(val sheetIndex: Int, val row: Int, val col: Int, val cxEmu: Long, val cyEmu: Long, val image: File,
-                        val colOffEmu: Long = 0, val rowOffEmu: Long = 0)
+                        val colOffEmu: Long = 0, val rowOffEmu: Long = 0, val id: Int = 0)
+
+/** A corner of a picture: [offEmu] into cell [row], [col] (column offset first). */
+data class CellPoint(val row: Int, val col: Int, val colOffEmu: Long, val rowOffEmu: Long)
+
+/**
+ * A picture of the sheet's drawing, found by its cNvPr [id]: [delete]d, or moved and resized to
+ * [from] - [to] ([cxEmu] x [cyEmu]); its anchor keeps its kind (two cells, one cell, absolute).
+ */
+data class PictureEdit(val sheetIndex: Int, val id: Int, val delete: Boolean = false,
+                       val from: CellPoint? = null, val to: CellPoint? = null,
+                       val xEmu: Long = 0, val yEmu: Long = 0, val cxEmu: Long = 0, val cyEmu: Long = 0)
 
 /** A column width in characters (Excel's unit) or a row height in points, at final coordinates. */
 data class SizeWrite(val sheetIndex: Int, val rows: Boolean, val index: Int, val size: Double)
@@ -50,7 +64,7 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
     fun save(target: File, writes: Collection<CellWrite>, styles: Collection<StyleWrite> = emptyList(),
              structure: List<StructureWrite> = emptyList(), sizes: List<SizeWrite> = emptyList(),
              newSheets: List<String> = emptyList(), merges: Map<Int, List<String>> = emptyMap(),
-             pictures: List<PictureWrite> = emptyList()): EditResult {
+             pictures: List<PictureWrite> = emptyList(), pictureEdits: List<PictureEdit> = emptyList()): EditResult {
         if (!source.extension.equals("xlsx", true) && !source.extension.equals("xlsm", true))
             return EditResult.Error(Reason.UNSUPPORTED_FORMAT, "Only .xlsx/.xlsm can be saved")
         if (source.canonicalFile == target.canonicalFile)
@@ -69,6 +83,11 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
                     val data = root.firstChild(SS, "sheetData") ?: error("Missing sheetData in $part")
                     rowElement(data, w.index).addAttribute("ht", sizeText(w.size))!!.addAttribute("customHeight", "1")
                 } else columnWidth(root, w.index, w.size)
+            }
+            // pictures of the file first: new ones only add anchors after them
+            for (e in pictureEdits) {
+                val part = parts.getOrNull(e.sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet ${e.sheetIndex} not found")
+                editPicture(pkg, part, e)
             }
             for (p in pictures) {
                 val part = parts.getOrNull(p.sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet ${p.sheetIndex} not found")
@@ -135,7 +154,7 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
         if (root.getNamespaceForURI(R.uRI) == null) root.addNamespace("r", R.uRI)
         fun all(e: Element): Sequence<Element> = sequenceOf(e) + e.elements()!!.filterIsInstance<Element>().asSequence().flatMap { all(it) }
         val ids = all(root).mapNotNull { e -> if (e.name == "cNvPr") e.attributeValue("id")?.toIntOrNull() else null }.toList()
-        val id = (ids.maxOrNull() ?: 1) + 1
+        val id = if (p.id > 0 && p.id !in ids) p.id else (ids.maxOrNull() ?: 1) + 1
         val a = com.wxiwei.office.editor.ooxml.A
         val anchor = root.addElement(QName("oneCellAnchor", XDR))!!
         anchor.addElement(QName("from", XDR))!!.apply {
@@ -162,6 +181,39 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             addElement(QName("prstGeom", a))!!.addAttribute("prst", "rect")!!.addElement(QName("avLst", a))
         }
         anchor.addElement(QName("clientData", XDR))
+    }
+
+    /** Moves, resizes or deletes the anchor holding picture [e].id; a picture not found is left alone. */
+    private fun editPicture(pkg: OoxmlPackage, sheetPart: String, e: PictureEdit) {
+        val rel = pkg.relationships(sheetPart).firstOrNull { it.type.endsWith("/drawing") && it.targetMode == null } ?: return
+        val root = pkg.xml(pkg.resolveTarget(sheetPart, rel.target)).rootElement!!
+        fun all(el: Element): Sequence<Element> = sequenceOf(el) + el.elements()!!.filterIsInstance<Element>().asSequence().flatMap { all(it) }
+        val anchor = root.elements()!!.filterIsInstance<Element>().firstOrNull { a ->
+            a.name in setOf("twoCellAnchor", "oneCellAnchor", "absoluteAnchor") &&
+                all(a).any { it.name == "cNvPr" && it.parent?.name == "nvPicPr" && it.attributeValue("id")?.toIntOrNull() == e.id }
+        } ?: return
+        if (e.delete) { root.remove(anchor); return }
+        fun point(el: Element?, p: CellPoint?) {
+            if (el == null || p == null) return
+            el.element("col")?.setText(p.col.toString())
+            el.element("colOff")?.setText(p.colOffEmu.toString())
+            el.element("row")?.setText(p.row.toString())
+            el.element("rowOff")?.setText(p.rowOffEmu.toString())
+        }
+        when (anchor.name) {
+            "twoCellAnchor" -> { point(anchor.element("from"), e.from); point(anchor.element("to"), e.to) }
+            "oneCellAnchor" -> {
+                point(anchor.element("from"), e.from)
+                anchor.element("ext")?.addAttribute("cx", e.cxEmu.toString())?.addAttribute("cy", e.cyEmu.toString())
+            }
+            else -> {
+                anchor.element("pos")?.addAttribute("x", e.xEmu.toString())?.addAttribute("y", e.yEmu.toString())
+                anchor.element("ext")?.addAttribute("cx", e.cxEmu.toString())?.addAttribute("cy", e.cyEmu.toString())
+            }
+        }
+        // the picture's own size follows (readers use the anchor; some look here)
+        all(anchor).firstOrNull { it.name == "xfrm" && it.parent?.name == "spPr" }?.element("ext")
+            ?.addAttribute("cx", e.cxEmu.toString())?.addAttribute("cy", e.cyEmu.toString())
     }
 
     /** Replaces the worksheet's `<mergeCells>` with [refs] ("A1:C3"), in its place in CT_Worksheet order. */

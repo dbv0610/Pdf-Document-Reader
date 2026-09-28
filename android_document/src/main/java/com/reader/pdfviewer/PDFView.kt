@@ -235,6 +235,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     var preloadSearchText = true
 
     private val selectionHandlePaint: Paint
+    private val selectionHandlePath = Path()
 
     /**
      * Paint object for drawing debug stuff
@@ -269,7 +270,6 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
      */
     private var selectionStartHandleDrawable: Drawable? = null
     private var selectionEndHandleDrawable: Drawable? = null
-    private var selectionHandleDrawablesLoaded = false
     private var tintSelectionHandles = true
 
     /**
@@ -484,6 +484,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         magnifierBorderPaint.color = DEFAULT_MAGNIFIER_BORDER_COLOR
         selectionHandlePaint = Paint()
         selectionHandlePaint.style = Paint.Style.FILL
+        selectionHandlePaint.isAntiAlias = true
         selectionHandlePaint.color = selectionHandleColor
         debugPaint = Paint()
         debugPaint.style = Paint.Style.STROKE
@@ -1261,12 +1262,12 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
 
     /**
      * Draw a handle hanging below the text at ([x], [bottom]) in document coordinates, like Android text selection:
-     * the start handle points up-right to the first character, the end handle up-left to the last one.
+     * a drop whose point touches the text, up-right to the first character for the start handle, up-left to the
+     * last one for the end handle. Drawables given with [setSelectionHandleDrawables] are used instead.
      *
      * @return the touch area of the handle in view coordinates
      */
     private fun drawSelectionHandle(canvas: Canvas, x: Float, bottom: Float, isStart: Boolean): RectF {
-        ensureSelectionHandleDrawables()
         val drawable = if (isStart) selectionStartHandleDrawable else selectionEndHandleDrawable
         val minTouchSize = Util.getDP(context, SELECTION_HANDLE_MIN_TOUCH_DP).toFloat()
         val bounds: RectF
@@ -1281,11 +1282,14 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             drawable.draw(canvas)
             bounds = RectF(drawable.bounds)
         } else {
-            val radius = SELECTION_HANDLE_RADIUS
-            val centerX = if (isStart) x - radius else x + radius
-            val centerY = bottom + radius
-            canvas.drawCircle(centerX, centerY, radius, selectionHandlePaint)
-            bounds = RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius)
+            // a circle whose corner toward the text is square: the point of the drop
+            val r = Util.getDP(context, SELECTION_HANDLE_RADIUS_DP).toFloat()
+            val left = if (isStart) x - 2 * r else x
+            bounds = RectF(left, bottom, left + 2 * r, bottom + 2 * r)
+            val radii = if (isStart) floatArrayOf(r, r, 0f, 0f, r, r, r, r) else floatArrayOf(0f, 0f, r, r, r, r, r, r)
+            selectionHandlePath.reset()
+            selectionHandlePath.addRoundRect(bounds, radii, Path.Direction.CW)
+            canvas.drawPath(selectionHandlePath, selectionHandlePaint)
         }
         bounds.offset(currentXOffset, currentYOffset)
         // Keep a comfortable touch target even for small drawables
@@ -1293,32 +1297,6 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         val extraY = max(0f, (minTouchSize - bounds.height()) / 2)
         bounds.inset(-extraX, -extraY)
         return bounds
-    }
-
-    private fun ensureSelectionHandleDrawables() {
-        if (selectionHandleDrawablesLoaded) {
-            return
-        }
-        selectionHandleDrawablesLoaded = true
-        if (selectionStartHandleDrawable == null) {
-            selectionStartHandleDrawable = loadThemeDrawable(android.R.attr.textSelectHandleLeft)
-        }
-        if (selectionEndHandleDrawable == null) {
-            selectionEndHandleDrawable = loadThemeDrawable(android.R.attr.textSelectHandleRight)
-        }
-        applySelectionHandleTint()
-    }
-
-    private fun loadThemeDrawable(attr: Int): Drawable? {
-        val attributes = context.obtainStyledAttributes(intArrayOf(attr))
-        try {
-            return attributes.getDrawable(0)?.mutate()
-        } catch (e: Exception) {
-            Log.w(TAG, "Cannot load selection handle drawable", e)
-            return null
-        } finally {
-            attributes.recycle()
-        }
     }
 
     private fun applySelectionHandleTint() {
@@ -1904,7 +1882,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
      * Use custom drawables for the selection handles. They hang below the text like Android handles:
      * the start drawable points to the first character from its top at 3/4 of its width,
      * the end drawable from its top at 1/4 of its width.
-     * A null drawable keeps the Android handle of the theme for that side.
+     * A null drawable draws the default drop handle for that side.
      *
      * @param tint whether to tint the drawables with the selection handle color
      */
@@ -1912,7 +1890,6 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         selectionStartHandleDrawable = start?.mutate()
         selectionEndHandleDrawable = end?.mutate()
         tintSelectionHandles = tint
-        selectionHandleDrawablesLoaded = false
         redraw()
     }
 
@@ -4264,7 +4241,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         private val INVALID_CHAR_INDEX = -1
         private const val MAX_FALLBACK_CHAR_DISTANCE_SQ = 400f
         private const val MAX_FALLBACK_DEVICE_DISTANCE_SQ = 900f
-        private const val SELECTION_HANDLE_RADIUS = 40f
+        private const val SELECTION_HANDLE_RADIUS_DP = 13
         private const val SELECTION_HANDLE_MIN_TOUCH_DP = 48
 
         const val DEFAULT_UNDERLINE_COLOR: Int = 0xFF1E88E5.toInt()

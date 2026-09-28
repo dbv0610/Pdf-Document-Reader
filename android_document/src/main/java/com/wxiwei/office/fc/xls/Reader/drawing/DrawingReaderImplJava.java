@@ -166,6 +166,9 @@ public class DrawingReaderImplJava
             return;
         }
         
+        // every id in the drawing, so a picture added later gets a new one
+        noteDrawingIds(root);
+
         @ SuppressWarnings("unchecked")
         Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) root.elementIterator();
         Element shapeElement;
@@ -192,6 +195,24 @@ public class DrawingReaderImplJava
         }
     }    
     
+    private void noteDrawingIds(Element e)
+    {
+        if ("cNvPr".equals(e.getName()))
+        {
+            try
+            {
+                sheet.noteDrawingId(Integer.parseInt(e.attributeValue("id")));
+            }
+            catch (Exception ignored)
+            {
+            }
+        }
+        for (Iterator< ? > it = e.elementIterator(); it.hasNext();)
+        {
+            noteDrawingIds((Element)it.next());
+        }
+    }
+
     /**
      * 
      * @param cellAnchorElement
@@ -823,6 +844,19 @@ public class DrawingReaderImplJava
                     if(parent == null)
                     {
                         sheet.appendShapes(shape);
+                        // a picture of its own anchor: edit mode can move or delete it by this id
+                        Element nv = sp.element("nvPicPr");
+                        Element pr = nv != null ? nv.element("cNvPr") : null;
+                        if (pr != null)
+                        {
+                            try
+                            {
+                                sheet.setPictureId(shape, Integer.parseInt(pr.attributeValue("id")));
+                            }
+                            catch (Exception ignored)
+                            {
+                            }
+                        }
                     }
                     else
                     {

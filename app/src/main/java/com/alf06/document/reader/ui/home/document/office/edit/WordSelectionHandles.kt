@@ -4,13 +4,16 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
+import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 
 /**
- * Two drag handles under the ends of the Word selection. Dragging one moves that end to the text
+ * Two drag handles under the ends of the Word selection, drops like Android's: the start one hangs
+ * left of the first character, the end one right of the last, their point on the text. Dragging one moves that end to the text
  * under the finger. Touches away from the handles pass through to the document.
  *
  * [range] is the selection (end exclusive), [caret] the caret rectangle of an offset in the
@@ -31,7 +34,7 @@ internal class WordSelectionHandles(
     private var downX = 0f
     private var downY = 0f
     private val density = context.resources.displayMetrics.density
-    private val radius = 12 * density
+    private val radius = 13 * density
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1A73E8.toInt() }
     // handle tips (the text line bottom) in this view's coordinates, or null when not shown
     private var startTip: Pair<Float, Float>? = null
@@ -69,11 +72,12 @@ internal class WordSelectionHandles(
         }
     }
 
-    private fun near(tip: Pair<Float, Float>?, x: Float, y: Float): Boolean {
+    private fun near(tip: Pair<Float, Float>?, start: Boolean, x: Float, y: Float): Boolean {
         tip ?: return false
-        // the grab area is the knob below the tip, generously sized for a finger
+        // the grab area is the drop below the tip, generously sized for a finger
+        val cx = if (start) tip.first - radius else tip.first + radius
         val cy = tip.second + radius
-        return Math.hypot((x - tip.first).toDouble(), (y - cy).toDouble()) <= radius * 3
+        return Math.hypot((x - cx).toDouble(), (y - cy).toDouble()) <= radius * 2.5
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -81,8 +85,8 @@ internal class WordSelectionHandles(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 dragging = when {
-                    near(endTip, event.x, event.y) -> 2
-                    near(startTip, event.x, event.y) -> 1
+                    near(endTip, false, event.x, event.y) -> 2
+                    near(startTip, true, event.x, event.y) -> 1
                     else -> 0
                 }
                 if (dragging != 0) parent?.requestDisallowInterceptTouchEvent(true)
@@ -114,11 +118,20 @@ internal class WordSelectionHandles(
         return false
     }
 
+    private val drop = Path()
+    private val box = RectF()
+
     override fun onDraw(canvas: Canvas) {
-        for (tip in listOf(startTip, endTip)) {
+        for ((tip, start) in listOf(startTip to true, endTip to false)) {
             tip ?: continue
-            canvas.drawRect(tip.first - density, tip.second - lineHeight, tip.first + density, tip.second + radius, paint)
-            canvas.drawCircle(tip.first, tip.second + radius, radius, paint)
+            // a circle whose corner at the tip is square: the point of the drop
+            val left = if (start) tip.first - 2 * radius else tip.first
+            box.set(left, tip.second, left + 2 * radius, tip.second + 2 * radius)
+            val r = radius
+            val radii = if (start) floatArrayOf(r, r, 0f, 0f, r, r, r, r) else floatArrayOf(0f, 0f, r, r, r, r, r, r)
+            drop.reset()
+            drop.addRoundRect(box, radii, Path.Direction.CW)
+            canvas.drawPath(drop, paint)
         }
     }
 }

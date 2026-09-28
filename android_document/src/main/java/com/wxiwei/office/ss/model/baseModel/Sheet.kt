@@ -787,6 +787,31 @@ open class Sheet {
         this.shapesList!!.remove(shape)
     }
 
+    /** Puts [shape] back at [index] of the drawing order (a deleted picture, undone). */
+    fun insertShape(index: Int, shape: IShape) {
+        this.shapesList!!.add(index.coerceIn(0, shapesList!!.size), shape)
+    }
+
+    fun indexOfShape(shape: IShape): Int = shapesList!!.indexOf(shape)
+
+    /** Pictures of the sheet's drawing by their cNvPr id (unique in the drawing): edit mode can move and delete them. */
+    private val pictureIds = HashMap<IShape, Int>()
+
+    /** The highest cNvPr id of the drawing: a new picture takes the next one. */
+    var maxDrawingId = 1
+        private set
+
+    fun pictureId(shape: IShape): Int? = pictureIds[shape]
+
+    fun setPictureId(shape: IShape, id: Int) {
+        pictureIds[shape] = id
+        noteDrawingId(id)
+    }
+
+    fun noteDrawingId(id: Int) {
+        if (id > maxDrawingId) maxDrawingId = id
+    }
+
     /**
      * get all shapes of this sheet
      */
