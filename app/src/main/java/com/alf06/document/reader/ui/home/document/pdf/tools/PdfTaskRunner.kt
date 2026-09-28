@@ -25,14 +25,18 @@ import java.io.File
  */
 internal class PdfTaskRunner(private val activity: AppCompatActivity) {
 
-    /** Asks the name of the new file, [suffix] added to [sourceName] by default, then runs [task] into it. */
-    fun run(title: String, sourceName: String, suffix: String, task: suspend (output: File, progress: (Int, Int) -> Unit) -> String?) {
+    /**
+     * Asks the name of the new file, [suffix] added to [sourceName] by default, then runs [task] into
+     * it; the file is a PDF unless [extension] says otherwise ("docx").
+     */
+    fun run(title: String, sourceName: String, suffix: String, extension: String = "pdf",
+            task: suspend (output: File, progress: (Int, Int) -> Unit) -> String?) {
         activity.lifecycleScope.launch {
             val dir = File(AppUtils.ensureDocumentDirectory())
             val base = "${sourceName}_$suffix"
-            val name = generateSequence(1) { it + 1 }.map { if (it == 1) base else "${base}_$it" }.first { !File(dir, "$it.pdf").exists() }
+            val name = generateSequence(1) { it + 1 }.map { if (it == 1) base else "${base}_$it" }.first { !File(dir, "$it.$extension").exists() }
             RenameFileDialog(activity, name, titleRes = R.string.pdf_tool_save_as, failedRes = R.string.file_name_exists, skipIfUnchanged = false) { chosen ->
-                val output = File(dir, "$chosen.pdf")
+                val output = File(dir, "$chosen.$extension")
                 if (output.exists()) return@RenameFileDialog false
                 start(title, output, task = task)
                 true
@@ -69,7 +73,8 @@ internal class PdfTaskRunner(private val activity: AppCompatActivity) {
             dialog.dismiss()
             result.onSuccess { message ->
                 if (onSuccess != null) return@onSuccess onSuccess(message)
-                MediaScannerConnection.scanFile(activity.applicationContext, arrayOf(output.path), arrayOf("application/pdf"), null)
+                val mime = if (output.extension == "docx") DOCX_MIME else "application/pdf"
+                MediaScannerConnection.scanFile(activity.applicationContext, arrayOf(output.path), arrayOf(mime), null)
                 done(output, message)
             }.onFailure {
                 Toast.makeText(activity, activity.getString(R.string.pdf_tool_failed, it.message ?: it.javaClass.simpleName), Toast.LENGTH_LONG).show()
@@ -83,7 +88,8 @@ internal class PdfTaskRunner(private val activity: AppCompatActivity) {
         DialogKit(activity).show(activity.getString(R.string.pdf_tool_done)) {
             text((message?.let { "$it\n\n" } ?: "") + output.path)
             positive(activity.getString(R.string.pdf_tool_open)) {
-                activity.openDocument(RecentDocument(path = output.path, lastModified = output.lastModified(), size = output.length(), type = DocumentType.Pdf))
+                val type = if (output.extension == "docx") DocumentType.Doc else DocumentType.Pdf
+                activity.openDocument(RecentDocument(path = output.path, lastModified = output.lastModified(), size = output.length(), type = type))
             }
             neutral(activity.getString(R.string.file_action_share)) {
                 if (!activity.shareFile(output.path)) Toast.makeText(activity, R.string.file_share_failed, Toast.LENGTH_SHORT).show()
@@ -93,6 +99,8 @@ internal class PdfTaskRunner(private val activity: AppCompatActivity) {
     }
 
     companion object {
+        private const val DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
         /** A size in bytes for people: 1.2 MB, 350 KB. */
         fun size(bytes: Long): String = when {
             bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / 1024f / 1024f)

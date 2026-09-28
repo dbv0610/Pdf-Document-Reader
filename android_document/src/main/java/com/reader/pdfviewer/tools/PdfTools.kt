@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.reader.pdfviewer.tools
 
 import android.content.Context
@@ -7,6 +14,15 @@ import android.graphics.Color
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.graphics.createBitmap
+import com.reader.pdfviewer.convert.Box
+import com.reader.pdfviewer.convert.DocxWriter
+import com.reader.pdfviewer.convert.FontNames
+import com.reader.pdfviewer.convert.LayoutPage
+import com.reader.pdfviewer.convert.PageLayout
+import com.reader.pdfviewer.convert.PictureBox
+import com.reader.pdfviewer.convert.TextLine
+import com.reader.pdfviewer.convert.TextRows
+import com.reader.pdfviewer.convert.TextStyle
 import com.reader.pdfviewer.pdfium.PdfDocument
 import com.reader.pdfviewer.pdfium.PdfPageText
 import com.reader.pdfviewer.pdfium.PdfiumCore
@@ -140,7 +156,12 @@ class PdfTools(context: Context) {
     /** The text layer, or OCR of the rendered page when the layer has no usable text. */
     private suspend fun textOf(doc: PdfDocument, pageIndex: Int, allowOcr: Boolean): PdfPageText? {
         val layer = pdfium.getPageTextLayout(doc, pageIndex) ?: return null
-        if (!allowOcr || !DocumentTextIndex.needsOcr(layer.text)) return layer
+        return if (allowOcr) withOcr(doc, pageIndex, layer) else layer
+    }
+
+    /** [layer], or OCR of the rendered page when [layer] has no usable text. */
+    private suspend fun withOcr(doc: PdfDocument, pageIndex: Int, layer: PdfPageText): PdfPageText {
+        if (!DocumentTextIndex.needsOcr(layer.text)) return layer
         val bitmap = renderForOcr(doc, pageIndex, layer.pageWidth, layer.pageHeight) ?: return layer
         return try {
             // Recognition runs on ML Kit's own threads, without holding the pdfium lock.
@@ -535,6 +556,222 @@ class PdfTools(context: Context) {
         }
     }
 
+    /**
+     * [source] as a Word document at [output]: the text of each page (recognized with OCR on
+     * scans) as paragraphs with their size, alignment, indents, weight, slant, color and font, its
+     * pictures in between, drawings with small labels as pictures, each PDF page on a new page. A
+     * page with neither text nor pictures is added as a picture of the whole page. Tables are not
+     * rebuilt. Pages go to disk one at a time, so any number of pages fits in memory.
+     */
+    suspend fun toWord(source: PdfSource, output: File, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }) =
+        withContext(dispatcher) {
+            val doc = open(source)
+            try {
+                DocxWriter(appContext.cacheDir).use { writer ->
+                    val count = pdfium.getPageCount(doc)
+                    for (index in 0 until count) {
+                        currentCoroutineContext().ensureActive()
+                        val (page, images) = wordPage(doc, index)
+                        writer.addPage(page, images)
+                        onProgress(index + 1, count)
+                    }
+                    currentCoroutineContext().ensureActive()
+                    writer.save(output)
+                    count
+                }
+            } finally {
+                pdfium.closeDocument(doc)
+            }
+        }
+
+    /** Page [index] rebuilt for Word, with the pictures its blocks point to. */
+    private suspend fun wordPage(doc: PdfDocument, index: Int): Pair<LayoutPage, Map<Int, DocxWriter.Image>> {
+        val page = pdfium.getPageForWord(doc, index)
+        val text = page?.let { withOcr(doc, index, it.text) }
+        val size = if (text == null) pdfium.getPagePointSize(doc, index) else null
+        val width = text?.pageWidth ?: size?.width?.toFloat() ?: A4_WIDTH
+        val height = text?.pageHeight ?: size?.height?.toFloat() ?: A4_HEIGHT
+        val heightToSize = if (text?.isOcr == true) PageLayout.OCR_LINE_HEIGHT else PageLayout.PDF_LINE_HEIGHT
+        var lines = if (text == null) emptyList() else wordLines(text, page.styles.takeIf { !text.isOcr })
+        val images = HashMap<Int, DocxWriter.Image>()
+        var boxes = ArrayList<PictureBox>()
+        for (image in page?.images.orEmpty()) {
+            currentCoroutineContext().ensureActive()
+            val b = image.bounds
+            val picture = pictureForWord(doc, index, image) ?: continue
+            images[boxes.size] = picture
+            boxes += PictureBox(boxes.size, b.left, b.top, b.right, b.bottom)
+        }
+        // drawings with small labels (screenshots, diagrams) become one picture each
+        val figures = PageLayout.figureAreas(width, height, lines, boxes, heightToSize)
+        if (figures.isNotEmpty()) {
+            val drawn = figurePictures(doc, index, width, height, figures)
+            lines = lines.filter { l -> figures.none { it.contains((l.left + l.right) / 2, (l.top + l.bottom) / 2) } }
+            boxes = ArrayList(boxes.filter { p -> figures.none { it.intersects(Box(p.left, p.top, p.right, p.bottom)) } })
+            drawn.forEach { (area, picture) ->
+                val key = FIGURE_KEYS + boxes.size
+                images[key] = picture
+                boxes += PictureBox(key, area.left, area.top, area.right, area.bottom)
+            }
+        }
+        if (lines.isEmpty() && boxes.isEmpty()) {
+            wholePage(doc, index, width, height)?.let {
+                images[0] = DocxWriter.Image(it, "jpeg")
+                boxes += PictureBox(0, 0f, 0f, width, height)
+            }
+        }
+        return PageLayout.build(width, height, lines, boxes, heightToSize) to images
+    }
+
+    /** Lines of a page for Word, from its characters, with the size, weight, slant, color and font of each. */
+    private fun wordLines(text: PdfPageText, info: PdfiumCore.TextStyles?): List<TextLine> {
+        val n = text.charCount
+        val codePoints = IntArray(n) { text.charCodePoint(it) }
+        val boxes = FloatArray(n * 4)
+        for (i in 0 until n) text.charBox(i)?.let {
+            boxes[i * 4] = it.left; boxes[i * 4 + 1] = it.top; boxes[i * 4 + 2] = it.right; boxes[i * 4 + 3] = it.bottom
+        }
+        val styles = info?.takeIf { it.sizes.size == n }?.let { s ->
+            val cache = HashMap<TextStyle, TextStyle>()
+            // Some PDFs scale all text with the page matrix, which pdfium's size leaves out: then
+            // every size is off from its box by one factor, found as the median of the page.
+            val ratios = (0 until n).mapNotNull { i ->
+                val h = boxes[i * 4 + 3] - boxes[i * 4 + 1]
+                if (h > 0f && s.sizes[i] > 0f) s.sizes[i] / h else null
+            }.sorted()
+            val ratio = ratios.getOrNull(ratios.size / 2)
+            val factor = if (ratio == null || ratio in 0.6f..1.1f) 1f else ratio / (1f / PageLayout.PDF_LINE_HEIGHT)
+            Array<TextStyle?>(n) { i ->
+                val raw = s.sizes[i] / factor
+                val size = if (raw > 0f) TextStyle.roundSize(raw) else 0f
+                val font = s.font(i)
+                val color = s.colors[i].let { if (it == 0) -1 else it and 0xFFFFFF }
+                val style = TextStyle(size, s.weight(i) >= 600 || s.forceBold(i) || FontNames.isBold(font),
+                    s.italic(i) || FontNames.isItalic(font), color, FontNames.family(font))
+                cache.getOrPut(style) { style }
+            }
+        }
+        return TextRows.build(codePoints, boxes, styles)
+    }
+
+    /**
+     * A picture of a page for Word, at most [WORD_PICTURE_SIDE] pixels on its long side: JPEG when
+     * it is opaque, PNG to keep its transparency. pdfium draws a picture as shown (mask applied)
+     * only at its size on the page, so that drawing just tells whether it is transparent and gives
+     * the mask; the colors come from the picture's own pixels, at their full resolution.
+     */
+    private fun pictureForWord(doc: PdfDocument, page: Int, image: PdfiumCore.PageImage): DocxWriter.Image? {
+        if (image.pixelWidth.toLong() * image.pixelHeight > MAX_COMPRESS_PIXELS) return null
+        val shown = pdfium.getRenderedImage(doc, page, image, MAX_COMPRESS_PIXELS.toInt())
+        try {
+            val transparent = shown != null && !isOpaque(shown)
+            val full = try { createBitmap(image.pixelWidth, image.pixelHeight) } catch (e: OutOfMemoryError) { null }
+            val own = full?.takeIf { pdfium.getImagePixels(doc, page, image, it) }
+            if (own == null) full?.recycle()
+            // the shown picture is turned or cut: only it is right
+            val sameShape = shown != null && own != null &&
+                kotlin.math.abs(shown.width.toFloat() / shown.height - own.width.toFloat() / own.height) < 0.02f * own.width / own.height
+            val picture = when {
+                own != null && !transparent -> own
+                own != null && sameShape -> own.also { withAlphaOf(it, shown!!) }
+                else -> { own?.recycle(); shown ?: return null }
+            }
+            try {
+                val side = maxOf(picture.width, picture.height)
+                val scaled = if (side > WORD_PICTURE_SIDE) Bitmap.createScaledBitmap(picture, maxOf(1, picture.width * WORD_PICTURE_SIDE / side),
+                    maxOf(1, picture.height * WORD_PICTURE_SIDE / side), true) else picture
+                try {
+                    return ByteArrayOutputStream().use { out ->
+                        val format = if (transparent) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+                        if (!scaled.compress(format, if (transparent) 100 else WORD_JPEG_QUALITY, out)) return null
+                        DocxWriter.Image(out.toByteArray(), if (transparent) "png" else "jpeg")
+                    }
+                } finally {
+                    if (scaled !== picture) scaled.recycle()
+                }
+            } finally {
+                if (picture !== shown) picture.recycle()
+            }
+        } finally {
+            shown?.recycle()
+        }
+    }
+
+    private fun isOpaque(bitmap: Bitmap): Boolean {
+        val row = IntArray(bitmap.width)
+        for (y in 0 until bitmap.height) {
+            bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+            if (row.any { it ushr 24 != 0xFF }) return false
+        }
+        return true
+    }
+
+    /** Gives [target] the transparency of [mask], stretched to its size. */
+    private fun withAlphaOf(target: Bitmap, mask: Bitmap) {
+        val stretched = Bitmap.createScaledBitmap(mask, target.width, target.height, true)
+        try {
+            val row = IntArray(target.width)
+            val alpha = IntArray(target.width)
+            for (y in 0 until target.height) {
+                target.getPixels(row, 0, target.width, 0, y, target.width, 1)
+                stretched.getPixels(alpha, 0, target.width, 0, y, target.width, 1)
+                for (x in row.indices) row[x] = (alpha[x] and 0xFF000000.toInt()) or (row[x] and 0xFFFFFF)
+                target.setPixels(row, 0, target.width, 0, y, target.width, 1)
+            }
+        } finally {
+            if (stretched !== mask) stretched.recycle()
+        }
+    }
+
+    /** [areas] of a page drawn as JPEG pictures, from one rendering of the page. */
+    private fun figurePictures(doc: PdfDocument, page: Int, width: Float, height: Float, areas: List<Box>): List<Pair<Box, DocxWriter.Image>> {
+        if (width <= 0f || height <= 0f) return emptyList()
+        val scale = FIGURE_DPI / 72f
+        val w = minOf((width * scale).toInt(), FIGURE_MAX_WIDTH)
+        val s = w / width
+        val h = maxOf(1, (height * s).toInt())
+        val bitmap = try { createBitmap(w, h) } catch (e: OutOfMemoryError) { return emptyList() }
+        try {
+            bitmap.eraseColor(Color.WHITE)
+            if (!pdfium.renderPageBitmapOnce(doc, bitmap, page, renderAnnot = true)) return emptyList()
+            return areas.mapNotNull { a ->
+                val x = (a.left * s).toInt().coerceIn(0, w - 1)
+                val y = (a.top * s).toInt().coerceIn(0, h - 1)
+                val cw = ((a.right * s).toInt() - x).coerceIn(1, w - x)
+                val ch = ((a.bottom * s).toInt() - y).coerceIn(1, h - y)
+                val crop = Bitmap.createBitmap(bitmap, x, y, cw, ch)
+                try {
+                    ByteArrayOutputStream().use { out ->
+                        if (!crop.compress(Bitmap.CompressFormat.JPEG, WORD_JPEG_QUALITY, out)) null
+                        else a to DocxWriter.Image(out.toByteArray(), "jpeg")
+                    }
+                } finally {
+                    if (crop !== bitmap) crop.recycle()
+                }
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /** The whole page drawn as a JPEG picture, for pages made only of drawings. */
+    private fun wholePage(doc: PdfDocument, page: Int, width: Float, height: Float): ByteArray? {
+        if (width <= 0f || height <= 0f) return null
+        val w = WORD_PICTURE_SIDE
+        val h = maxOf(1, (w * height / width).toInt())
+        val bitmap = try { createBitmap(w, h) } catch (e: OutOfMemoryError) { return null }
+        try {
+            bitmap.eraseColor(Color.WHITE)
+            if (!pdfium.renderPageBitmapOnce(doc, bitmap, page, renderAnnot = true)) return null
+            return ByteArrayOutputStream().use { out ->
+                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, WORD_JPEG_QUALITY, out)) return null
+                out.toByteArray()
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
     /** Number of pages of [source]. */
     suspend fun pageCount(source: PdfSource): Int = withContext(dispatcher) {
         val doc = open(source)
@@ -621,6 +858,14 @@ class PdfTools(context: Context) {
         // 24 million pixels are ~96 MB decoded: bigger pictures are left as they are
         private const val MAX_COMPRESS_PIXELS = 24_000_000L
         private const val REDACT_DPI = 200f
+        // pictures in a converted Word document: sharp enough to print, small enough to keep in memory
+        private const val WORD_PICTURE_SIDE = 1600
+        private const val WORD_JPEG_QUALITY = 85
+        // drawings turned into pictures: 200 dpi, the page at most this many pixels wide
+        private const val FIGURE_DPI = 200f
+        private const val FIGURE_MAX_WIDTH = 2400
+        // keys of figure pictures, apart from the page's own pictures
+        private const val FIGURE_KEYS = 1000
 
         /**
          * The one thread all tool work runs on, so tools never take more than one IO thread.

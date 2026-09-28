@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          WorkBooks.java
  *
  * 编译器:            android2.2
@@ -55,7 +62,8 @@ open class Workbook(before07: Boolean) {
 
     //shared strings, index is continuous
     @JvmField
-    protected var sharedString: MutableMap<Int, Any?>? = HashMap(20)
+    /** Shared strings by index (String or SectionElement): a list, as a map costs ~50 bytes more per string. */
+    protected var sharedString: ArrayList<Any?>? = ArrayList(20)
 
     //theme Color index
     private var themeColor: MutableMap<Int, Int>? = HashMap(20)
@@ -310,7 +318,7 @@ open class Workbook(before07: Boolean) {
 //        else
         run {
             //add to end
-            sharedString!![sharedString!!.size] = item
+            sharedString!!.add(item)
             return sharedString!!.size - 1
         }
     }
@@ -321,7 +329,10 @@ open class Workbook(before07: Boolean) {
      * @param item
      */
     fun addSharedString(index: Int, item: Any?) {
-        sharedString!![index] = item
+        val list = sharedString!!
+        if (index < 0) return
+        while (list.size <= index) list.add(null)
+        list[index] = item
     }
 
     /**
@@ -330,7 +341,7 @@ open class Workbook(before07: Boolean) {
      * @return
      */
     fun getSharedString(index: Int): String? {
-        val si = sharedString!![index]
+        val si = sharedString!!.getOrNull(index)
         var value: String? = null
         if (si is SectionElement) {
             value = si.getText(null)
@@ -347,7 +358,7 @@ open class Workbook(before07: Boolean) {
      * @return string or SectionElement
      */
     fun getSharedItem(index: Int): Any? {
-        return sharedString!![index]
+        return sharedString!!.getOrNull(index)
     }
 
     /**

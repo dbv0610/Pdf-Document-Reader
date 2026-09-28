@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.xls.Reader
 
 import android.util.Log
@@ -26,7 +33,9 @@ class SheetReader private constructor() {
         private val reader = SheetReader()
         private const val STREAMING_THRESHOLD = 1500
         private const val INITIAL_ROW_BATCH = 240
-        private const val CONTINUATION_ROW_BATCH = 480
+        // After the first screen, bigger batches: each pause between batches costs ~50 ms (the
+        // reader yields so the view can draw), which made up half the load time of a 150k-row sheet.
+        private const val CONTINUATION_ROW_BATCH = 2000
         @JvmStatic fun instance(): SheetReader = reader
     }
 
@@ -77,7 +86,8 @@ class SheetReader private constructor() {
             scan@ while (true) {
                 when (parser.next()) {
                     XmlPullParser.END_DOCUMENT -> break@scan
-                    XmlPullParser.START_TAG -> if (parser.name == "dimension") {
+                    // <dimension> comes before <sheetData>: without one, do not read the whole sheet looking for it
+                    XmlPullParser.START_TAG -> if (parser.name == "sheetData") break@scan else if (parser.name == "dimension") {
                         val ref = parser.attr("ref") ?: break@scan
                         val parts = ref.replace("$", "").split(":")
                         val first = cellAddress(parts.first()) ?: break@scan
@@ -122,10 +132,13 @@ class SheetReader private constructor() {
         val parser = streamParser ?: return true
         val input = streamInput ?: return true
         var row: Row? = null
-        var cellRef: String? = null
+        var inCell = false
+        var cellRow = 0
+        var cellCol = 0
+        var nextCol = 0 // a <c> without r="" is the one after the cell before it
         var cellType: String? = null
         var cellStyle = 0
-        var cellText: StringBuilder? = null
+        val cellText = StringBuilder()
         var formulaText: StringBuilder? = null
         var formulaSi: String? = null
         var captureFormula = false
@@ -189,6 +202,7 @@ class SheetReader private constructor() {
                         }
                         "row" -> {
                             val rowIndex = parser.attr("r")?.toIntOrNull()?.minus(1) ?: 0
+                            nextCol = 0
                             row = Row(parser.attr("spans")?.let { getEndBySpans(it) } ?: 0)
                             row!!.setRowNumber(rowIndex)
                             row!!.setSheet(target)
@@ -202,32 +216,36 @@ class SheetReader private constructor() {
                             rowHasMetadata = parser.attr("ht") != null || hidden || parser.attr("s") != null
                         }
                         "c" -> {
-                            cellRef = parser.attr("r")
+                            val ref = parser.attr("r")
+                            val refCol = if (ref != null) refColumn(ref) else -1
+                            val refRow = if (ref != null) refRow(ref) else -1
+                            cellCol = if (refCol >= 0) refCol else nextCol
+                            cellRow = if (refRow >= 0) refRow else row?.getRowNumber() ?: 0
+                            nextCol = cellCol + 1
+                            inCell = true
                             cellType = parser.attr("t")
-                            val col = ReferenceUtil.instance().getColumnIndex(cellRef ?: "A1")
-                            cellStyle = parser.attr("s")?.toIntOrNull() ?: target.getColumnStyle(col)
-                            cellText = StringBuilder()
+                            cellStyle = parser.attr("s")?.toIntOrNull() ?: target.getColumnStyle(cellCol)
+                            cellText.setLength(0)
                             formulaText = null
                             formulaSi = null
                         }
                         "f" -> { formulaText = StringBuilder(); formulaSi = parser.attr("si"); captureFormula = true }
-                        "v", "t" -> if (cellText != null) captureValue = true
+                        "v", "t" -> if (inCell) captureValue = true
                         "mergeCell" -> parser.attr("ref")?.let { addMergeRange(target, it) }
                     }
                     XmlPullParser.TEXT, XmlPullParser.CDSECT -> if (captureValue) {
-                        cellText?.append(parser.text)
+                        cellText.append(parser.text)
                     } else if (captureFormula) { formulaText?.append(parser.text) }
                     XmlPullParser.END_TAG -> when (parser.name) {
                         "f" -> captureFormula = false
                         "v", "t" -> captureValue = false
                         "c" -> {
-                            val ref = cellRef
-                            val text = cellText?.toString()
-                            if (row != null && ref != null && text != null) {
+                            if (row != null && inCell) {
+                                val text = cellText.toString()
                                 val cell = Cell(cellTypeToModelType(cellType))
                                 cell.setSheet(target)
-                                cell.setRowNumber(ReferenceUtil.instance().getRowIndex(ref))
-                                cell.setColNumber(ReferenceUtil.instance().getColumnIndex(ref))
+                                cell.setRowNumber(cellRow)
+                                cell.setColNumber(cellCol)
                                 cell.setCellStyle(cellStyle)
                                 val workbook = target.getWorkbook()!!
                                 if (text.isEmpty()) {
@@ -248,9 +266,8 @@ class SheetReader private constructor() {
                                 cell.formula = formulaText?.let { resolveFormula(target, cell, it.toString(), formulaSi) }
                                 row!!.addCell(cell)
                             }
-                            cellRef = null
+                            inCell = false
                             cellType = null
-                            cellText = null
                             captureValue = false
                         }
                         "row" -> {
@@ -322,6 +339,29 @@ class SheetReader private constructor() {
     }
 
     private fun XmlPullParser.attr(name: String): String? = getAttributeValue(null, name)
+
+    /** Column (0 based) of a cell reference such as "BC12", read in place; -1 when it has none. */
+    private fun refColumn(ref: String): Int {
+        var column = 0
+        var i = 0
+        while (i < ref.length) {
+            val c = ref[i].uppercaseChar()
+            if (c !in 'A'..'Z') break
+            column = column * 26 + (c - 'A' + 1)
+            i++
+        }
+        return column - 1
+    }
+
+    /** Row (0 based) of a cell reference such as "BC12", read in place; -1 when it has none. */
+    private fun refRow(ref: String): Int {
+        var row = 0
+        var digits = false
+        for (c in ref) {
+            if (c in '0'..'9') { row = row * 10 + (c - '0'); digits = true } else if (digits) break
+        }
+        return if (digits) row - 1 else -1
+    }
 
     private fun stringToInt(number: String): Int {
         try { return number.toInt() } catch (e: NumberFormatException) { Log.e("HungHoai", "stringToInt: $number") }

@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 锟侥硷拷锟斤拷锟斤拷:          ListData.java
  * 锟斤拷权锟斤拷锟斤拷@2001-2014 锟斤拷锟斤拷锟斤拷锟捷ｏ拷锟狡硷拷锟斤拷锟睫癸拷司
  * 锟斤拷锟斤拷锟斤拷:            android2.2

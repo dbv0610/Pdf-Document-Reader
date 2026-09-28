@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * Proprietary and confidential. Unauthorized copying, modification or distribution of this
+ * file, via any medium, is strictly prohibited without the written permission of dongb2002.
+ */
 package com.wxiwei.office.simpletext.model
 
 /**

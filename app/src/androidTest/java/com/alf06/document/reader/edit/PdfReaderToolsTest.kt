@@ -226,7 +226,7 @@ class PdfReaderToolsTest {
     fun everyToolDialogOpens() {
         launchReader(pdf("tools-dialogs.pdf", 2)) { scenario, _ ->
             val dialogs = listOf(R.string.pdf_page_numbers, R.string.pdf_watermark, R.string.pdf_compress, R.string.pdf_password,
-                R.string.pdf_flatten, R.string.export_images, R.string.pdf_bookmarks, R.string.pdf_reading_colors)
+                R.string.pdf_flatten, R.string.export_images, R.string.pdf_bookmarks, R.string.pdf_reading_colors, R.string.pdf_to_word)
             for (item in dialogs) {
                 menu(scenario, item)
                 screenshot("dialog_" + context.resources.getResourceEntryName(item))

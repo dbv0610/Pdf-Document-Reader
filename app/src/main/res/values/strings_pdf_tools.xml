@@ -135,6 +135,10 @@
     <string name="pdf_password_short">Use at least 4 characters</string>
     <string name="pdf_password_mismatch">The passwords do not match</string>
     <string name="pdf_flatten">Flatten</string>
+    <string name="pdf_to_word">Convert to Word</string>
+    <string name="pdf_to_word_message">Each page becomes paragraphs of text with their size and alignment, and the pictures of the page. Bold, fonts, colors, tables and columns are not kept. Scanned pages are recognized with OCR.</string>
+    <string name="pdf_to_word_convert">Convert</string>
+    <string name="pdf_to_word_done">%1$d pages converted</string>
     <string name="pdf_flatten_message">Annotations and form fields become part of the pages in a new file, and can no longer be edited.</string>
     <string name="pdf_images_quality">Quality</string>
     <string name="pdf_images_normal">Normal (1080 px)</string>

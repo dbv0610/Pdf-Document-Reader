@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.reader.pdfviewer.pdfium
 
 import android.graphics.Color
@@ -134,6 +141,8 @@ class PdfiumCore(ctx: Context) {
         r: Int, g: Int, b: Int, a: Int, x: Float, y: Float, angle: Float, anchor: Int): FloatArray?
     private external fun nativeAddInvisibleWords(docPtr: Long, pageIndex: Int, fontPath: String?, words: Array<String>, boxes: FloatArray, turns: Int): Boolean
     private external fun nativeGetPageImages(docPtr: Long, pageIndex: Int): FloatArray?
+    private external fun nativeGetRenderedImage(docPtr: Long, pageIndex: Int, objIndex: Int, maxPixels: Int): IntArray?
+    private external fun nativeGetPageForWord(docPtr: Long, pageIndex: Int): Array<Any?>?
     private external fun nativeGetImagePixels(docPtr: Long, pageIndex: Int, objIndex: Int, bitmap: Bitmap): Boolean
     private external fun nativeReplaceImageJpeg(docPtr: Long, pageIndex: Int, objIndex: Int, jpeg: ByteArray): Boolean
     private external fun nativeAddNoteAnnot(pagePtr: Long, x: Float, y: Float, r: Int, g: Int, b: Int, a: Int, contents: String?, name: String): Boolean
@@ -577,15 +586,57 @@ class PdfiumCore(ctx: Context) {
     fun addInvisibleWords(doc: PdfDocument, pageIndex: Int, words: Array<String>, boxes: FloatArray, fontPath: String?, turns: Int = 0): Boolean =
         synchronized(lock) { doc.mNativeDocPtr != 0L && nativeAddInvisibleWords(doc.mNativeDocPtr, pageIndex, fontPath, words, boxes, turns) }
 
-    /** An opaque picture placed on a page: [index] of its object, its pixels, its shown size in points and stored bytes. */
-    class PageImage(val index: Int, val pixelWidth: Int, val pixelHeight: Int, val shownWidth: Float, val shownHeight: Float, val storedBytes: Long)
+    /**
+     * A picture placed on a page: [index] of its object, its pixels, its shown size in points and
+     * stored bytes; [bounds] is where it is shown, in points from the top left of the page as it is
+     * rendered (like [PdfPageText]); [transparent] when it may have a mask or alpha.
+     */
+    class PageImage(val index: Int, val pixelWidth: Int, val pixelHeight: Int, val shownWidth: Float, val shownHeight: Float,
+                    val storedBytes: Long, val bounds: RectF = RectF(), val transparent: Boolean = false)
 
+    /** The opaque pictures of a page. */
     fun getPageImages(doc: PdfDocument, pageIndex: Int): List<PageImage> = synchronized(lock) {
         if (doc.mNativeDocPtr == 0L) return@synchronized emptyList()
-        val v = nativeGetPageImages(doc.mNativeDocPtr, pageIndex) ?: return@synchronized emptyList()
-        (0 until v.size / 6).map { i ->
-            PageImage(v[i * 6].toInt(), v[i * 6 + 1].toInt(), v[i * 6 + 2].toInt(), v[i * 6 + 3], v[i * 6 + 4], v[i * 6 + 5].toLong())
-        }
+        pageImages(nativeGetPageImages(doc.mNativeDocPtr, pageIndex) ?: return@synchronized emptyList())
+    }
+
+    private fun pageImages(v: FloatArray): List<PageImage> = (0 until v.size / 11).map { i ->
+        val o = i * 11
+        PageImage(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3], v[o + 4], v[o + 5].toLong(),
+            RectF(v[o + 6], v[o + 7], v[o + 8], v[o + 9]), v[o + 10] != 0f)
+    }
+
+    /** [image] as shown on the page, its transparency kept; null when it cannot be drawn or is over [maxPixels]. */
+    fun getRenderedImage(doc: PdfDocument, pageIndex: Int, image: PageImage, maxPixels: Int): Bitmap? {
+        val v = synchronized(lock) {
+            if (doc.mNativeDocPtr == 0L) null else nativeGetRenderedImage(doc.mNativeDocPtr, pageIndex, image.index, maxPixels)
+        } ?: return null
+        return try { Bitmap.createBitmap(v, 2, v[0], v[0], v[1], Bitmap.Config.ARGB_8888) } catch (e: Exception) { null }
+    }
+
+    /**
+     * Font size (points, 0 unknown), style and fill color (ARGB, 0 unknown) of every character of a
+     * page, indexed like [getPageTextLayout]; [fonts] holds the font names a style points to.
+     */
+    class TextStyles(val sizes: FloatArray, private val styles: IntArray, val colors: IntArray, private val fonts: Array<String?>) {
+        fun weight(index: Int) = styles[index] and 0xFFFF
+        fun italic(index: Int) = styles[index] and (1 shl 16) != 0
+        fun forceBold(index: Int) = styles[index] and (1 shl 17) != 0
+        fun font(index: Int): String? = (styles[index] ushr 18).let { if (it in 1..fonts.size) fonts[it - 1] else null }
+    }
+
+    /** A page for PDF → Word: its text, the style of each character and all its pictures (any of them may be transparent). */
+    class WordPage(val text: PdfPageText, val styles: TextStyles, val images: List<PageImage>)
+
+    /** Everything PDF → Word needs of a page, read with one load of it; null when it cannot be loaded. */
+    fun getPageForWord(doc: PdfDocument, pageIndex: Int): WordPage? = synchronized(lock) {
+        if (doc.mNativeDocPtr == 0L) return@synchronized null
+        val raw = nativeGetPageForWord(doc.mNativeDocPtr, pageIndex) ?: return@synchronized null
+        val size = raw[2] as FloatArray
+        @Suppress("UNCHECKED_CAST")
+        WordPage(PdfPageText(pageIndex, size[0], size[1], raw[0] as IntArray, raw[1] as FloatArray),
+            TextStyles(raw[3] as FloatArray, raw[4] as IntArray, raw[5] as IntArray, raw[6] as Array<String?>),
+            pageImages(raw[7] as FloatArray))
     }
 
     /** The pixels of [image] into [bitmap] (ARGB_8888, the picture's pixel size). */

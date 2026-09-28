@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 #include "util.hpp"
 
 extern "C" {
@@ -24,6 +31,7 @@ using namespace android;
 #include <fpdf_formfill.h>
 #include <fpdf_flatten.h>
 #include <map>
+#include <initializer_list>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -1315,6 +1323,153 @@ JNI_FUNC(jboolean, PdfiumCore, nativeAddJpegPage)(JNI_ARGS, jlong docPtr, jbyteA
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
+// FPDF_PageToDevice only outputs ints, so points are mapped onto a grid 100 times the page
+// size to keep 0.01 point precision.
+static const double kGrid = 100.0;
+
+/** A rectangle of the page in points, origin at the top left of the page as it is rendered. */
+static void toShown(FPDF_PAGE page, float left, float top, float right, float bottom, jfloat* out) {
+    int sizeX = (int) lround(FPDF_GetPageWidthF(page) * kGrid);
+    int sizeY = (int) lround(FPDF_GetPageHeightF(page) * kGrid);
+    int x1, y1, x2, y2;
+    FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, left, top, &x1, &y1);
+    FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, right, bottom, &x2, &y2);
+    // with /Rotate the corners swap, so sort them
+    out[0] = (jfloat) (std::min(x1, x2) / kGrid);
+    out[1] = (jfloat) (std::min(y1, y2) / kGrid);
+    out[2] = (jfloat) (std::max(x1, x2) / kGrid);
+    out[3] = (jfloat) (std::max(y1, y2) / kGrid);
+}
+
+/** Code point and box (4 floats, 0 when none) of every character of [textPage]. */
+static void readTextLayout(FPDF_PAGE page, FPDF_TEXTPAGE textPage, std::vector<jint>& codePoints, std::vector<jfloat>& boxes) {
+    int count = std::max(0, FPDFText_CountChars(textPage));
+    codePoints.assign(count, 0);
+    boxes.assign((size_t) count * 4, 0.0f);
+    for (int i = 0; i < count; i++) {
+        codePoints[i] = (jint) FPDFText_GetUnicode(textPage, i);
+        FS_RECTF rect;
+        if (!FPDFText_GetLooseCharBox(textPage, i, &rect) || rect.right <= rect.left || rect.top <= rect.bottom) continue;
+        toShown(page, rect.left, rect.top, rect.right, rect.bottom, &boxes[(size_t) i * 4]);
+    }
+}
+
+/**
+ * Size, style and color of every character of [textPage]: size in points (0 unknown);
+ * style = weight (0 unknown) | 1 << 16 italic | 1 << 17 force bold | font index << 18 (index
+ * into [fonts] + 1, 0 none); color ARGB (0 unknown). Fonts keep their subset prefix.
+ */
+static void readTextStyles(FPDF_TEXTPAGE textPage, std::vector<jfloat>& sizes, std::vector<jint>& styles,
+                           std::vector<jint>& colors, std::vector<std::string>& fonts) {
+    int count = std::max(0, FPDFText_CountChars(textPage));
+    sizes.assign(count, 0.0f);
+    styles.assign(count, 0);
+    colors.assign(count, 0);
+    std::map<std::string, int> fontIndex;
+    char name[256];
+    for (int i = 0; i < count; i++) {
+        sizes[i] = (jfloat) FPDFText_GetFontSize(textPage, i);
+        int weight = std::max(0, FPDFText_GetFontWeight(textPage, i));
+        int flags = 0;
+        unsigned long length = FPDFText_GetFontInfo(textPage, i, name, sizeof(name), &flags);
+        int font = 0;
+        if (length > 0 && length <= sizeof(name)) {
+            std::string key(name);
+            auto found = fontIndex.find(key);
+            if (found == fontIndex.end()) {
+                fonts.push_back(key);
+                font = (int) fonts.size();
+                fontIndex[key] = font;
+            } else {
+                font = found->second;
+            }
+        }
+        // PDF font descriptor flags: bit 7 italic, bit 19 force bold
+        styles[i] = (jint) ((weight & 0xFFFF) | ((flags & (1 << 6)) ? (1 << 16) : 0)
+                | ((flags & (1 << 18)) ? (1 << 17) : 0) | (std::min(font, 8191) << 18));
+        unsigned int r = 0, g = 0, b = 0, a = 0;
+        if (FPDFText_GetFillColor(textPage, i, &r, &g, &b, &a)) {
+            colors[i] = (jint) ((std::max(1u, a) << 24) | (r << 16) | (g << 8) | b);
+        }
+    }
+}
+
+/**
+ * Pictures placed directly on the page, 11 floats each: {object index, pixel width, pixel height,
+ * shown width, shown height (points), stored bytes, left, top, right, bottom (shown box),
+ * transparent}. With [checkTransparency] each picture is drawn to find out whether it has
+ * transparency, and transparent ones are left out; without, the flag is 1 (unknown) for all.
+ */
+static void readPageImages(FPDF_DOCUMENT document, FPDF_PAGE page, bool checkTransparency, std::vector<jfloat>& values) {
+    int count = FPDFPage_CountObjects(page);
+    for (int i = 0; i < count; ++i) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
+        if (!obj || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
+        unsigned int w = 0, h = 0;
+        if (!FPDFImageObj_GetImagePixelSize(obj, &w, &h) || w < 16 || h < 16) continue;
+        float l, b, r, t;
+        if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
+        if (checkTransparency) {
+            // a picture with a mask would lose its transparency when stored as JPEG
+            FPDF_BITMAP shown = FPDFImageObj_GetRenderedBitmap(document, page, obj);
+            bool transparent = !shown;
+            if (shown) {
+                if (FPDFBitmap_GetFormat(shown) == FPDFBitmap_BGRA) {
+                    int bw = FPDFBitmap_GetWidth(shown), bh = FPDFBitmap_GetHeight(shown), stride = FPDFBitmap_GetStride(shown);
+                    auto px = static_cast<unsigned char*>(FPDFBitmap_GetBuffer(shown));
+                    for (int y = 0; y < bh && !transparent; ++y)
+                        for (int x = 0; x < bw; ++x) if (px[y * stride + x * 4 + 3] != 255) { transparent = true; break; }
+                }
+                FPDFBitmap_Destroy(shown);
+            }
+            if (transparent) continue;
+        }
+        unsigned long stored = FPDFImageObj_GetImageDataRaw(obj, NULL, 0);
+        jfloat box[4];
+        toShown(page, l, t, r, b, box);
+        values.insert(values.end(), {(float) i, (float) w, (float) h, r - l, t - b, (float) stored,
+                box[0], box[1], box[2], box[3], checkTransparency ? 0.0f : 1.0f});
+    }
+}
+
+static jobjectArray stringArray(JNIEnv* env, const std::vector<std::string>& values) {
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (!stringClass) return NULL;
+    jobjectArray array = env->NewObjectArray((jsize) values.size(), stringClass, NULL);
+    if (!array) return NULL;
+    for (size_t i = 0; i < values.size(); i++) {
+        jstring value = env->NewStringUTF(values[i].c_str());
+        if (value == NULL) { env->ExceptionClear(); continue; } // not modified UTF-8
+        env->SetObjectArrayElement(array, (jsize) i, value);
+        env->DeleteLocalRef(value);
+    }
+    return array;
+}
+
+static jintArray intArray(JNIEnv* env, const std::vector<jint>& v) {
+    jintArray a = env->NewIntArray((jsize) v.size());
+    if (a) env->SetIntArrayRegion(a, 0, (jsize) v.size(), v.data());
+    return a;
+}
+
+static jfloatArray floatArray(JNIEnv* env, const std::vector<jfloat>& v) {
+    jfloatArray a = env->NewFloatArray((jsize) v.size());
+    if (a) env->SetFloatArrayRegion(a, 0, (jsize) v.size(), v.data());
+    return a;
+}
+
+/** An Object[] of [items], or NULL when one of them could not be made. */
+static jobjectArray objectArray(JNIEnv* env, std::initializer_list<jobject> items) {
+    jclass objectClass = env->FindClass("java/lang/Object");
+    if (!objectClass) return NULL;
+    for (jobject item : items) if (item == NULL) return NULL;
+    jobjectArray result = env->NewObjectArray((jsize) items.size(), objectClass, NULL);
+    if (!result) return NULL;
+    jsize i = 0;
+    for (jobject item : items) env->SetObjectArrayElement(result, i++, item);
+    return result;
+}
+
 /**
  * Text of a page with the position of every character, in one call.
  * Returns {int[] codePoints, float[] boxes, float[] {pageWidth, pageHeight}}; boxes holds
@@ -1331,52 +1486,42 @@ JNI_FUNC(jobjectArray, PdfiumCore, nativeGetPageTextLayout)(JNI_ARGS, jlong docP
         FPDF_ClosePage(page);
         return NULL;
     }
-
-    float pageWidth = FPDF_GetPageWidthF(page);
-    float pageHeight = FPDF_GetPageHeightF(page);
-    int count = std::max(0, FPDFText_CountChars(textPage));
-    std::vector<jint> codePoints(count);
-    std::vector<jfloat> boxes(count * 4, 0.0f);
-
-    // FPDF_PageToDevice only outputs ints, so map onto a grid 100 times the page size
-    // to keep 0.01 point precision.
-    const double scale = 100.0;
-    int sizeX = (int) lround(pageWidth * scale);
-    int sizeY = (int) lround(pageHeight * scale);
-    for (int i = 0; i < count; i++) {
-        codePoints[i] = (jint) FPDFText_GetUnicode(textPage, i);
-        FS_RECTF rect;
-        if (!FPDFText_GetLooseCharBox(textPage, i, &rect) || rect.right <= rect.left || rect.top <= rect.bottom) {
-            continue;
-        }
-        int x1, y1, x2, y2;
-        FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, rect.left, rect.top, &x1, &y1);
-        FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, rect.right, rect.bottom, &x2, &y2);
-        // With /Rotate the corners swap, so sort them.
-        boxes[i * 4] = (jfloat) (std::min(x1, x2) / scale);
-        boxes[i * 4 + 1] = (jfloat) (std::min(y1, y2) / scale);
-        boxes[i * 4 + 2] = (jfloat) (std::max(x1, x2) / scale);
-        boxes[i * 4 + 3] = (jfloat) (std::max(y1, y2) / scale);
-    }
+    std::vector<jint> codePoints;
+    std::vector<jfloat> boxes;
+    readTextLayout(page, textPage, codePoints, boxes);
+    std::vector<jfloat> size = { FPDF_GetPageWidthF(page), FPDF_GetPageHeightF(page) };
     FPDFText_ClosePage(textPage);
     FPDF_ClosePage(page);
+    return objectArray(env, { intArray(env, codePoints), floatArray(env, boxes), floatArray(env, size) });
+}
 
-    jintArray codeArray = env->NewIntArray(count);
-    jfloatArray boxArray = env->NewFloatArray(count * 4);
-    jfloatArray sizeArray = env->NewFloatArray(2);
-    jclass objectClass = env->FindClass("java/lang/Object");
-    if (codeArray == NULL || boxArray == NULL || sizeArray == NULL || objectClass == NULL) return NULL;
-    env->SetIntArrayRegion(codeArray, 0, count, codePoints.data());
-    env->SetFloatArrayRegion(boxArray, 0, count * 4, boxes.data());
-    jfloat size[2] = { pageWidth, pageHeight };
-    env->SetFloatArrayRegion(sizeArray, 0, 2, size);
-
-    jobjectArray result = env->NewObjectArray(3, objectClass, NULL);
-    if (result == NULL) return NULL;
-    env->SetObjectArrayElement(result, 0, codeArray);
-    env->SetObjectArrayElement(result, 1, boxArray);
-    env->SetObjectArrayElement(result, 2, sizeArray);
-    return result;
+/**
+ * Everything PDF → Word needs of a page, with one load of it: {int[] codePoints, float[] boxes,
+ * float[] {pageWidth, pageHeight}} as nativeGetPageTextLayout, then {float[] sizes, int[] styles,
+ * int[] colors, String[] fonts} as readTextStyles, then float[] pictures as readPageImages
+ * (transparency not checked).
+ */
+JNI_FUNC(jobjectArray, PdfiumCore, nativeGetPageForWord)(JNI_ARGS, jlong docPtr, jint pageIndex) {
+    DocumentFile* doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (doc == NULL || doc->pdfDocument == NULL) return NULL;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (page == NULL) return NULL;
+    FPDF_TEXTPAGE textPage = FPDFText_LoadPage(page);
+    if (textPage == NULL) {
+        FPDF_ClosePage(page);
+        return NULL;
+    }
+    std::vector<jint> codePoints, styles, colors;
+    std::vector<jfloat> boxes, sizes, pictures;
+    std::vector<std::string> fonts;
+    readTextLayout(page, textPage, codePoints, boxes);
+    readTextStyles(textPage, sizes, styles, colors, fonts);
+    readPageImages(doc->pdfDocument, page, false, pictures);
+    std::vector<jfloat> size = { FPDF_GetPageWidthF(page), FPDF_GetPageHeightF(page) };
+    FPDFText_ClosePage(textPage);
+    FPDF_ClosePage(page);
+    return objectArray(env, { intArray(env, codePoints), floatArray(env, boxes), floatArray(env, size),
+            floatArray(env, sizes), intArray(env, styles), intArray(env, colors), stringArray(env, fonts), floatArray(env, pictures) });
 }
 
 // ---- page edits ---------------------------------------------------------------------------
@@ -1555,43 +1700,58 @@ JNI_FUNC(jboolean, PdfiumCore, nativeAddInvisibleWords)(JNI_ARGS, jlong docPtr, 
 
 // ---- pictures of a page (compression) -------------------------------------------------------
 
-/**
- * Pictures placed directly on the page: 6 floats each, {object index, pixel width, pixel height,
- * shown width, shown height (points), stored bytes}. Pictures with transparency are left out.
- */
+/** Opaque pictures placed directly on the page, as readPageImages. */
 JNI_FUNC(jfloatArray, PdfiumCore, nativeGetPageImages)(JNI_ARGS, jlong docPtr, jint pageIndex) {
     auto doc = reinterpret_cast<DocumentFile*>(docPtr);
     if (!doc || !doc->pdfDocument) return NULL;
     FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
     if (!page) return NULL;
     std::vector<jfloat> values;
-    int count = FPDFPage_CountObjects(page);
-    for (int i = 0; i < count; ++i) {
-        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
-        if (!obj || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
-        unsigned int w = 0, h = 0;
-        if (!FPDFImageObj_GetImagePixelSize(obj, &w, &h) || w < 16 || h < 16) continue;
-        float l, b, r, t;
-        if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
-        // a picture with a mask would lose its transparency when stored as JPEG
+    readPageImages(doc->pdfDocument, page, true, values);
+    FPDF_ClosePage(page);
+    return floatArray(env, values);
+}
+
+/**
+ * Picture [objIndex] as it is shown, its mask applied: {width, height, then ARGB per pixel},
+ * or null. Pictures over [maxPixels] are refused.
+ */
+JNI_FUNC(jintArray, PdfiumCore, nativeGetRenderedImage)(JNI_ARGS, jlong docPtr, jint pageIndex, jint objIndex, jint maxPixels) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument) return NULL;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return NULL;
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, objIndex);
+    jintArray result = NULL;
+    unsigned int pw = 0, ph = 0;
+    if (obj && FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_IMAGE && FPDFImageObj_GetImagePixelSize(obj, &pw, &ph)
+            && (long long) pw * ph <= maxPixels) {
         FPDF_BITMAP shown = FPDFImageObj_GetRenderedBitmap(doc->pdfDocument, page, obj);
-        bool transparent = !shown;
         if (shown) {
-            if (FPDFBitmap_GetFormat(shown) == FPDFBitmap_BGRA) {
-                int bw = FPDFBitmap_GetWidth(shown), bh = FPDFBitmap_GetHeight(shown), stride = FPDFBitmap_GetStride(shown);
-                auto px = static_cast<unsigned char*>(FPDFBitmap_GetBuffer(shown));
-                for (int y = 0; y < bh && !transparent; ++y)
-                    for (int x = 0; x < bw; ++x) if (px[y * stride + x * 4 + 3] != 255) { transparent = true; break; }
+            int w = FPDFBitmap_GetWidth(shown), h = FPDFBitmap_GetHeight(shown), stride = FPDFBitmap_GetStride(shown);
+            int format = FPDFBitmap_GetFormat(shown);
+            auto px = static_cast<unsigned char*>(FPDFBitmap_GetBuffer(shown));
+            if (w > 0 && h > 0 && (long long) w * h <= maxPixels && px &&
+                    (format == FPDFBitmap_BGRA || format == FPDFBitmap_BGRx || format == FPDFBitmap_BGR || format == FPDFBitmap_Gray)) {
+                std::vector<jint> out((size_t) w * h + 2);
+                out[0] = w; out[1] = h;
+                for (int y = 0; y < h; ++y) {
+                    auto row = px + (size_t) y * stride;
+                    for (int x = 0; x < w; ++x) {
+                        unsigned int r, g, b, a = 255;
+                        if (format == FPDFBitmap_Gray) { r = g = b = row[x]; }
+                        else if (format == FPDFBitmap_BGR) { b = row[x * 3]; g = row[x * 3 + 1]; r = row[x * 3 + 2]; }
+                        else { b = row[x * 4]; g = row[x * 4 + 1]; r = row[x * 4 + 2]; if (format == FPDFBitmap_BGRA) a = row[x * 4 + 3]; }
+                        out[2 + (size_t) y * w + x] = (jint) ((a << 24) | (r << 16) | (g << 8) | b);
+                    }
+                }
+                result = env->NewIntArray((jsize) out.size());
+                if (result) env->SetIntArrayRegion(result, 0, (jsize) out.size(), out.data());
             }
             FPDFBitmap_Destroy(shown);
         }
-        if (transparent) continue;
-        unsigned long stored = FPDFImageObj_GetImageDataRaw(obj, NULL, 0);
-        values.insert(values.end(), {(float) i, (float) w, (float) h, r - l, t - b, (float) stored});
     }
     FPDF_ClosePage(page);
-    auto result = env->NewFloatArray(values.size());
-    env->SetFloatArrayRegion(result, 0, values.size(), values.data());
     return result;
 }
 

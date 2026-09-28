@@ -135,6 +135,10 @@
     <string name="pdf_password_short">Dùng ít nhất 4 ký tự</string>
     <string name="pdf_password_mismatch">Hai mật khẩu không khớp</string>
     <string name="pdf_flatten">Làm phẳng</string>
+    <string name="pdf_to_word">Chuyển sang Word</string>
+    <string name="pdf_to_word_message">Mỗi trang thành các đoạn chữ giữ cỡ chữ và căn lề, kèm ảnh của trang. Không giữ chữ đậm, font, màu, bảng và cột. Trang scan được nhận dạng chữ (OCR).</string>
+    <string name="pdf_to_word_convert">Chuyển</string>
+    <string name="pdf_to_word_done">Đã chuyển %1$d trang</string>
     <string name="pdf_flatten_message">Chú thích và ô form trở thành một phần của trang trong tệp mới, không sửa được nữa.</string>
     <string name="pdf_images_quality">Chất lượng</string>
     <string name="pdf_images_normal">Thường (1080 px)</string>

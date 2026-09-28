@@ -753,6 +753,15 @@ internal class PdfReaderTools(
         }
     }
 
+    fun toWord() = withSavedEdits {
+        val src = source ?: return@withSavedEdits
+        dialogs.confirm(str(R.string.pdf_to_word), str(R.string.pdf_to_word_message), str(R.string.pdf_to_word_convert), str(android.R.string.cancel)) {
+            runner.run(str(R.string.pdf_to_word), baseName, "word", extension = "docx") { output, progress ->
+                str(R.string.pdf_to_word_done, tools.toWord(src, output, progress))
+            }
+        }
+    }
+
     /** Each page as a picture in Pictures/<name of the document>. */
     fun exportImages() = withSavedEdits {
         val src = source ?: return@withSavedEdits
@@ -828,6 +837,7 @@ internal class PdfReaderTools(
             item(R.string.pdf_organize) { withSavedEdits(onOrganize) }
             item(R.string.export_images) { exportImages() }
             caption(str(R.string.pdf_group_file))
+            item(R.string.pdf_to_word) { toWord() }
             item(R.string.pdf_ocr) { recognizeText() }
             item(R.string.pdf_compress) { compress() }
             item(R.string.pdf_watermark) { watermark() }

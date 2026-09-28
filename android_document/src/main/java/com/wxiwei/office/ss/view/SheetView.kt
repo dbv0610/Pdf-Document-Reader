@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          SheetView.java
  *
  * 编译器:            android2.2
@@ -92,6 +99,15 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
     private var extentSignature = Long.MIN_VALUE
     private var extentWidth = 0f
     private var extentHeight = 0f
+    // what updateDataExtent has scanned of extentSheet, to go on from there
+    private var extentLastRowNum = -1
+    private var extentReading = false
+    private var extentShapes = 0
+    private var scannedRow = -1
+    private var dataLastCol = 0 // exclusive
+    private var dataLastRow = -1
+    private var heightRow = -1 // rowsHeight holds the heights of rows 0..heightRow
+    private var rowsHeight = 0f
     // empty columns/rows allowed past the data; grows while the user keeps pushing at the edge
     private var extraColumns = EXTRA_EMPTY
     private var extraRows = EXTRA_EMPTY
@@ -591,36 +607,51 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             signature = signature * 31 + v
         }
         if (sheet === extentSheet && signature == extentSignature) return
+        val lastRowNum = sheet.getLastRowNum()
+        // What was scanned stays right while the sheet is still being read (rows only arrive at
+        // the end, and editing waits for the end) or when only the selection or the empty margin
+        // changed; anything else (an edit that adds or removes rows, shapes) rescans from the top.
+        // Scanning a sheet of a million cells on every touch while it loads froze scrolling.
+        val grows = sheet === extentSheet && lastRowNum >= extentLastRowNum &&
+            (extentReading || (lastRowNum == extentLastRowNum && sheet.getShapeCount() == extentShapes))
+        if (!grows) {
+            scannedRow = sheet.getFirstRowNum() - 1
+            dataLastCol = 0
+            dataLastRow = -1
+            heightRow = -1
+            rowsHeight = 0f
+        }
         extentSheet = sheet
         extentSignature = signature
-        var lastCol = 0 // exclusive
-        var lastRow = -1
+        extentLastRowNum = lastRowNum
+        extentReading = !sheet.isAccomplished()
+        extentShapes = sheet.getShapeCount()
         // only cells that show something: Row.getLastCol also counts blank cells that merely carry a
         // style, which stretches the scroll range far into empty columns
-        for (r in sheet.getFirstRowNum()..sheet.getLastRowNum()) {
+        for (r in maxOf(scannedRow + 1, sheet.getFirstRowNum())..lastRowNum) {
             val row = sheet.getRow(r) ?: continue
             for (cell in row.cellCollection()) {
                 if (!isVisibleCell(cell)) continue
-                lastCol = maxOf(lastCol, cell.getColNumber() + 1)
-                lastRow = r
+                dataLastCol = maxOf(dataLastCol, cell.getColNumber() + 1)
+                dataLastRow = r
             }
         }
+        scannedRow = maxOf(scannedRow, lastRowNum)
         // the selected cell is always reachable, even outside the data
-        lastCol = maxOf(lastCol, sheet.getActiveCellColumn() + 1)
-        lastRow = maxOf(lastRow, sheet.getActiveCellRow())
+        val lastCol = maxOf(dataLastCol, sheet.getActiveCellColumn() + 1) // exclusive
+        val lastRow = maxOf(dataLastRow, sheet.getActiveCellRow())
         var width = 0f
         for (c in 0 until lastCol + extraColumns) {
             if (!sheet.isColumnHidden(c)) width += sheet.getColumnPixelWidth(c)
         }
-        var height = 0f
-        for (r in 0..lastRow + extraRows) {
-            val row = sheet.getRow(r)
-            height += when {
-                row == null -> sheet.getDefaultRowHeight().toFloat()
-                row.isZeroHeight() -> 0f
-                else -> row.getRowPixelHeight()
-            }
-        }
+        // rows up to the last one read keep their height: add only the new ones to the sum
+        val target = lastRow + extraRows
+        val known = minOf(target, lastRowNum)
+        if (known < heightRow) { heightRow = -1; rowsHeight = 0f }
+        for (r in heightRow + 1..known) rowsHeight += rowHeightOf(sheet, r)
+        heightRow = maxOf(heightRow, known)
+        var height = rowsHeight
+        for (r in known + 1..target) height += rowHeightOf(sheet, r)
         for (shape in sheet.getShapes()) {
             val b = shape.bounds ?: continue
             width = maxOf(width, (b.x + b.width).toFloat())
@@ -628,6 +659,15 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
         }
         extentWidth = width
         extentHeight = height
+    }
+
+    private fun rowHeightOf(sheet: Sheet, r: Int): Float {
+        val row = sheet.getRow(r)
+        return when {
+            row == null -> sheet.getDefaultRowHeight().toFloat()
+            row.isZeroHeight() -> 0f
+            else -> row.getRowPixelHeight()
+        }
     }
 
     /**

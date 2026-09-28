@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 鏂囦欢鍚嶇О:          SlideShowSlideInfoAtom.java
  * 鐗堟潈鎵�鏈堾2001-2014 铏硅蒋锛堟澀宸烇級绉戞妧鏈夐檺鍏徃
  * 缂栬瘧鍣�:            android2.2
