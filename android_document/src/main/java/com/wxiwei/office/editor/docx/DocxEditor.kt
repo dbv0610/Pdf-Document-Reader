@@ -58,6 +58,12 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     fun setBold(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "b", if (on) "1" else "0"))
     fun setItalic(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "i", if (on) "1" else "0"))
     fun setUnderline(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "u", if (on) "single" else "none"))
+    fun setStrike(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "strike", if (on) "1" else "0"))
+    /** The font of [start, end): [name] for Latin, complex-script and East Asian text alike. */
+    fun setFont(start: Long, end: Long, name: String) =
+        if (name.isBlank() || name.length > 31) invalid("Bad font name") else queue(Op(start, end, "rFonts", name))
+    /** [script]: 1 superscript, 2 subscript, 0 back on the line. */
+    fun setScript(start: Long, end: Long, script: Int) = queue(Op(start, end, "vertAlign", when (script) { 1 -> "superscript"; 2 -> "subscript"; else -> "baseline" }))
     fun setTextColor(start: Long, end: Long, rgbHex: String): Boolean {
         val rgb = rgbHex.removePrefix("#")
         return if (rgb.matches(Regex("(?i)[0-9a-f]{6}"))) queue(Op(start, end, "color", rgb.uppercase())) else invalid("Expected RRGGBB")
@@ -73,6 +79,22 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     /** Line spacing as a multiple of single (1.0, 1.5, 2.0...) of every paragraph touching [start, end). */
     fun setLineSpacing(start: Long, end: Long, multiple: Float): Boolean =
         if (multiple in 0.25f..10f) queue(Op(start, end, "pline", Math.round(multiple * 240).toString())) else invalid("Bad line spacing")
+    /** Line height of the paragraphs [exactly] [points] (or at least that much). */
+    fun setLineSpacingPoints(start: Long, end: Long, points: Float, exactly: Boolean): Boolean =
+        if (points in 1f..1584f) queue(Op(start, end, "pline", Math.round(points * 20).toString() + "," + (if (exactly) "exact" else "atLeast"))) else invalid("Bad line spacing")
+    /** Space before and after the paragraphs, in points. */
+    fun setParagraphSpacing(start: Long, end: Long, beforePt: Float, afterPt: Float): Boolean =
+        if (beforePt in 0f..1584f && afterPt in 0f..1584f) queue(Op(start, end, "pspace", "${Math.round(beforePt * 20)},${Math.round(afterPt * 20)}")) else invalid("Bad paragraph spacing")
+    /**
+     * Word's Paragraph dialog in one step: alignment (left, center, right, both), left/right indent in
+     * twips, [specialTwips] > 0 first-line indent / < 0 hanging indent, space before/after in points.
+     */
+    fun setParagraphLayout(start: Long, end: Long, align: String, leftTwips: Int, rightTwips: Int, specialTwips: Int, beforePt: Float, afterPt: Float): Boolean = when {
+        align !in setOf("left", "center", "right", "both") -> invalid("Bad alignment")
+        leftTwips !in -31680..31680 || rightTwips !in -31680..31680 || specialTwips !in -31680..31680 -> invalid("Bad indent")
+        beforePt !in 0f..1584f || afterPt !in 0f..1584f -> invalid("Bad paragraph spacing")
+        else -> queue(Op(start, end, "ppara", "$align,$leftTwips,$rightTwips,$specialTwips,${Math.round(beforePt * 20)},${Math.round(afterPt * 20)}"))
+    }
     /** Bullets ("●" list, level 0) on or off for every paragraph touching [start, end). */
     fun setBullets(start: Long, end: Long, on: Boolean) = queue(Op(start, end, "pnum", if (on) "bullet" else "0"))
     /** List level (0-8) of every listed paragraph touching [start, end). */
@@ -175,6 +197,26 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     /** A [rows] x [cols] table with thin borders after the body paragraph holding [offset]. */
     fun insertTable(offset: Long, rows: Int, cols: Int): Boolean =
         if (rows !in 1..200 || cols !in 1..63) invalid("Bad table size") else queue(Op(offset, offset, "table", width = rows, height = cols))
+    /**
+     * The border after grid column [boundary] - 1 of the table holding [offset] moves by [dTwips]:
+     * the column before it gets wider, the one after it narrower (the table keeps its width);
+     * the right edge ([boundary] = column count) widens the last column and the table.
+     */
+    fun resizeTableColumn(offset: Long, boundary: Int, dTwips: Int): Boolean =
+        if (boundary < 1) invalid("Bad column border") else queue(Op(offset, offset, "tblcol", "$boundary,$dTwips"))
+    /** A new empty row [below] (or above) the row holding [offset], with the same cells. */
+    fun insertTableRow(offset: Long, below: Boolean): Boolean = queue(Op(offset, offset, "tblrowins", if (below) "below" else "above"))
+    /** A new empty column [right] of (or left of) the cell holding [offset], as wide as that cell's column was; all columns shrink so the table keeps its width. */
+    fun insertTableColumn(offset: Long, right: Boolean): Boolean = queue(Op(offset, offset, "tblcolins", if (right) "right" else "left"))
+    /** Removes the row holding [offset] (not the last one of its table). */
+    fun deleteTableRow(offset: Long): Boolean = queue(Op(offset, offset, "tblrowdel"))
+    /** Removes the grid columns of the cell holding [offset] (not the last one); the others widen so the table keeps its width. */
+    fun deleteTableColumn(offset: Long): Boolean = queue(Op(offset, offset, "tblcoldel"))
+    /** The row holding [offset] is at least [twips] high. */
+    fun setTableRowHeight(offset: Long, twips: Int): Boolean =
+        if (twips < 0) invalid("Bad row height") else queue(Op(offset, offset, "tblrow", twips.toString()))
+    /** Moves the body table holding [offset] before the body paragraph (or table) holding [to], or [after] it. */
+    fun moveTable(offset: Long, to: Long, after: Boolean): Boolean = queue(Op(offset, offset, "tblmove", "$to,$after"))
     /** Drops the last queued operation (undo of a live edit). */
     fun undoLast(): Boolean = if (ops.isEmpty()) false else { ops.removeAt(ops.lastIndex); true }
     /** Number of queued operations. */
@@ -189,14 +231,18 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
      * Writes the edited document to [target]. [overrides] (by [lastOp] handle) replace the text
      * of queued inserts, with their run formatting.
      */
-    fun save(target: File, overrides: Map<Any, InsertOverride> = emptyMap()): EditResult {
+    /**
+     * [cellFills] (by [lastOp] handle of an [insertTableRow] or [insertTableColumn]) is the text of
+     * each cell that op makes, in order (null: left empty), with its run formatting.
+     */
+    fun save(target: File, overrides: Map<Any, InsertOverride> = emptyMap(), cellFills: Map<Any, List<InsertOverride?>> = emptyMap()): EditResult {
         val result = try {
             if (!source.extension.equals("docx", true)) fail(Reason.UNSUPPORTED_FORMAT, "Only DOCX is editable")
             val pkg = OoxmlPackage.open(source)
             // one pass per edited part: the body (with its text boxes), a header, a footer
             val parts = map.parts()
             for (name in ops.map { (map.partAt(it.start) ?: fail(Reason.MAP_MISMATCH, "No part for offset ${it.start}")).name }.distinct()) {
-                Session(pkg, java.util.IdentityHashMap(overrides), name, parts.filter { it.name == name }).applyAll()
+                Session(pkg, java.util.IdentityHashMap(overrides), name, parts.filter { it.name == name }, java.util.IdentityHashMap(cellFills)).applyAll()
             }
             pkg.saveTo(target)
         } catch (e: Failure) { EditResult.Error(e.reason, e.message ?: "Edit failed")
@@ -208,7 +254,8 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     }
 
     private inner class Session(val pkg: OoxmlPackage, val overrides: java.util.IdentityHashMap<Any, InsertOverride>,
-                                val part: String, val ranges: List<DocxSourceMap.Part>) {
+                                val part: String, val ranges: List<DocxSourceMap.Part>,
+                                val cellFills: java.util.IdentityHashMap<Any, List<InsertOverride?>> = java.util.IdentityHashMap()) {
         val root: Element = pkg.xml(part).rootElement!!
         // w:hdr and w:ftr hold their paragraphs directly
         val body = if (part == "word/document.xml") root.firstChild(W, "body") ?: fail(Reason.MAP_MISMATCH, "No document body") else root
@@ -265,8 +312,15 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                         if (b != null) overrides[op].let { o -> insert(b, o?.text ?: op.value, o?.runs) }?.let { insertionEnds[op.start] = it }
                         delete(op.start, op.end)
                     }
-                    "pjc", "pind", "pline", "pnum", "plvl" -> paragraphFormat(op)
+                    "pjc", "pind", "pline", "pspace", "pnum", "plvl", "ppara" -> paragraphFormat(op)
                     "table" -> table(op)
+                    "tblmove" -> moveTable(op)
+                    "tblcol" -> tableColumn(op)
+                    "tblrow" -> tableRow(op)
+                    "tblrowins" -> insertRow(op)
+                    "tblcolins" -> insertColumn(op)
+                    "tblrowdel" -> deleteRow(op)
+                    "tblcoldel" -> deleteColumn(op)
                     "objsize", "objmove", "objshift" -> objectOp(op)
                     else -> format(op)
                 }
@@ -319,12 +373,33 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                     insertInPPr(pPr, numPr)
                     continue
                 }
+                if (op.type == "ppara") {
+                    val v = op.value.split(',')
+                    fun child(name: String) = pPr.firstChild(W, name) ?: newElement(W, name).also { insertInPPr(pPr, it) }
+                    fun drop(e: Element, vararg names: String) = names.forEach { a -> e.attribute(QName(a, W))?.let { e.remove(it) } }
+                    child("jc").addAttribute(QName("val", W), v[0])
+                    val ind = child("ind")
+                    drop(ind, "start", "end", "leftChars", "rightChars", "firstLineChars", "hangingChars", "firstLine", "hanging")
+                    ind.addAttribute(QName("left", W), v[1])
+                    ind.addAttribute(QName("right", W), v[2])
+                    val special = v[3].toInt()
+                    if (special > 0) ind.addAttribute(QName("firstLine", W), special.toString())
+                    else if (special < 0) ind.addAttribute(QName("hanging", W), (-special).toString())
+                    val spacing = child("spacing")
+                    drop(spacing, "beforeLines", "afterLines", "beforeAutospacing", "afterAutospacing")
+                    spacing.addAttribute(QName("before", W), v[4])
+                    spacing.addAttribute(QName("after", W), v[5])
+                    continue
+                }
                 val (name, attrs) = when (op.type) {
                     "pjc" -> "jc" to listOf("val" to op.value)
                     "pind" -> "ind" to listOf("left" to op.value)
-                    else -> "spacing" to listOf("line" to op.value, "lineRule" to "auto")
+                    "pspace" -> op.value.split(',').let { "spacing" to listOf("before" to it[0], "after" to it[1]) }
+                    else -> op.value.split(',').let { "spacing" to listOf("line" to it[0], "lineRule" to (it.getOrNull(1) ?: "auto")) }
                 }
                 val child = pPr.firstChild(W, name) ?: newElement(W, name).also { insertInPPr(pPr, it) }
+                // spacing in points wins over spacing in lines of text and "auto" spacing
+                if (op.type == "pspace") listOf("beforeLines", "afterLines", "beforeAutospacing", "afterAutospacing").forEach { a -> child.attribute(QName(a, W))?.let { child.remove(it) } }
                 // w:start is the bidi-neutral twin of w:left
                 if (name == "ind") child.attribute(QName("start", W))?.let { child.remove(it) }
                 attrs.forEach { (k, v) -> child.addAttribute(QName(k, W), v) }
@@ -350,11 +425,22 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             pr.childrenNamed(W, type).forEach { it.detach() }
             if (type == "highlight") pr.childrenNamed(W, "shd").forEach { it.detach() }
             if (type == "shd") pr.childrenNamed(W, "highlight").forEach { it.detach() }
-            pr.add(newElement(W, type).apply {
-                addAttribute(QName(if (type == "shd") "fill" else "val", W), value)
-                if (type == "shd") addAttribute(QName("val", W), "clear")
+            putRunProp(pr, newElement(W, type).apply {
+                when (type) {
+                    // one name for every script; no theme font over it
+                    "rFonts" -> listOf("ascii", "hAnsi", "cs", "eastAsia").forEach { addAttribute(QName(it, W), value) }
+                    "shd" -> { addAttribute(QName("fill", W), value); addAttribute(QName("val", W), "clear") }
+                    else -> addAttribute(QName("val", W), value)
+                }
             })
-            if (type == "sz") { pr.childrenNamed(W, "szCs").forEach { it.detach() }; pr.add(newElement(W, "szCs").apply { addAttribute(QName("val", W), value) }) }
+            if (type == "sz") { pr.childrenNamed(W, "szCs").forEach { it.detach() }; putRunProp(pr, newElement(W, "szCs").apply { addAttribute(QName("val", W), value) }) }
+        }
+
+        /** Puts [e] into the run properties [pr] where CT_RPr wants it: Word refuses them out of order. */
+        fun putRunProp(pr: Element, e: Element) {
+            val rank = RPR_ORDER.indexOf(e.name).let { if (it < 0) RPR_ORDER.size else it }
+            val next = pr.elements()!!.filterIsInstance<Element>().firstOrNull { (RPR_ORDER.indexOf(it.name).let { i -> if (i < 0) RPR_ORDER.size else i }) > rank }
+            addBefore(pr, next, e)
         }
         fun boundary(at: Long): Boundary {
             if (opaqueSpans.values.any { at > it.first && at < it.last })
@@ -531,6 +617,260 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             // Word wants a paragraph after a table
             if (next == null || next.name != "p") addBefore(body, next, newElement(W, "p"))
         }
+        /** The child of the body (a paragraph, a table) holding the paragraph at [offset]. */
+        fun bodyChildAt(offset: Long): Element {
+            val para = paras.firstOrNull { offset >= it.start && offset < it.end } ?: fail(Reason.INVALID_ARGUMENT, "No paragraph at offset")
+            var e = paragraphs.getOrNull(para.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
+            while (e.parent !== body) e = e.parent ?: fail(Reason.INVALID_ARGUMENT, "Not in the body")
+            return e
+        }
+
+        /** The paragraph at [offset] and its nearest ancestor named [local] (w:tbl, w:tr). */
+        fun ancestorAt(offset: Long, local: String): Element {
+            val para = paras.firstOrNull { offset >= it.start && offset < it.end } ?: fail(Reason.INVALID_ARGUMENT, "No paragraph at offset")
+            var e: Element? = paragraphs.getOrNull(para.paraIndex) ?: fail(Reason.MAP_MISMATCH, "Missing paragraph")
+            while (e != null && !(e.name == local && e.namespaceURI == W.uRI)) e = e.parent
+            return e ?: fail(Reason.INVALID_ARGUMENT, "Not in a table")
+        }
+        fun twipsOf(e: Element?, attr: String = "w"): Int? = e?.attributeValue(QName(attr, W))?.toIntOrNull()
+
+        fun tableColumn(op: Op) {
+            val (g, d) = op.value.split(',').map { it.toInt() }
+            val tbl = ancestorAt(op.start, "tbl")
+            val grid = tbl.firstChild(W, "tblGrid")?.childrenNamed(W, "gridCol") ?: fail(Reason.INVALID_ARGUMENT, "Table without grid")
+            if (g !in 1..grid.size) fail(Reason.INVALID_ARGUMENT, "Bad column border")
+            val widths = grid.map { twipsOf(it) ?: 0 }.toMutableList()
+            widths[g - 1] += d
+            if (g < widths.size) widths[g] -= d
+            if (widths.any { it <= 0 }) fail(Reason.INVALID_ARGUMENT, "Column too narrow")
+            grid.forEachIndexed { i, e -> e.addAttribute(QName("w", W), widths[i].toString()) }
+            // the cells ending or starting at the border take the grid width they span
+            for (tr in tbl.childrenNamed(W, "tr")) {
+                var col = twipsOf(tr.firstChild(W, "trPr")?.firstChild(W, "gridBefore"), "val") ?: 0
+                for (tc in tr.childrenNamed(W, "tc")) {
+                    val span = twipsOf(tc.firstChild(W, "tcPr")?.firstChild(W, "gridSpan"), "val") ?: 1
+                    if (col + span == g || col == g) {
+                        tc.firstChild(W, "tcPr")?.firstChild(W, "tcW")?.let { w ->
+                            w.addAttribute(QName("w", W), widths.subList(col, minOf(col + span, widths.size)).sum().toString())
+                            w.addAttribute(QName("type", W), "dxa")
+                        }
+                    }
+                    col += span
+                }
+            }
+            // the right edge makes the table wider
+            if (g == widths.size) tbl.firstChild(W, "tblPr")?.firstChild(W, "tblW")?.let { w ->
+                if (w.attributeValue(QName("type", W)) == "dxa") w.addAttribute(QName("w", W), widths.sum().toString())
+            }
+        }
+
+        fun tableRow(op: Op) {
+            val tr = ancestorAt(op.start, "tr")
+            // CT_Row: tblPrEx?, trPr?, then the cells
+            val trPr = tr.firstChild(W, "trPr") ?: newElement(W, "trPr").also { p ->
+                val children = tr.elements()!!.filterIsInstance<Element>()
+                val after = children.firstOrNull { it.name == "tblPrEx" }
+                addBefore(tr, if (after != null) children.getOrNull(children.indexOf(after) + 1) else children.firstOrNull(), p)
+            }
+            val h = trPr.firstChild(W, "trHeight") ?: trPr.addElement(QName("trHeight", W))!!
+            h.addAttribute(QName("val", W), op.value)
+            // "at least": the text still fits (an exact height keeps its rule)
+            if (h.attributeValue(QName("hRule", W)) != "exact") h.addAttribute(QName("hRule", W), "atLeast")
+        }
+
+        /** An empty cell like [like]: its properties (no merge), one empty paragraph with its first paragraph's properties. */
+        fun emptyCell(like: Element, widthTwips: Int? = null): Element {
+            val tc = newElement(W, "tc")
+            like.firstChild(W, "tcPr")?.let { pr ->
+                val copy = pr.createCopy()!!
+                copy.childrenNamed(W, "gridSpan").forEach { it.detach() }
+                copy.childrenNamed(W, "vMerge").forEach { it.detach() }
+                if (widthTwips != null) copy.firstChild(W, "tcW")?.let { w ->
+                    w.addAttribute(QName("w", W), widthTwips.toString()); w.addAttribute(QName("type", W), "dxa")
+                }
+                tc.add(copy)
+            }
+            val p = tc.addElement(QName("p", W))!!
+            like.firstChild(W, "p")?.firstChild(W, "pPr")?.let { p.add(it.createCopy()!!) }
+            return tc
+        }
+
+        /** The text shown in the new cells [made] of [op], written into their empty paragraph. */
+        fun fill(op: Op, made: List<Element>) {
+            val fills = cellFills[op] ?: return
+            made.forEachIndexed { i, tc ->
+                val f = fills.getOrNull(i) ?: return@forEachIndexed
+                if (f.text.isEmpty()) return@forEachIndexed
+                val p = tc.firstChild(W, "p") ?: return@forEachIndexed
+                insert(Boundary(p, null, null), f.text, f.runs)
+            }
+        }
+
+        fun insertRow(op: Op) {
+            val tr = ancestorAt(op.start, "tr")
+            val row = newElement(W, "tr")
+            val made = ArrayList<Element>()
+            tr.firstChild(W, "tblPrEx")?.let { row.add(it.createCopy()!!) }
+            // the same row properties, but never repeated as a header row
+            tr.firstChild(W, "trPr")?.let { pr -> row.add(pr.createCopy()!!.also { c -> c.childrenNamed(W, "tblHeader").forEach { it.detach() } }) }
+            for (tc in tr.childrenNamed(W, "tc")) {
+                val cell = emptyCell(tc)
+                // a merged cell stays merged over the new row's matching cells
+                tc.firstChild(W, "tcPr")?.firstChild(W, "gridSpan")?.let { span ->
+                    (cell.firstChild(W, "tcPr") ?: newElement(W, "tcPr").also { addBefore(cell, cell.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }).add(span.createCopy()!!)
+                }
+                row.add(cell)
+                made.add(cell)
+            }
+            val parent = tr.parent ?: fail(Reason.MAP_MISMATCH, "Row was removed")
+            val siblings = parent.elements()!!.filterIsInstance<Element>()
+            addBefore(parent, if (op.value == "below") siblings.getOrNull(siblings.indexOf(tr) + 1) else tr, row)
+            fill(op, made)
+        }
+
+        fun insertColumn(op: Op) {
+            val right = op.value == "right"
+            val here = ancestorAt(op.start, "tc")
+            val tbl = ancestorAt(op.start, "tbl")
+            val gridEl = tbl.firstChild(W, "tblGrid") ?: fail(Reason.INVALID_ARGUMENT, "Table without grid")
+            val grid = gridEl.childrenNamed(W, "gridCol")
+            // the grid columns of the cell holding the caret
+            var at = -1
+            var width = 0
+            run {
+                val tr = here.parent!!
+                var col = twipsOf(tr.firstChild(W, "trPr")?.firstChild(W, "gridBefore"), "val") ?: 0
+                for (tc in tr.childrenNamed(W, "tc")) {
+                    val span = twipsOf(tc.firstChild(W, "tcPr")?.firstChild(W, "gridSpan"), "val") ?: 1
+                    if (tc === here) {
+                        at = if (right) col + span else col
+                        width = twipsOf(grid.getOrNull(if (right) col + span - 1 else col)) ?: 1440
+                    }
+                    col += span
+                }
+            }
+            if (at < 0) fail(Reason.MAP_MISMATCH, "Cell not in its row")
+            val newCol = newElement(W, "gridCol").also { it.addAttribute(QName("w", W), width.toString()) }
+            addBefore(gridEl, grid.getOrNull(at), newCol)
+            val made = ArrayList<Element>()
+            for (tr in tbl.childrenNamed(W, "tr")) {
+                var col = twipsOf(tr.firstChild(W, "trPr")?.firstChild(W, "gridBefore"), "val") ?: 0
+                val cells = tr.childrenNamed(W, "tc")
+                var done = false
+                for ((k, tc) in cells.withIndex()) {
+                    val spanEl = tc.firstChild(W, "tcPr")?.firstChild(W, "gridSpan")
+                    val span = twipsOf(spanEl, "val") ?: 1
+                    when {
+                        // a merged cell across the new column takes it in
+                        col < at && at < col + span -> {
+                            spanEl!!.addAttribute(QName("val", W), (span + 1).toString())
+                            tc.firstChild(W, "tcPr")?.firstChild(W, "tcW")?.let { w -> twipsOf(w)?.let { w.addAttribute(QName("w", W), (it + width).toString()) } }
+                            done = true
+                        }
+                        col == at -> { addBefore(tr, tc, emptyCell(tc, width).also { made.add(it) }); done = true }
+                    }
+                    if (done) break
+                    col += span
+                    // after the last cell
+                    if (k == cells.lastIndex && col == at) { addBefore(tr, null, emptyCell(tc, width).also { made.add(it) }); done = true }
+                }
+            }
+            fill(op, made)
+            // the table keeps its width: every column gives up its share to the new one
+            val cols = gridEl.childrenNamed(W, "gridCol")
+            val old = cols.map { twipsOf(it) ?: 0 }
+            val total = old.sum() - width
+            if (total > 0) {
+                val scaled = old.map { maxOf(1, Math.round(it.toDouble() * total / old.sum()).toInt()) }.toMutableList()
+                scaled[scaled.lastIndex] += total - scaled.sum()
+                cols.forEachIndexed { i, e -> e.addAttribute(QName("w", W), scaled[i].toString()) }
+                for (tr in tbl.childrenNamed(W, "tr")) {
+                    var col = twipsOf(tr.firstChild(W, "trPr")?.firstChild(W, "gridBefore"), "val") ?: 0
+                    for (tc in tr.childrenNamed(W, "tc")) {
+                        val span = twipsOf(tc.firstChild(W, "tcPr")?.firstChild(W, "gridSpan"), "val") ?: 1
+                        tc.firstChild(W, "tcPr")?.firstChild(W, "tcW")?.let { w ->
+                            if (w.attributeValue(QName("type", W)) == "dxa") w.addAttribute(QName("w", W), scaled.subList(minOf(col, scaled.size), minOf(col + span, scaled.size)).sum().toString())
+                        }
+                        col += span
+                    }
+                }
+            }
+        }
+
+        /** Grid start column of each cell of [tr], with its span. */
+        fun cellColumns(tr: Element): List<Triple<Element, Int, Int>> {
+            var col = twipsOf(tr.firstChild(W, "trPr")?.firstChild(W, "gridBefore"), "val") ?: 0
+            return tr.childrenNamed(W, "tc").map { tc ->
+                val span = twipsOf(tc.firstChild(W, "tcPr")?.firstChild(W, "gridSpan"), "val") ?: 1
+                Triple(tc, col, span).also { col += span }
+            }
+        }
+
+        fun deleteRow(op: Op) {
+            val tr = ancestorAt(op.start, "tr")
+            val tbl = tr.parent ?: fail(Reason.MAP_MISMATCH, "Row was removed")
+            val rows = tbl.childrenNamed(W, "tr")
+            if (rows.size <= 1) fail(Reason.INVALID_ARGUMENT, "The last row of a table")
+            // a vertical merge starting here starts in the next row now
+            rows.getOrNull(rows.indexOf(tr) + 1)?.let { next ->
+                val below = cellColumns(next)
+                for ((tc, col, _) in cellColumns(tr)) {
+                    if (tc.firstChild(W, "tcPr")?.firstChild(W, "vMerge")?.attributeValue(QName("val", W)) != "restart") continue
+                    below.firstOrNull { it.second == col }?.first?.firstChild(W, "tcPr")?.firstChild(W, "vMerge")?.let { v ->
+                        if (v.attributeValue(QName("val", W)) != "restart") v.addAttribute(QName("val", W), "restart")
+                    }
+                }
+            }
+            tr.detach()
+        }
+
+        fun deleteColumn(op: Op) {
+            val here = ancestorAt(op.start, "tc")
+            val tbl = ancestorAt(op.start, "tbl")
+            val gridEl = tbl.firstChild(W, "tblGrid") ?: fail(Reason.INVALID_ARGUMENT, "Table without grid")
+            val grid = gridEl.childrenNamed(W, "gridCol")
+            val (_, from, span) = cellColumns(here.parent!!).firstOrNull { it.first === here } ?: fail(Reason.MAP_MISMATCH, "Cell not in its row")
+            val to = from + span
+            if (span >= grid.size) fail(Reason.INVALID_ARGUMENT, "The last column of a table")
+            for (tr in tbl.childrenNamed(W, "tr")) {
+                for ((tc, col, n) in cellColumns(tr)) {
+                    val overlap = minOf(col + n, to) - maxOf(col, from)
+                    if (overlap <= 0) continue
+                    if (overlap >= n) tc.detach()
+                    else tc.firstChild(W, "tcPr")?.firstChild(W, "gridSpan")?.addAttribute(QName("val", W), (n - overlap).toString())
+                }
+                // a row left without cells goes too
+                if (tr.childrenNamed(W, "tc").isEmpty()) tr.detach()
+            }
+            val old = grid.map { twipsOf(it) ?: 0 }
+            val total = old.sum()
+            grid.subList(from, to).forEach { it.detach() }
+            val kept = old.filterIndexed { i, _ -> i !in from until to }
+            // the table keeps its width: the other columns share what was taken out
+            val scaled = kept.map { maxOf(1, Math.round(it.toDouble() * total / kept.sum()).toInt()) }.toMutableList()
+            scaled[scaled.lastIndex] += total - scaled.sum()
+            gridEl.childrenNamed(W, "gridCol").forEachIndexed { i, e -> e.addAttribute(QName("w", W), scaled[i].toString()) }
+            for (tr in tbl.childrenNamed(W, "tr")) for ((tc, col, n) in cellColumns(tr)) {
+                tc.firstChild(W, "tcPr")?.firstChild(W, "tcW")?.let { w ->
+                    if (w.attributeValue(QName("type", W)) == "dxa") w.addAttribute(QName("w", W), scaled.subList(minOf(col, scaled.size), minOf(col + n, scaled.size)).sum().toString())
+                }
+            }
+        }
+
+        fun moveTable(op: Op) {
+            val (to, after) = op.value.split(',').let { it[0].toLong() to it[1].toBoolean() }
+            val tbl = bodyChildAt(op.start)
+            if (tbl.name != "tbl" || tbl.namespaceURI != W.uRI) fail(Reason.INVALID_ARGUMENT, "No table at offset")
+            val target = bodyChildAt(to)
+            if (target === tbl) return
+            tbl.detach()
+            val siblings = body.elements()!!.filterIsInstance<Element>()
+            addBefore(body, if (after) siblings.getOrNull(siblings.indexOf(target) + 1) else target, tbl)
+            // Word wants a paragraph after a table
+            val now = body.elements()!!.filterIsInstance<Element>()
+            val next = now.getOrNull(now.indexOf(tbl) + 1)
+            if (next == null || next.name != "p") addBefore(body, next, newElement(W, "p"))
+        }
         fun append(text: String) { text.split('\n').forEach { part ->
             val p = newElement(W, "p"); p.add(textRun(part, null)); addBefore(body, body.firstChild(W, "sectPr"), p)
         } }
@@ -560,6 +900,10 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
     }
     companion object {
+        /** Children of w:rPr in schema order (CT_RPr). */
+        private val RPR_ORDER = listOf("rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline", "shadow",
+            "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern", "position", "sz", "szCs",
+            "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath")
         private const val AREA_MASK = com.wxiwei.office.constant.wp.WPModelConstant.AREA_MASK
         private const val TEXTBOX = com.wxiwei.office.constant.wp.WPModelConstant.TEXTBOX
         private const val STORY_MASK = AREA_MASK or com.wxiwei.office.constant.wp.WPModelConstant.TEXTBOX_MASK

@@ -3394,6 +3394,13 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         temp = rPr.element("highlight")
         if (temp != null) {
             am.setFontHighLight(attr, FCKit.convertColor(temp.attributeValue("val")))
+        } else {
+            // run shading (what the editor writes for a color that is not a named highlight). Not
+            // "auto", not white: WPS puts white shading under white text on colored cells, which
+            // Word would draw as white boxes hiding the text; on a white page it shows nothing anyway
+            rPr.element("shd")?.attributeValue("fill")?.takeIf { it.matches(Regex("(?i)[0-9a-f]{6}")) && !it.equals("FFFFFF", true) }?.let {
+                am.setFontHighLight(attr, (0xFF shl 24) or it.toInt(16))
+            }
         }
     }
 
@@ -3881,6 +3888,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     override fun dispose() {
         if (isReaderFinish()) {
             filePath = null
+            // close the file now: left to the finalizer, closing a file deleted meanwhile (shared
+            // storage) fails with EIO and that exception kills the app
+            zipPackage?.revert()
             zipPackage = null
             wpdoc = null
             packagePart = null

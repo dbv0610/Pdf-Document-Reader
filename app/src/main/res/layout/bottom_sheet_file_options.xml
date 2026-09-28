@@ -49,6 +49,21 @@
         android:visibility="gone" />
 
     <include
+        android:id="@+id/btnSlideList"
+        layout="@layout/item_file_option"
+        android:visibility="gone" />
+
+    <include
+        android:id="@+id/btnExportPdf"
+        layout="@layout/item_file_option"
+        android:visibility="gone" />
+
+    <include
+        android:id="@+id/btnExportImages"
+        layout="@layout/item_file_option"
+        android:visibility="gone" />
+
+    <include
         android:id="@+id/btnRename"
         layout="@layout/item_file_option" />
 

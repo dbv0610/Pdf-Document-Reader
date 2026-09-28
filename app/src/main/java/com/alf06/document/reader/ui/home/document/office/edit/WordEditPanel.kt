@@ -14,6 +14,8 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.wxiwei.office.editor.EditResult
 import com.wxiwei.office.editor.docx.LiveDocxSession
 import com.wxiwei.office.editor.word.WordSelection
@@ -63,7 +65,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             if (keyCode == KeyEvent.KEYCODE_DEL && event.action == KeyEvent.ACTION_DOWN && base > 0 &&
                 selectionStart == 0 && selectionEnd == 0) {
                 val s = session() ?: return@setOnKeyListener true
-                if (s.deleteText(base - 1, base)) { base -= 1; caret.touch(); reader.thumbnails?.invalidateAll() }
+                if (s.deleteText(base - 1, base)) { base -= 1; caret.touch(); pagesChangedFrom(base) }
                 else toast(s.lastError?.message ?: "Không xóa được")
                 true
             } else false
@@ -76,10 +78,14 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         addView(selectionLabel)
         addView(line(text, button("Thay") { replace() }, button("Chèn") { insert() }, weights = floatArrayOf(1f, 0f, 0f)))
         addView(toolRow(
-            button("B", bold = true) { op { e, r -> e.setBold(r.first, r.last + 1, !e.isBold(r.first)) } },
-            button("I") { op { e, r -> e.setItalic(r.first, r.last + 1, !e.isItalic(r.first)) } },
-            button("U") { op { e, r -> e.setUnderline(r.first, r.last + 1, !e.isUnderlined(r.first)) } },
+            button("B", bold = true) { toggle("Đậm", { e, a -> e.isBold(a) }) { e, a, b, on -> e.setBold(a, b, on) } },
+            button("I") { toggle("Nghiêng", { e, a -> e.isItalic(a) }) { e, a, b, on -> e.setItalic(a, b, on) } },
+            button("U") { toggle("Gạch chân", { e, a -> e.isUnderlined(a) }) { e, a, b, on -> e.setUnderline(a, b, on) } },
+            button("S̶") { toggle("Gạch giữa", { e, a -> e.isStruck(a) }) { e, a, b, on -> e.setStrike(a, b, on) } },
+            button("x²") { toggle("Chỉ số trên", { e, a -> e.isSuperscript(a) }) { e, a, b, on -> e.setScript(a, b, if (on) 1 else 0) } },
+            button("x₂") { toggle("Chỉ số dưới", { e, a -> e.isSubscript(a) }) { e, a, b, on -> e.setScript(a, b, if (on) 2 else 0) } },
             button("Màu chữ") { needSelection { pickColor("Màu chữ") { c -> c?.let { op { e, r -> e.setTextColor(r.first, r.last + 1, it) } } } } },
+            button("Font") { needSelection { pickFont { name -> op { e, r -> e.setFont(r.first, r.last + 1, name) } } } },
             button("Cỡ chữ") { needSelection { pickSize { pt -> op { e, r -> e.setFontSize(r.first, r.last + 1, pt) } } } },
             button("Tô màu") { needSelection { pickColor("Tô màu", none = "Bỏ tô") { c -> op { e, r -> e.highlight(r.first, r.last + 1, c ?: "none") } } } },
             button("Chọn từ") { selectAround { sel, at -> sel.wordAt(at) } },
@@ -96,6 +102,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             button("↔") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "center") } },
             button("⇥") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "right") } },
             button("☰") { paraOp { e, r -> e.setAlignment(r.first, r.last + 1, "both") } },
+            button("Đoạn văn…") { askParagraph() },
             button("Thụt +") { paraOp { e, r ->
                 // in a list: one level deeper, like Tab in Word
                 if (e.hasBullet(r.first)) e.setListLevel(r.first, r.last + 1, minOf(8, e.listLevelAt(r.first) + 1))
@@ -105,13 +112,19 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
                 if (e.hasBullet(r.first)) e.setListLevel(r.first, r.last + 1, maxOf(0, e.listLevelAt(r.first) - 1))
                 else e.setIndentLeft(r.first, r.last + 1, maxOf(0, e.indentLeftAt(r.first) - 720))
             } },
-            button("Dòng 1.0") { paraOp { e, r -> e.setLineSpacing(r.first, r.last + 1, 1f) } },
-            button("Dòng 1.5") { paraOp { e, r -> e.setLineSpacing(r.first, r.last + 1, 1.5f) } },
+            button("Giãn dòng") { askLineSpacing() },
             button("↶") { stopTyping(); session?.let { if (!it.undo()) toast("Không còn gì để hoàn tác") } },
             button("↷") { stopTyping(); session?.let { if (!it.redo()) toast("Không còn gì để làm lại") } },
             button("Bỏ chọn") { clearSelection() },
+            button("Tìm & thay") { findReplace() },
             button("+ Ảnh") { pickImage() },
             button("+ Bảng") { askTable() },
+            button("+ Hàng trên") { insertRowOrColumn(row = true, after = false) },
+            button("+ Hàng dưới") { insertRowOrColumn(row = true, after = true) },
+            button("+ Cột trái") { insertRowOrColumn(row = false, after = false) },
+            button("+ Cột phải") { insertRowOrColumn(row = false, after = true) },
+            button("− Hàng") { deleteRowOrColumn(row = true) },
+            button("− Cột") { deleteRowOrColumn(row = false) },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { save() },
             button("Lưu bản sao") { stopTyping(); saveCopy() },
         ))
@@ -125,8 +138,19 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     /** Where the caret or the selection starts, or -1. */
     private fun here(): Long = selection()?.selection()?.first ?: if (base >= 0) base + typing.selectionStart.coerceAtLeast(0) else -1L
 
+    /** [action] on the selected text; with only the caret in a word, on that word (like Word). */
     private fun needSelection(action: () -> Unit) {
-        if (selection()?.selection() == null) return toast("Chọn chữ trước (nhấn giữ một từ, hoặc Chọn từ/đoạn)")
+        val sel = selection() ?: return
+        if (sel.selection() == null && base >= 0) {
+            val caretAt = base + typing.selectionEnd.coerceAtLeast(0)
+            val word = sel.wordAt(caretAt)
+            if (!word.isEmpty() && caretAt >= word.first && caretAt <= word.last + 1) {
+                stopTyping()
+                anchor = word
+                select(sel, word)
+            }
+        }
+        if (sel.selection() == null) return toast("Chọn chữ trước (nhấn giữ một từ, hoặc Chọn từ/đoạn)")
         action()
     }
 
@@ -187,29 +211,242 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         reloadWorking()
     }
 
+    /**
+     * A new empty row above/below ([after]) or column left/right of the cell with the caret (or
+     * the first cell of the selected table). The working copy is reopened (a new cell has no place
+     * in the file yet), the view stays where it was and the caret goes into the new cell.
+     */
+    private fun insertRowOrColumn(row: Boolean, after: Boolean) {
+        val s = session() ?: return
+        val at = here().takeIf { it >= 0 } ?: tableAt?.first ?: -1L
+        val place = if (at >= 0) s.cellAt(at) else null
+        if (place == null) return toast("Chạm vào một ô của bảng trước")
+        stopTyping()
+        clearPicture()
+        val shown = !s.needsReopen
+        val ok = if (row) s.insertTableRow(at, after) else s.insertTableColumn(at, after)
+        // next to a cell added just now: save the working copy first (it has no place in the file yet), then again
+        // the same text is read back: the caret goes back to [at], then again
+        if (!ok && s.needsFlush) return reloadWorking { startTyping(at); insertRowOrColumn(row, after) }
+        if (!ok) return toast(s.lastError?.message ?: if (row) "Không thêm được hàng" else "Không thêm được cột")
+        // the new cell: same column in the new row, or the new column in the same row
+        val (r, c) = if (row) (if (after) place.row + 1 else place.row) to place.cell
+            else place.row to (if (after) place.cell + place.span else place.cell)
+        val typeThere = { session()?.cellStart(place.table, r, c)?.takeIf { it >= 0 }?.let { startTyping(it) } }
+        pagesChangedFrom(at)
+        // shown at once (a table without merged cells); otherwise the file is read again
+        if (shown && s.needsReopen) reloadWorking { typeThere() } else typeThere()
+    }
+
+    /**
+     * Removes the row or the column of the cell with the caret (or the first cell of the selected
+     * table); reopened like [insertRowOrColumn], with the caret in the cell that takes its place.
+     */
+    private fun deleteRowOrColumn(row: Boolean) {
+        val s = session() ?: return
+        val at = here().takeIf { it >= 0 } ?: tableAt?.first ?: -1L
+        val place = if (at >= 0) s.cellAt(at) else null
+        if (place == null) return toast("Chạm vào một ô của bảng trước")
+        stopTyping()
+        clearPicture()
+        val shown = !s.needsReopen
+        val ok = if (row) s.deleteTableRow(at) else s.deleteTableColumn(at)
+        if (!ok && s.needsFlush) return reloadWorking { startTyping(at); deleteRowOrColumn(row) }
+        if (!ok) return toast(s.lastError?.message ?: if (row) "Không xóa được hàng" else "Không xóa được cột")
+        pagesChangedFrom(at)
+        val caretBack: () -> Unit = {
+            val t = session()
+            // the row now in its place (or the one above, for the last row); the column before it
+            val tries = if (row) listOf(place.row to place.cell, place.row - 1 to place.cell, place.row to 0, place.row - 1 to 0)
+                else listOf(place.row to place.cell - 1, place.row to place.cell, place.row to 0)
+            tries.firstNotNullOfOrNull { (r, c) -> if (r < 0 || c < 0 || t == null) null else t.cellStart(place.table, r, c).takeIf { it >= 0 } }?.let { startTyping(it) }
+        }
+        if (shown && s.needsReopen) reloadWorking { caretBack() } else caretBack()
+    }
+
+    /**
+     * Line spacing of the paragraphs at the caret (or selected): 1.0 / 1.15 / 1.5 / 2.0, a multiple,
+     * exactly or at least some points; and the space before and after them. Filled with what they have.
+     */
+    /**
+     * Word's Paragraph dialog: alignment, left/right indent and first-line / hanging indent (cm),
+     * space before/after (pt), starting from the paragraph at the caret; one undoable step.
+     */
+    private fun askParagraph() {
+        val s = session() ?: return
+        val at = here()
+        if (at < 0) return toast("Chạm vào đoạn văn trước")
+        val now = s.paragraphLayoutAt(at)
+        val twipsPerCm = 1440f / 2.54f
+        fun cm(tw: Int) = "%.2f".format(java.util.Locale.ROOT, tw / twipsPerCm).trimEnd('0').trimEnd('.')
+        fun num(v: Float) = if (v % 1f == 0f) v.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, v)
+        val aligns = listOf("Trái" to "left", "Giữa" to "center", "Phải" to "right", "Đều hai bên" to "both")
+        dialogs.show("Đoạn văn") {
+            caption("Căn lề")
+            val alignGroup = choices(aligns.map { it.first }, aligns.indexOfFirst { it.second == now.align })
+            caption("Thụt lề (cm)")
+            val left = input("Thụt trái (cm)", cm(now.leftTwips), numeric = true)
+            val right = input("Thụt phải (cm)", cm(now.rightTwips), numeric = true)
+            caption("Thụt đặc biệt")
+            val specialGroup = choices(listOf("Không", "Dòng đầu", "Treo"), when { now.specialTwips > 0 -> 1; now.specialTwips < 0 -> 2; else -> 0 }, horizontal = true)
+            val special = input("Thụt đặc biệt (cm)", cm(Math.abs(now.specialTwips)), numeric = true)
+            special.isEnabled = now.specialTwips != 0
+            specialGroup.onChange { special.isEnabled = it != 0 }
+            caption("Khoảng cách (pt)")
+            val before = input("Trước đoạn (pt)", num(now.beforePt), numeric = true)
+            val after = input("Sau đoạn (pt)", num(now.afterPt), numeric = true)
+            positive("Áp dụng") {
+                fun f(e: android.widget.EditText) = e.text.toString().replace(',', '.').ifBlank { "0" }.toFloatOrNull()
+                val l = f(left); val r = f(right); val sp = f(special); val b = f(before); val a = f(after)
+                if (l == null || r == null || sp == null || b == null || a == null || sp < 0f || b < 0f || a < 0f) return@positive toast("Giá trị không hợp lệ")
+                val layout = com.wxiwei.office.editor.docx.LiveDocxSession.ParagraphLayout(
+                    align = aligns.getOrNull(alignGroup.picked)?.second ?: now.align,
+                    leftTwips = Math.round(l * twipsPerCm), rightTwips = Math.round(r * twipsPerCm),
+                    specialTwips = when (specialGroup.picked) { 1 -> Math.round(sp * twipsPerCm); 2 -> -Math.round(sp * twipsPerCm); else -> 0 },
+                    beforePt = b, afterPt = a,
+                )
+                if (layout != now) paraOp { e, rg -> e.setParagraphLayout(rg.first, rg.last + 1, layout) }
+            }
+            negative()
+        }
+    }
+
+    private fun askLineSpacing() {
+        val s = session() ?: return
+        val at = here()
+        if (at < 0) return toast("Chạm vào đoạn văn trước")
+        val (kind, value) = s.lineSpacingAt(at)
+        val (before, after) = s.paragraphSpacingAt(at)
+        val labels = listOf("1.0", "1.15", "1.5", "2.0", "Bội số", "Chính xác (pt)", "Tối thiểu (pt)")
+        fun num(v: Float) = if (v % 1f == 0f) v.toInt().toString() else "%.2f".format(java.util.Locale.ROOT, v).trimEnd('0').trimEnd('.')
+        // what the paragraph has now
+        val presets = listOf(1f, 1.15f, 1.5f, 2f)
+        val checked = when (kind) {
+            com.wxiwei.office.constant.wp.WPAttrConstant.LINE_SPACE_EXACTLY.toInt() -> 5
+            com.wxiwei.office.constant.wp.WPAttrConstant.LINE_SAPCE_LEAST.toInt() -> 6
+            else -> presets.indexOfFirst { Math.abs(it - value) < 0.01f }.let { if (it >= 0) it else 4 }
+        }
+        dialogs.show("Giãn dòng") {
+            val group = choices(labels, checked)
+            val amount = input("Giá trị", num(value), numeric = true)
+            amount.isEnabled = checked >= 4
+            group.onChange { amount.isEnabled = it >= 4 }
+            caption("Khoảng cách đoạn")
+            val spaceBefore = input("Trước đoạn (pt)", num(before), numeric = true)
+            val spaceAfter = input("Sau đoạn (pt)", num(after), numeric = true)
+            positive("OK") {
+                val pick = group.picked
+                val v = amount.text.toString().replace(',', '.').toFloatOrNull()
+                val b = spaceBefore.text.toString().replace(',', '.').toFloatOrNull() ?: before
+                val a = spaceAfter.text.toString().replace(',', '.').toFloatOrNull() ?: after
+                if (pick >= 4 && (v == null || v <= 0f)) return@positive toast("Giá trị không hợp lệ")
+                paraOp { e, r ->
+                    val lineOk = when (pick) {
+                        in 0..3 -> e.setLineSpacing(r.first, r.last + 1, presets[pick])
+                        4 -> e.setLineSpacing(r.first, r.last + 1, v!!)
+                        else -> e.setLineSpacingPoints(r.first, r.last + 1, v!!, exactly = pick == 5)
+                    }
+                    lineOk && (b == before && a == after || e.setParagraphSpacing(r.first, r.last + 1, b, a))
+                }
+            }
+            negative()
+        }
+    }
+
+    /** The fonts the app offers ([EditFonts]), each shown in itself; the one of the selection checked. */
+    private fun pickFont(onPick: (String) -> Unit) {
+        val names = EditFonts.names
+        val current = selection()?.selection()?.let { session()?.fontAt(it.first) }
+        dialogs.show("Font") {
+            items(names.map { if (it.equals(current, ignoreCase = true)) "✓ $it" else it }) { i -> onPick(names[i]) }
+                .forEachIndexed { i, row -> row.typeface = EditFonts.typeface(names[i]); row.textSize = 18f }
+            negative()
+        }
+    }
+
+    /**
+     * Find and replace in the body: "Tìm tiếp" selects the next match (round), "Thay" replaces the
+     * selected one and goes on, "Thay tất cả" replaces all (one undo step). The dialog sits at the
+     * top and stays open; the match is scrolled into view under it.
+     */
+    private fun findReplace() {
+        stopTyping()
+        var atTop = true
+        val dialog = dialogs.show("Tìm & thay", scroll = false) {
+            val find = input("Tìm")
+            val with = input("Thay bằng")
+            val matchCase = check("Phân biệt hoa thường")
+            val status = text("")
+            fun matches() = session()?.find(find.text.toString(), matchCase.isChecked).orEmpty()
+            fun show(r: LongRange, all: List<LongRange>) {
+                val sel = selection() ?: return
+                val word = docView() ?: return
+                select(sel, r)
+                val tall = (dialog?.window?.decorView?.height ?: 0) + dp(24)
+                val top = IntArray(2).also { word.getLocationOnScreen(it) }[1]
+                // the dialog covers the top of the view (it sits at the top) or its bottom
+                fun coveredTop() = if (atTop) maxOf(0, tall - top) else dp(24)
+                fun visibleBottom() = if (atTop) word.height else word.height - tall
+                sel.revealCaret(r.first, coveredTop(), visibleBottom())
+                // near the start of the document the page cannot scroll under the dialog: move it down
+                val caret = sel.caretRect(r.first)
+                if (atTop && caret != null && caret.top < coveredTop()) {
+                    atTop = false
+                    dialog?.window?.setGravity(android.view.Gravity.BOTTOM)
+                    sel.revealCaret(r.first, coveredTop(), visibleBottom())
+                }
+                handles.refresh()
+                status.text = "Kết quả ${all.indexOf(r) + 1}/${all.size}"
+            }
+            fun next(from: Long) {
+                val all = matches()
+                if (all.isEmpty()) { status.text = "Không tìm thấy"; return }
+                show(all.firstOrNull { it.first >= from } ?: all.first(), all)
+            }
+            keepOpenOnButtons()
+            neutral("Tìm tiếp") { next(selection()?.selection()?.let { it.first + 1 } ?: 0L) }
+            positive("Thay") {
+                val s = session() ?: return@positive
+                val current = selection()?.selection()
+                if (current == null || matches().none { it == current }) return@positive next(0L)
+                val text = with.text.toString()
+                if (!s.replaceText(current.first, current.last + 1, text)) { status.text = s.lastError?.message ?: "Không thay được chỗ này"; return@positive }
+                pagesChangedFrom(current.first)
+                next(current.first + text.length)
+            }
+            negative("Thay tất cả") {
+                val s = session() ?: return@negative
+                val (done, skipped) = s.replaceAll(find.text.toString(), with.text.toString(), matchCase.isChecked)
+                clearSelection()
+                pagesChangedFrom(0)
+                status.text = "Đã thay $done chỗ" + if (skipped > 0) " ($skipped chỗ không thay được)" else ""
+            }
+        }
+        dialog.window?.setGravity(android.view.Gravity.TOP)
+        dialog.window?.setDimAmount(0f)
+    }
+
     private fun askTable() {
         val at = here()
         if (at < 0) return toast("Chạm vào đoạn muốn chèn bảng phía sau trước")
-        val rows = input("Số hàng").apply { inputType = InputType.TYPE_CLASS_NUMBER; setText("3") }
-        val cols = input("Số cột").apply { inputType = InputType.TYPE_CLASS_NUMBER; setText("3") }
-        val form = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
-            addView(label("Số hàng")); addView(rows); addView(label("Số cột")); addView(cols)
-        }
-        androidx.appcompat.app.AlertDialog.Builder(context).setTitle("Chèn bảng").setView(form)
-            .setPositiveButton("Chèn") { _, _ ->
+        dialogs.show("Chèn bảng") {
+            caption("Số hàng")
+            val rows = input("Số hàng", "3").apply { inputType = InputType.TYPE_CLASS_NUMBER }
+            caption("Số cột")
+            val cols = input("Số cột", "3").apply { inputType = InputType.TYPE_CLASS_NUMBER }
+            positive("Chèn") {
                 val r = rows.text.toString().toIntOrNull() ?: 0
                 val c = cols.text.toString().toIntOrNull() ?: 0
-                val s = session() ?: return@setPositiveButton
+                val s = session() ?: return@positive
                 stopTyping()
                 if (!s.insertTable(at, r, c)) toast(s.lastError?.message ?: "Không chèn được bảng") else reloadWorking()
             }
-            .setNegativeButton("Hủy", null).show()
+            negative()
+        }
     }
 
-    /** Writes every edit to a working copy in the cache and shows it; the original waits for Save. */
-    private fun reloadWorking() {
+    /** Writes every edit to a working copy in the cache and shows it; the original waits for Save. Then [then], once the view is back where it was. */
+    private fun reloadWorking(then: (() -> Unit)? = null) {
         val s = session ?: return
         val next = workingCopy()
         val result = s.save(next)
@@ -220,7 +457,33 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         session = null
         anchor = null
         selectionLabel.text = HINT
-        reopen(next) { if (previous != file) previous.delete() }
+        // the reopened document starts at page 1: bring back the place the edit was made
+        val w = docView() as? com.wxiwei.office.wp.control.Word
+        val place = w?.let { Triple(it.scrollX, it.scrollY, it.getZoom()) }
+        reopen(next) {
+            if (previous != file) previous.delete()
+            if (place != null) restoreScroll(place.first, place.second, place.third, then) else then?.invoke()
+        }
+    }
+
+    /** Scrolls the reopened document to ([x], [y]) at [zoom], once its pages are laid out that far. */
+    private fun restoreScroll(x: Int, y: Int, zoom: Float, then: (() -> Unit)? = null) {
+        activity.lifecycleScope.launch {
+            val end = System.currentTimeMillis() + 5_000
+            while (System.currentTimeMillis() < end) {
+                val w = docView() as? com.wxiwei.office.wp.control.Word ?: return@launch
+                val scale = w.getZoom() / zoom
+                val tx = Math.round(x * scale); val ty = Math.round(y * scale)
+                if (w.getWordHeight() * w.getZoom() - w.height >= ty) {
+                    w.scrollTo(tx, ty)
+                    w.postInvalidate()
+                    then?.invoke()
+                    return@launch
+                }
+                kotlinx.coroutines.delay(50)
+            }
+            then?.invoke()
+        }
     }
 
     init {
@@ -229,8 +492,23 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             when (type) {
                 IMainFrame.ON_LONG_PRESS -> {
                     stopTyping()
+                    // a picture: selected, and the finger still down moves it
+                    if (pictureTap(selection, event.rawX, event.rawY)) {
+                        if (picture.grab(event.rawX, event.rawY)) reader.touchCapture = { picture.follow(it) }
+                        return@gesture true
+                    }
+                    clearPicture()
                     val offset = selection.offsetAtScreen(event.rawX, event.rawY)
                     if (offset < 0) return@gesture false
+                    // in a table: the word is selected like anywhere (to type over, format...) and the
+                    // table's frame shows; the finger moving on picks the whole table up instead
+                    session()?.tableAt(offset)?.let { table ->
+                        val word = selection.wordAt(offset)
+                        if (word.isEmpty()) startTyping(offset) else { anchor = word; select(selection, word) }
+                        showTableFrame(table)
+                        dragTableFrom(table, event.rawX, event.rawY)
+                        return@gesture true
+                    }
                     val word = selection.wordAt(offset)
                     // no word here (an empty paragraph, a space): just put the caret
                     if (word.isEmpty()) return@gesture startTyping(offset)
@@ -262,20 +540,40 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     // the selected picture: its one-char object in the text, and whether it floats on the page
     private var pictureAt = -1L
     private var pictureFloats = false
+    // the table being dragged: its offsets
+    private var tableAt: LongRange? = null
     private val picture = WordPictureOverlay(context, { docView() },
         frame = {
             val sel = selection()
+            val table = currentTable()
             when {
-                pictureAt < 0 || sel == null -> null
+                sel == null -> null
+                table != null -> sel.tableRect(table.first, table.last + 1)
+                pictureAt < 0 -> null
                 pictureFloats -> sel.floatingShapeRect(pictureAt)
-                else -> sel.rectsFor(pictureAt, pictureAt + 1).firstOrNull()
+                else -> sel.inlineObjectRect(pictureAt)
             }
         },
-        onMove = { rawX, rawY, dx, dy -> movePicture(rawX, rawY, dx, dy) },
+        onMove = { rawX, rawY, dx, dy -> if (tableAt != null) moveTable(rawX, rawY, dy) else movePicture(rawX, rawY, dx, dy) },
+        // an in-line picture goes to a text position: a caret shows it under the finger
+        dropAt = { rawX, rawY, dy ->
+            val sel = selection()
+            val table = tableAt
+            when {
+                sel == null -> null
+                table != null -> tableDrop(sel, table, rawX, rawY, dy)
+                pictureFloats -> null
+                else -> sel.offsetAtScreen(rawX, rawY).takeIf { it >= 0 }?.let { sel.caretRect(it) }
+            }
+        },
+        guides = { currentTable()?.let { t -> selection()?.tableGuides(t.first, t.last + 1) } },
+        onColumn = { index, dx -> resizeColumn(index, dx) },
+        onRow = { start, height -> resizeRow(start, height) },
         onResize = { w, h -> resizePicture(w, h) },
     )
 
     init {
+        EditFonts.register()
         addOverlay(caret)
         addOverlay(handles)
         addOverlay(picture)
@@ -285,6 +583,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     override fun close() {
         super.close()
         reader.onDocumentGesture = null
+        reader.touchCapture = null
         stopTyping()
         removeOverlay(caret)
         removeOverlay(handles)
@@ -310,7 +609,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         for (o in listOf(offset, offset - 1)) {
             if (o >= 0 && isPicture(s.shapeAt(o))) {
                 // in a line: only when the tap is on the picture itself
-                val r = sel.rectsFor(o, o + 1).firstOrNull() ?: continue
+                val r = sel.inlineObjectRect(o) ?: continue
                 if (r.contains((rawX - at[0]).toInt(), (rawY - at[1]).toInt())) return selectPicture(o, false)
             }
         }
@@ -328,42 +627,160 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     }
 
     private fun clearPicture() {
-        if (pictureAt < 0) return
+        if (pictureAt < 0 && tableAt == null) return
         pictureAt = -1
+        tableAt = null
         picture.active = false
+        picture.resizable = true
         selectionLabel.text = HINT
+    }
+
+    /**
+     * Where a dragged [table] would go for the finger at ([rawX], [rawY]): a line across the table's
+     * width at the top of the paragraph under it, or at its bottom when dragged down ([dy] > 0).
+     */
+    private fun tableDrop(sel: WordSelection, table: LongRange, rawX: Float, rawY: Float, dy: Float): android.graphics.Rect? {
+        val to = sel.offsetAtScreen(rawX, rawY)
+        if (to < 0 || to in table) return null
+        val doc = (docView() as? com.wxiwei.office.wp.control.Word)?.getDocument() as? com.wxiwei.office.wp.model.WPDocument ?: return null
+        // the body paragraph or table the drop goes next to
+        val block = doc.getParagraph0(to) ?: return null
+        val lines = if (block is com.wxiwei.office.wp.model.TableElement) listOfNotNull(sel.tableRect(block.getStartOffset(), block.getEndOffset()))
+            else sel.rectsFor(block.getStartOffset(), block.getEndOffset())
+        if (lines.isEmpty()) return null
+        val y = if (dy > 0) lines.maxOf { it.bottom } else lines.minOf { it.top }
+        val span = sel.tableRect(table.first, table.last + 1) ?: return null
+        val half = Math.round(1.5f * context.resources.displayMetrics.density)
+        return android.graphics.Rect(span.left, y - half, span.right, y + half)
+    }
+
+    /**
+     * Thumbnails of the pages from the one holding [offset] on are drawn again (an edit there can
+     * push the rest down); the pages before it did not change and keep theirs.
+     */
+    private fun pagesChangedFrom(offset: Long) {
+        val thumbs = reader.thumbnails ?: return
+        val root = (docView() as? com.wxiwei.office.wp.control.Word)?.getRoot(com.wxiwei.office.constant.wp.WPViewConstant.PAGE_ROOT.toInt()) as? com.wxiwei.office.wp.view.PageRoot
+        val count = maxOf(reader.state.value.pageCount, root?.getPageCount() ?: 0)
+        val first = root?.let { r -> (0 until r.getPageCount()).lastOrNull { (r.getPageView(it)?.getStartOffset(null) ?: Long.MAX_VALUE) <= offset } } ?: 0
+        for (page in first + 1..maxOf(first + 1, count)) thumbs.invalidate(page)
+    }
+
+    /** Pixels shown at the current zoom -> twips of the document. */
+    private fun twips(px: Float): Int = Math.round(px / zoom() * com.wxiwei.office.constant.MainConstant.PIXEL_TO_TWIPS)
+
+    private fun resizeColumn(index: Int, dx: Float) {
+        val s = session() ?: return
+        val table = currentTable() ?: return
+        if (s.resizeTableColumn(table.first, index, twips(dx)) == null) toast(s.lastError?.message ?: "Không đổi được độ rộng cột")
+        pagesChangedFrom(table.first)
+        picture.invalidate()
+    }
+
+    private fun resizeRow(start: Long, height: Float) {
+        val s = session() ?: return
+        if (!s.setTableRowHeight(start, twips(height))) toast(s.lastError?.message ?: "Không đổi được chiều cao hàng")
+        pagesChangedFrom(start)
+        picture.invalidate()
+    }
+
+    /** The table's frame with its handles, over whatever text is selected or typed in it. */
+    private fun showTableFrame(table: LongRange) {
+        pictureAt = -1
+        tableAt = table
+        picture.resizable = false
+        picture.active = true
+    }
+
+    /** The table picked up to move: the text selection goes. */
+    private fun selectTable(table: LongRange) {
+        stopTyping()
+        clearSelection()
+        showTableFrame(table)
+        selectionLabel.text = "Kéo bảng đến đoạn muốn đặt (vạch đỏ)"
+    }
+
+    /** The table shown now, [tableAt] as the text typed in it grew it (its start stays). */
+    private fun currentTable(): LongRange? = tableAt?.let { t -> session()?.tableAt(t.first) ?: t }
+
+    /**
+     * After a long press in [table]: when the finger then moves, the table is picked up and follows
+     * it; lifted in place, the word stays selected (and the frame shows).
+     */
+    private fun dragTableFrom(table: LongRange, rawX: Float, rawY: Float) {
+        val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+        var picked = false
+        reader.touchCapture = { e ->
+            if (!picked && e.actionMasked == android.view.MotionEvent.ACTION_MOVE &&
+                Math.hypot((e.rawX - rawX).toDouble(), (e.rawY - rawY).toDouble()) > slop) {
+                picked = true
+                selectTable(table)
+                if (!picture.grab(rawX, rawY)) clearPicture()
+            }
+            if (picked) picture.follow(e)
+        }
+    }
+
+    /** Puts the dragged table before the paragraph where the finger was lifted, or after it when dragged down. */
+    private fun moveTable(rawX: Float, rawY: Float, dy: Float) {
+        val table = currentTable() ?: return
+        val s = session() ?: return
+        val to = selection()?.offsetAtScreen(rawX, rawY) ?: return
+        // dropped on itself: it stays selected
+        if (to < 0 || to in table) return picture.invalidate()
+        val shown = !s.needsReopen
+        if (!s.moveTable(table.first, to, after = dy > 0)) { clearPicture(); return toast(s.lastError?.message ?: "Không di chuyển được bảng") }
+        pagesChangedFrom(minOf(table.first, to))
+        if (shown && s.needsReopen) { clearPicture(); return reloadWorking() }
+        // shown at once: keep it selected where it is now
+        tableAt = s.movedTable ?: return clearPicture()
+        picture.active = true
     }
 
     private fun movePicture(rawX: Float, rawY: Float, dx: Float, dy: Float) {
         val s = session() ?: return
         val sel = selection() ?: return
         val z = zoom()
+        val shown = !s.needsReopen
+        var at = pictureAt
         val ok = if (pictureFloats) s.shiftObject(pictureAt, Math.round(dx / z), Math.round(dy / z))
         else {
-            // to the text position where the finger was lifted
+            // to the text position where the finger was lifted (the caret shown while dragging)
             val to = sel.offsetAtScreen(rawX, rawY)
-            to >= 0 && s.moveObject(pictureAt, to)
+            if (to == pictureAt || to == pictureAt + 1) return picture.invalidate()
+            (to >= 0 && s.moveObject(pictureAt, to)).also { if (it) at = if (to > pictureAt) to - 1 else to }
         }
-        clearPicture()
-        if (!ok) return toast(s.lastError?.message ?: "Không di chuyển được ảnh")
-        reloadWorking()
+        if (!ok) { clearPicture(); return toast(s.lastError?.message ?: "Không di chuyển được ảnh") }
+        pictureEdited(s, shown, at)
+    }
+
+    /**
+     * After a picture edit: the view shows it already (the picture stays selected at [at]), or,
+     * when the session could not show it, the working copy is reopened.
+     */
+    private fun pictureEdited(s: LiveDocxSession, shown: Boolean, at: Long) {
+        pagesChangedFrom(minOf(at, pictureAt.takeIf { it >= 0 } ?: at))
+        if (shown && s.needsReopen) { clearPicture(); return reloadWorking() }
+        pictureAt = at
+        picture.active = true
     }
 
     private fun resizePicture(width: Float, height: Float) {
         val s = session() ?: return
         val z = zoom()
+        val shown = !s.needsReopen
         val ok = s.resizeObject(pictureAt, maxOf(1, Math.round(width / z)), maxOf(1, Math.round(height / z)))
-        clearPicture()
-        if (!ok) return toast(s.lastError?.message ?: "Không đổi cỡ được ảnh")
-        reloadWorking()
+        if (!ok) { clearPicture(); return toast(s.lastError?.message ?: "Không đổi cỡ được ảnh") }
+        pictureEdited(s, shown, pictureAt)
     }
 
     /** A tap ends any selection and puts the caret there; the handles extend a selection. */
     private fun tapAt(rawX: Float, rawY: Float): Boolean {
         val sel = selection() ?: return false
         if (pictureTap(sel, rawX, rawY)) return true
-        clearPicture()
         val offset = sel.offsetAtScreen(rawX, rawY)
+        // a tap in the table keeps its frame (typing in a cell); anywhere else takes it off
+        if (currentTable()?.let { offset in it } != true) clearPicture()
         if (offset < 0) return false
         return clickAndType(sel, offset, rawX, rawY) || startTyping(offset)
     }
@@ -399,12 +816,14 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             x > w.width * 2f / 3 -> s.setAlignment(at, at + 1, "right")
             x > w.width / 3f -> s.setAlignment(at, at + 1, "center")
         }
-        reader.thumbnails?.invalidateAll()
+        pagesChangedFrom(at)
         return startTyping(at)
     }
 
     /** Puts the caret before [offset] and opens the keyboard. */
     private fun startTyping(offset: Long): Boolean {
+        // the caret moved: B / I / U pressed before apply at the old place only
+        pending.clear()
         session() ?: return false
         anchor = null
         selection()?.clearSelection()
@@ -425,6 +844,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     }
 
     private fun stopTyping() {
+        pending.clear()
         if (base < 0) return
         base = -1
         caret.active = false
@@ -432,6 +852,33 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
     }
 
     /** Replays a change of the typing buffer on the document. */
+    /** B / I / U turned on or off with only the caret: for the text typed next (like Word), by name. */
+    private val pending = LinkedHashMap<String, Pair<Boolean, (LiveDocxSession, Long, Long, Boolean) -> Boolean>>()
+
+    /**
+     * B / I / U: on the selected text; with only the caret, on the word it is in (like Word), or,
+     * between words, for the text typed next.
+     */
+    private fun toggle(name: String, isOn: (LiveDocxSession, Long) -> Boolean, set: (LiveDocxSession, Long, Long, Boolean) -> Boolean) {
+        if (base < 0 || selection()?.selection() != null) return op { e, r -> set(e, r.first, r.last + 1, !isOn(e, r.first)) }
+        val s = session() ?: return
+        val caretAt = base + typing.selectionEnd.coerceAtLeast(0)
+        val word = selection()?.wordAt(caretAt)
+        if (word != null && !word.isEmpty() && caretAt > word.first && caretAt <= word.last) {
+            if (!set(s, word.first, word.last + 1, !isOn(s, word.first))) {
+                if (s.needsFlush) { stopTyping(); return reloadWorking { startTyping(caretAt); toggle(name, isOn, set) } }
+                return toast(s.lastError?.message ?: "Không thực hiện được")
+            }
+            resetBuffer(caretAt)
+            caret.touch()
+            pagesChangedFrom(word.first)
+            return
+        }
+        val on = !(pending[name]?.first ?: (caretAt > 0 && isOn(s, caretAt - 1)))
+        pending[name] = on to set
+        selectionLabel.text = "$name: ${if (on) "bật" else "tắt"} cho chữ gõ tiếp"
+    }
+
     private fun typed(start: Int, removed: Int, added: String) {
         val s = session() ?: return
         val at = base + start
@@ -447,9 +894,11 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
             resetBuffer(at)
             return
         }
+        // B / I / U pressed before typing: on what was just typed
+        if (added.isNotEmpty()) for ((on, set) in pending.values) set(s, at, at + added.length, on)
         caret.touch()
         revealCaret()
-        reader.thumbnails?.invalidateAll()
+        pagesChangedFrom(at)
     }
 
     private val clipboard get() = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -485,7 +934,7 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
                 val until = base + typing.selectionEnd.coerceAtLeast(0)
                 stopTyping()
                 if (!s.pasteFormatted(minOf(at, until), maxOf(at, until), formatted)) return toast(s.lastError?.message ?: "Không dán được")
-                reader.thumbnails?.invalidateAll()
+                pagesChangedFrom(minOf(at, until))
                 startTyping(minOf(at, until) + formatted.text.length)
                 return
             }
@@ -545,21 +994,28 @@ internal class WordEditPanel(activity: AppCompatActivity, reader: OfficeDocument
         if (base < 0 || selection()?.selection() != null) return op(action)
         val caretAt = base + typing.selectionEnd.coerceAtLeast(0)
         val s = session() ?: return
-        if (!action(s, caretAt..caretAt)) return toast(s.lastError?.message ?: "Không thực hiện được")
+        if (!action(s, caretAt..caretAt)) {
+            // in a cell added just now: save the working copy first (the cell gets its place), then again
+            if (s.needsFlush) { stopTyping(); return reloadWorking { startTyping(caretAt); paraOp(action) } }
+            return toast(s.lastError?.message ?: "Không thực hiện được")
+        }
         // offsets did not move: keep typing at the same place
         resetBuffer(caretAt)
         caret.touch()
-        reader.thumbnails?.invalidateAll()
+        pagesChangedFrom(caretAt)
     }
 
     private fun op(action: (LiveDocxSession, LongRange) -> Boolean) {
         stopTyping()
         val range = selection()?.selection() ?: return toast("Chọn chữ trước")
         val s = session() ?: return
-        if (!action(s, range)) return toast(s.lastError?.message ?: "Không thực hiện được")
+        if (!action(s, range)) {
+            if (s.needsFlush) return reloadWorking { selection()?.let { select(it, range) }; op(action) }
+            return toast(s.lastError?.message ?: "Không thực hiện được")
+        }
         // the pages were laid out again: show the selection on the new layout, refresh thumbnails
         selection()?.let { select(it, range) }
-        reader.thumbnails?.invalidateAll()
+        pagesChangedFrom(range.first)
         if (s.needsReopen) toast("Đã ghi nhận, sẽ hiện sau khi Lưu")
     }
 

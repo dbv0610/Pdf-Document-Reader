@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -164,6 +167,55 @@ class SampleRenderTest {
             excel.getSheetView()!!.drawRegion(sheet, 0, 0, 0.3f, canvas)
         }
         save(bitmap, "xlsx_picture_rows.png")
+    }
+
+    /** X6: sheet 3 of sample.xlsx freezes column A and rows 1-5: scrolled down and right, they stay in place. */
+    @Test
+    fun frozenPanesStayInPlace() = withReader("sample.xlsx") { reader ->
+        val excel = findExcelView(reader.documentView!!)!!
+        instrumentation.runOnMainSync { excel.showSheet(2) }
+        delay(2500)
+        // larger than the screen, so it scrolls both ways
+        instrumentation.runOnMainSync { excel.getSheetView()!!.setZoom(4f) }
+        delay(500)
+        var scrolled = 0f to 0f
+        fun draw(x: Int, y: Int): Bitmap {
+            lateinit var bitmap: Bitmap
+            instrumentation.runOnMainSync {
+                val sheet = excel.getSpreadsheet()!!.getWorkbook()!!.getSheet(2)!!
+                assertNotNull("panes frozen", sheet.getFrozenPane())
+                bitmap = Bitmap.createBitmap(1080, 1400, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                val canvas = Canvas(bitmap)
+                canvas.clipRect(0, 0, 1080, 1400)
+                // the screen's way of drawing (the thumbnail one has no frozen panes)
+                val sv = excel.getSheetView()!!
+                sv.scrollTo(x.toFloat(), y.toFloat())
+                scrolled = sv.getScrollX() to sv.getScrollY()
+                sv.drawSheet(canvas, false)
+            }
+            return bitmap
+        }
+        val top = draw(0, 0)
+        val moved = draw(300, 300)
+        android.util.Log.i(TAG, "frozen: scrolled to $scrolled")
+        assertTrue("the sheet scrolled: $scrolled", scrolled.second > 0f)
+        var bandH = 0; var bandW = 0; var header = 0; var rowHeader = 0
+        instrumentation.runOnMainSync {
+            val sv = excel.getSheetView()!!
+            val sheet = excel.getSpreadsheet()!!.getWorkbook()!!.getSheet(2)!!
+            header = sv.getColumnHeaderHeight(); rowHeader = sv.getRowHeaderWidth()
+            val z = sv.getZoom()
+            bandH = header + ((0 until 5).sumOf { r -> (sheet.getRow(r)?.getRowPixelHeight() ?: sheet.getDefaultRowHeight().toFloat()).toDouble() } * z).toInt()
+            bandW = rowHeader + (sheet.getColumnPixelWidth(0) * z).toInt()
+        }
+        fun area(b: Bitmap, l: Int, t: Int, r: Int, bt: Int) = (t until bt).map { y -> IntArray(r - l).also { b.getPixels(it, 0, r - l, l, y, r - l, 1) }.toList() }
+        android.util.Log.i(TAG, "frozen: header $header rowHeader $rowHeader band ${bandW}x$bandH")
+        val keepTop = top.copy(Bitmap.Config.ARGB_8888, false); val keepMoved = moved.copy(Bitmap.Config.ARGB_8888, false)
+        save(keepTop, "xlsx_frozen_top.png"); save(keepMoved, "xlsx_frozen_scrolled.png")
+        // the corner (column A x rows 1-5) is the same; the cells away from the frozen bands moved
+        assertEquals("frozen corner unchanged", area(top, rowHeader + 2, header + 2, bandW - 3, bandH - 3), area(moved, rowHeader + 2, header + 2, bandW - 3, bandH - 3))
+        assertNotEquals("the rest scrolled", area(top, bandW + 5, bandH + 5, 1080, 1400), area(moved, bandW + 5, bandH + 5, 1080, 1400))
     }
 
     private fun renderSheets(sample: String, prefix: String) = withReader(sample) { reader ->

@@ -34,16 +34,20 @@ internal object EmbeddedFontReader {
                 if (FontTypefaceManage.instance().hasEmbeddedFont(name)) {
                     continue
                 }
+                fun load(variant: String): Pair<Typeface, ByteArray>? {
+                    val rId = font.element(variant)?.attributeValue("id") ?: return null
+                    val part = zipPackage.getPart(presentationPart.getRelationship(rId).getTargetURI()) ?: return null
+                    val fontData = extractFontData(part.getInputStream().use { it.readBytes() }) ?: return null
+                    return createTypeface(dir, fontData)?.let { it to fontData }
+                }
+                val faces = listOf("regular" to Typeface.NORMAL, "bold" to Typeface.BOLD, "italic" to Typeface.ITALIC, "boldItalic" to Typeface.BOLD_ITALIC)
+                    .mapNotNull { (v, style) -> load(v)?.let { style to it } }
                 // regular first; a family embedded only as bold/italic still beats the fallback
-                val variant = listOf("regular", "bold", "italic", "boldItalic")
-                    .firstNotNullOfOrNull { font.element(it) } ?: continue
-                val rId = variant.attributeValue("id") ?: continue
-                val part = zipPackage.getPart(presentationPart.getRelationship(rId).getTargetURI()) ?: continue
-                val data = part.getInputStream().use { it.readBytes() }
-                val fontData = extractFontData(data) ?: continue
-                val typeface = createTypeface(dir, fontData) ?: continue
-                FontTypefaceManage.instance().addEmbeddedFont(name, typeface)
-                if (weightClass(fontData) >= 600) FontTypefaceManage.instance().markBoldFace(name)
+                val (baseStyle, base) = faces.firstOrNull() ?: continue
+                FontTypefaceManage.instance().addEmbeddedFont(name, base.first)
+                if (baseStyle == Typeface.NORMAL && weightClass(base.second) >= 600) FontTypefaceManage.instance().markBoldFace(name)
+                // its real bold / italic faces, instead of ones synthesized from the regular
+                for ((style, face) in faces) if (style != Typeface.NORMAL) FontTypefaceManage.instance().addEmbeddedFace(name, style, face.first)
             } catch (e: Exception) {
                 control.getSysKit().getErrorKit().writerLog(e)
             }

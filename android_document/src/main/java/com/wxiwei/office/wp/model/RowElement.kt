@@ -23,4 +23,7 @@ class RowElement : AbstractElement() {
     }
 
     fun getCellNumber(): Int = cellElement.size()
+
+    /** Takes the cell at [index] out. */
+    fun detachCellAt(index: Int): IElement? = cellElement.detachElementForIndex(index)
 }

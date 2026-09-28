@@ -199,6 +199,8 @@ class CellStyle
             alignment!!.setHorizontalAlign(ALIGN_JUSTIFY)
         } else if (horAlign.equals("distributed", ignoreCase = true)) {
             alignment!!.setHorizontalAlign(ALIGN_JUSTIFY)
+        } else if (horAlign.equals("centerContinuous", ignoreCase = true)) {
+            alignment!!.setHorizontalAlign(ALIGN_CENTER_SELECTION)
         }
     }
 
@@ -287,6 +289,9 @@ class CellStyle
      *
      * @param cellBorder
      */
+    /** The border object (shared by the styles of one file borderId: copy it before changing it). */
+    fun getBorder(): CellBorder? = cellBorder
+
     fun setBorder(cellBorder: CellBorder?) {
         this.cellBorder = cellBorder
     }

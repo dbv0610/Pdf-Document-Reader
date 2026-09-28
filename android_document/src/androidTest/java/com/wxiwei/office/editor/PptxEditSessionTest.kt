@@ -9,6 +9,7 @@ import com.wxiwei.office.editor.pptx.LivePptxSession
 import com.wxiwei.office.editor.pptx.PptxEditor
 import com.wxiwei.office.editor.pptx.Rect
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -309,5 +310,187 @@ class PptxEditSessionTest {
             }
         }
     }
-}
 
+    /** Offsets of a text box's laid-out text from its middle: lines (x) and the block (y), in pixels at zoom 1. */
+    private fun centering(box: com.wxiwei.office.pg.model.PGSlide?, id: Int, reader: com.wxiwei.office.reader.OfficeReader): Pair<List<Int>, Int>? {
+        val tb = box?.getShapes()?.filterIsInstance<com.wxiwei.office.common.shape.TextBox>()?.firstOrNull { it.shapeID == id } ?: return null
+        val root = tb.rootView ?: return null
+        val b = tb.bounds ?: return null
+        val xs = ArrayList<Int>()
+        var top = Int.MAX_VALUE; var bottom = Int.MIN_VALUE
+        var para = root.getChildView()
+        while (para != null) {
+            var line = para.getChildView()
+            while (line != null) {
+                // the line's text: from its first leaf to the end of its last one
+                var leaf = line.getChildView(); var l = Int.MAX_VALUE; var r = Int.MIN_VALUE
+                while (leaf != null) { l = minOf(l, leaf.getX()); r = maxOf(r, leaf.getX() + leaf.getWidth()); leaf = leaf.getNextView() }
+                if (r > l) xs.add(para.getX() + line.getX() + (l + r) / 2 - b.width / 2)
+                // the root is moved down by the vertical alignment (anchor) of the box
+                top = minOf(top, root.getY() + para.getY() + line.getY()); bottom = maxOf(bottom, root.getY() + para.getY() + line.getY() + line.getHeight())
+                line = line.getNextView()
+            }
+            para = para.getNextView()
+        }
+        return xs to ((top + bottom) / 2 - b.height / 2)
+    }
+
+    /** Centered text stays centered when its size changes (horizontally, and vertically when anchored in the middle). */
+    @Test
+    fun sizeKeepsCentering() {
+        val problems = ArrayList<String>()
+        for (sample in listOf("sample.pptx", "ppt2.pptx")) {
+            val source = OpenDocument.copySample(sample, "center_" + sample)
+            OpenDocument.open(source, { it.pageCount >= 1 }) { reader ->
+                val session = onMain { LivePptxSession(reader.control!!, source) }
+                val p = reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation
+                val slides = minOf(4, onMain { session.slideCount() })
+                for (slide in 0 until slides) {
+                    val shapes = onMain { session.listShapes(slide) }.filter { it.kind.name == "TEXT" && it.text.isNotBlank() }
+                    for (shape in shapes) {
+                        reader.thumbnails!!.render(slide + 1, 1280)
+                        val before = onMain { centering(p.getSlide(slide), shape.id, reader) } ?: continue
+                        val size = onMain { session.textStyle(slide, shape.id)?.sizePt } ?: continue
+                        assertTrue(onMain { session.setTextFormat(slide, shape.id, com.wxiwei.office.editor.pptx.TextFormat(sizePt = size * 1.5f)) })
+                        reader.thumbnails!!.invalidateAll()
+                        reader.thumbnails!!.render(slide + 1, 1280)
+                        val after = onMain { centering(p.getSlide(slide), shape.id, reader) } ?: continue
+                        Log.i("CenterTest", "$sample s$slide #${shape.id} '${shape.text.take(20)}' ${size}pt x ${before.first} -> ${after.first}  y ${before.second} -> ${after.second}")
+                        // lines that were centered (within 3 px) must stay centered; so must the block
+                        val wasCentered = before.first.isNotEmpty() && before.first.all { Math.abs(it) <= 3 }
+                        if (wasCentered && after.first.any { Math.abs(it) > 3 }) problems.add("$sample s$slide #${shape.id} x ${after.first}")
+                        if (Math.abs(before.second) <= 3 && Math.abs(after.second) > 3) problems.add("$sample s$slide #${shape.id} y ${before.second} -> ${after.second}")
+                        onMain { session.undo() }
+                    }
+                }
+            }
+        }
+        assertEquals(emptyList<String>(), problems)
+    }
+
+    /** P2: a red rectangle, a blue ellipse, a yellow arrow and a line on slide 1: drawn at once, undone/redone, saved, read back. */
+    @Test
+    fun addShapes() {
+        val source = OpenDocument.copySample("sample.pptx", "shapes_source.pptx")
+        val saved = OpenDocument.output("shapes_saved.pptx")
+        val specs = listOf(Triple("rect", "FF0000", Rect(914400, 914400, 1828800, 1371600)), Triple("ellipse", "0000FF", Rect(3657600, 914400, 1828800, 1371600)),
+            Triple("rightArrow", "FFC000", Rect(914400, 3200400, 2743200, 914400)), Triple("line", "00B050", Rect(4572000, 3657600, 2743200, 0)))
+        val ids = ArrayList<Int>()
+        OpenDocument.open(source, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, source) }
+            for ((prst, color, r) in specs) {
+                val id = onMain { session.addShape(0, r, prst, if (prst == "line") null else color, if (prst == "line") color else "404040", 2f) }
+                assertTrue(session.lastError?.toString(), id > 0); ids.add(id)
+            }
+            val p = reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation
+            val live = onMain { p.getSlide(0)!!.getShapes().filter { it.shapeID in ids }.map { it.javaClass.simpleName } }
+            assertEquals(listOf("AutoShape", "AutoShape", "AutoShape", "LineShape"), live)
+            // the fill color in the middle of each filled shape
+            reader.thumbnails!!.invalidateAll()
+            val bmp = reader.thumbnails!!.render(1, 1280)!!
+            val size = onMain { session.slideSizeEmu() }
+            for ((prst, color, r) in specs.take(3)) {
+                val px = bmp.getPixel(((r.x + r.width / 2).toDouble() / size.width * bmp.width).toInt(), ((r.y + r.height / 2).toDouble() / size.height * bmp.height).toInt()) and 0xFFFFFF
+                Log.i("PptxEditTest", "$prst middle %06X".format(px))
+                assertEquals("$prst filled", color.toInt(16), px)
+            }
+            File(out, "shapes.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
+            // undo the line, redo it
+            assertTrue(onMain { session.undo() })
+            assertEquals(3, onMain { p.getSlide(0)!!.getShapes().count { it.shapeID in ids } })
+            assertTrue(onMain { session.redo() })
+            assertTrue(onMain { session.save(saved) } is com.wxiwei.office.editor.EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide1.xml")).readBytes().toString(Charsets.UTF_8) }
+        for ((prst, _, _) in specs) assertTrue("$prst saved", xml.contains("prst=\"$prst\""))
+        OpenDocument.open(saved, { it.pageCount >= 10 }) { reader ->
+            val p = reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation
+            val types = onMain { p.getSlide(0)!!.getShapes().filter { it.shapeID in ids }.map { it.javaClass.simpleName } }
+            assertEquals("read back", listOf("AutoShape", "AutoShape", "AutoShape", "LineShape"), types)
+        }
+    }
+
+    /** Z-order: red under blue at the same place; red to the front shows red, undo shows blue, saved order, read back. */
+    @Test
+    fun zOrder() {
+        val source = OpenDocument.copySample("sample.pptx", "zorder_source.pptx")
+        val saved = OpenDocument.output("zorder_saved.pptx")
+        val r = Rect(914400, 914400, 1828800, 1371600)
+        var red = 0; var blue = 0
+        suspend fun middle(reader: com.wxiwei.office.reader.OfficeReader, session: LivePptxSession): Int {
+            reader.thumbnails!!.invalidateAll()
+            val bmp = reader.thumbnails!!.render(1, 1280)!!
+            val size = onMain { session.slideSizeEmu() }
+            return bmp.getPixel(((r.x + r.width / 2).toDouble() / size.width * bmp.width).toInt(), ((r.y + r.height / 2).toDouble() / size.height * bmp.height).toInt()) and 0xFFFFFF
+        }
+        OpenDocument.open(source, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, source) }
+            red = onMain { session.addShape(0, r, "rect", "FF0000", "FF0000", 1f) }
+            blue = onMain { session.addShape(0, r, "rect", "0000FF", "0000FF", 1f) }
+            assertEquals("blue on top", 0x0000FF, middle(reader, session))
+            assertFalse("blue is already in front", onMain { session.reorderShape(0, blue, "front") })
+            assertTrue(session.lastError?.toString(), onMain { session.reorderShape(0, red, "front") })
+            assertEquals("red to the front", 0xFF0000, middle(reader, session))
+            assertTrue(onMain { session.undo() })
+            assertEquals("undone", 0x0000FF, middle(reader, session))
+            assertTrue(onMain { session.redo() })
+            assertTrue(onMain { session.reorderShape(0, blue, "forward") })
+            assertEquals("blue one layer up", 0x0000FF, middle(reader, session))
+            assertTrue(onMain { session.reorderShape(0, blue, "back") })
+            assertEquals("blue to the back", 0xFF0000, middle(reader, session))
+            assertTrue(onMain { session.save(saved) } is com.wxiwei.office.editor.EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide1.xml")).readBytes().toString(Charsets.UTF_8) }
+        assertTrue("blue first in the tree", xml.indexOf("<p:cNvPr id=\"$blue\"") in 0 until xml.indexOf("<p:cNvPr id=\"$red\""))
+        assertTrue("blue before every other shape", Regex("<p:cNvPr id=\"(\\d+)\"").findAll(xml).map { it.groupValues[1].toInt() }.filter { it != 1 }.first() == blue)
+        OpenDocument.open(saved, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, saved) }
+            assertEquals("read back: red on top", 0xFF0000, middle(reader, session))
+        }
+    }
+
+    /** Animations and a transition written, undone, redone, saved, read back the same; the engine still opens the file. */
+    @Test
+    fun animationsAndTransition() {
+        val source = OpenDocument.copySample("sample.pptx", "anim_source.pptx")
+        val saved = OpenDocument.output("anim_saved.pptx")
+        var effects = emptyList<com.wxiwei.office.editor.pptx.SlideEffect>()
+        val push = com.wxiwei.office.editor.pptx.SlideTransition("push", "l", 1000, 5000)
+        OpenDocument.open(source, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, source) }
+            val ids = onMain { session.listShapes(0).map { it.id } }
+            assertTrue("two shapes on slide 1: $ids", ids.size >= 2)
+            val (a, b) = ids[0] to ids[1]
+            effects = listOf(
+                com.wxiwei.office.editor.pptx.SlideEffect(a, com.wxiwei.office.editor.pptx.SlideEffect.Kind.ENTRANCE, com.wxiwei.office.editor.pptx.SlideEffect.Effect.FADE, durationMs = 700),
+                com.wxiwei.office.editor.pptx.SlideEffect(b, com.wxiwei.office.editor.pptx.SlideEffect.Kind.ENTRANCE, com.wxiwei.office.editor.pptx.SlideEffect.Effect.FLY, com.wxiwei.office.editor.pptx.SlideEffect.Direction.LEFT, com.wxiwei.office.editor.pptx.SlideEffect.Start.WITH, 500),
+                com.wxiwei.office.editor.pptx.SlideEffect(a, com.wxiwei.office.editor.pptx.SlideEffect.Kind.EMPHASIS, com.wxiwei.office.editor.pptx.SlideEffect.Effect.PULSE, start = com.wxiwei.office.editor.pptx.SlideEffect.Start.AFTER, durationMs = 600),
+                com.wxiwei.office.editor.pptx.SlideEffect(b, com.wxiwei.office.editor.pptx.SlideEffect.Kind.EXIT, com.wxiwei.office.editor.pptx.SlideEffect.Effect.ZOOM, durationMs = 500),
+            )
+            assertTrue(session.lastError?.toString(), onMain { session.setSlideEffects(0, effects) })
+            assertEquals(effects, onMain { session.slideEffects(0) })
+            assertTrue(onMain { session.setSlideTransition(listOf(0, 1), push) })
+            assertEquals(push, onMain { session.slideTransition(1) })
+            assertTrue(onMain { session.undo() })
+            assertEquals("transition undone", null, onMain { session.slideTransition(1) })
+            assertTrue(onMain { session.undo() })
+            assertEquals("effects undone", emptyList<com.wxiwei.office.editor.pptx.SlideEffect>(), onMain { session.slideEffects(0) })
+            assertTrue(onMain { session.redo() }); assertTrue(onMain { session.redo() })
+            // writing what was read changes nothing
+            val xml1 = onMain { session.readPackage("") { it.xml("ppt/slides/slide1.xml").asXML()!! } }
+            assertTrue(onMain { session.setSlideEffects(0, session.slideEffects(0)) })
+            assertEquals("idempotent", xml1, onMain { session.readPackage("") { it.xml("ppt/slides/slide1.xml").asXML()!! } })
+            assertTrue(onMain { session.save(saved) } is com.wxiwei.office.editor.EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide1.xml")).readBytes().toString(Charsets.UTF_8) }
+        assertTrue("transition before timing", xml.indexOf("<p:transition") in 0 until xml.indexOf("<p:timing"))
+        assertTrue("unique cTn ids", Regex("<p:cTn id=\"(\\d+)\"").findAll(xml).map { it.groupValues[1] }.toList().let { it.size == it.toSet().size && it.size > 8 })
+        OpenDocument.open(saved, { it.pageCount >= 10 }) { reader ->
+            val session = onMain { LivePptxSession(reader.control!!, saved) }
+            assertEquals("read back", effects, onMain { session.slideEffects(0) })
+            assertEquals(push, onMain { session.slideTransition(0) })
+            val p = reader.control!!.getView() as com.wxiwei.office.pg.control.Presentation
+            assertTrue("the engine reads the animations", onMain { p.getSlide(0)!!.getSlideShowAnimation()?.isNotEmpty() == true })
+        }
+    }
+}

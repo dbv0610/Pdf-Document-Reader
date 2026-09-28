@@ -181,6 +181,20 @@ class SheetBar : HorizontalScrollView, View.OnClickListener {
         }
     }
 
+    /** Builds the sheet buttons again (a sheet was added or removed), [focus] selected. */
+    fun refresh(focus: Int) {
+        sheetbarFrame?.let { removeView(it) }
+        currentSheet = null
+        init()
+        setFocusSheetButton(focus)
+        // the new buttons are measured on the next layout: bring the focused one into view then
+        post {
+            val frame = sheetbarFrame ?: return@post
+            val button = (0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it is SheetButton && it.getSheetIndex() == focus } ?: return@post
+            if (button.right > scrollX + width || button.left < scrollX) scrollTo(maxOf(0, button.right - width), 0)
+        }
+    }
+
     /**
      * @return Returns the sheetbarHeight.
      */

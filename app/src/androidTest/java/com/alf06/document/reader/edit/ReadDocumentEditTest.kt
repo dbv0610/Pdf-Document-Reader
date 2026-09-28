@@ -589,8 +589,29 @@ class ReadDocumentEditTest {
                 Thread.sleep(1500)
             }
             tapOn("PianoLearn — Tính năng")
+            scenario.onActivity {
+                val kids = (0 until viewer.childCount).map { i -> viewer.getChildAt(i).let { c -> c.javaClass.simpleName + "(" + c.width + "x" + c.height + " vis=" + c.visibility + ")" } }
+                android.util.Log.i("CaretDebug", "viewer children: $kids padding=${viewer.paddingBottom}")
+                val caret = (0 until viewer.childCount).map { viewer.getChildAt(it) }.firstOrNull { it.javaClass.simpleName == "WordCaretOverlay" }
+                if (caret != null) {
+                    val f = caret.javaClass.getDeclaredField("visible").apply { isAccessible = true }
+                    val r = caret.javaClass.getDeclaredField("rect").apply { isAccessible = true }
+                    val act = caret.javaClass.getDeclaredMethod("getActive").invoke(caret)
+                    android.util.Log.i("CaretDebug", "caret active=$act visible=${f.get(caret)} rect=${r.get(caret)}")
+                }
+            }
+            repeat(6) { k ->
+                val bmp = instrumentation.uiAutomation.takeScreenshot()
+                java.io.File(shots, "caret_burst_$k.png").outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, it) }
+                Thread.sleep(180)
+            }
             screenshot("caret_body")
             tapOn("MidiConverter.kt, MidiAccompaniment")
+            repeat(4) { k ->
+                val bmp = instrumentation.uiAutomation.takeScreenshot()
+                java.io.File(shots, "caret_cellburst_$k.png").outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, it) }
+                Thread.sleep(180)
+            }
             screenshot("caret_cell")
             instrumentation.runOnMainSync {
                 scenario.onActivity { a ->

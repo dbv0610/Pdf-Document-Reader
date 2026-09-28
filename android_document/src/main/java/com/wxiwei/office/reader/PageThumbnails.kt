@@ -144,6 +144,34 @@ class PageThumbnails internal constructor(
         return bitmap to !pending
     }
 
+    /**
+     * Slide [pageNumber] (1-based) [width] px wide in layers for the slideshow (see
+     * [Presentation.slideLayers]), drawn on the render thread; the flag is false while pictures of
+     * the slide are still being converted (draw it again a little later).
+     */
+    suspend fun slideLayers(pageNumber: Int, width: Int, animated: Set<Int>): Pair<com.wxiwei.office.pg.view.SlideDrawKit.Layers?, Boolean> =
+        onRenderThread {
+            val presentation = view as? Presentation ?: return@onRenderThread null to true
+            val kit = PictureKit.instance()
+            kit.startTrackingPendingPictures()
+            var layers: com.wxiwei.office.pg.view.SlideDrawKit.Layers? = null
+            val pending: Boolean
+            try {
+                layers = presentation.slideLayers(pageNumber - 1, width, animated)
+            } catch (e: Exception) {
+                OpenTrace.e("slideshow render failed page=$pageNumber", e)
+            } catch (e: OutOfMemoryError) {
+                OpenTrace.e("slideshow render out of memory page=$pageNumber", e)
+                cache.evictAll()
+            } finally {
+                pending = kit.stopTrackingPendingPictures()
+            }
+            layers to !pending
+        } ?: (null to true)
+
+    /** Runs [block] on the thread that draws pages (the engine is not safe to draw from two threads). */
+    suspend fun <T> onDrawingThread(block: () -> T?): T? = onRenderThread(block)
+
     /** Drops [pageNumber] so the next [get] draws it again (e.g. a Word page that was still being laid out). */
     fun invalidate(pageNumber: Int) {
         generation.incrementAndGet()

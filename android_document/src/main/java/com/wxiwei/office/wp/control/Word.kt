@@ -288,6 +288,8 @@ class Word : LinearLayout, IWord {
                 pageRoot = root
                 root.doLayout(0, 0, mWidth, mHeight, Int.MAX_VALUE, 0)
                 LayoutKit.instance().layoutAllPage(root, zoom)
+                // the pages down to where the view was, or scrollTo stops at the first ones
+                if (fromOffset >= 0) root.layoutDownTo(((sy + height) / zoom).toInt() + 1, zoom)
                 scrollTo(sx, sy)
                 postInvalidate()
             }

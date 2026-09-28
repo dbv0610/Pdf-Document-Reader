@@ -22,6 +22,9 @@ class FileOptionsBottomSheet(
     private val onThumbnail: (() -> Unit)? = null,
     private val onPageByPage: (() -> Unit)? = null,
     private val onSlideShow: (() -> Unit)? = null,
+    private val onSlideList: (() -> Unit)? = null,
+    private val onExportPdf: (() -> Unit)? = null,
+    private val onExportImages: (() -> Unit)? = null,
 ) : BaseBottomSheet<BottomSheetFileOptionsBinding>(activity, BottomSheetFileOptionsBinding::inflate) {
 
     override fun BottomSheetFileOptionsBinding.onBind() {
@@ -29,6 +32,9 @@ class FileOptionsBottomSheet(
         onThumbnail?.let { btnThumbnail.setup(R.drawable.ic_page_thumnail, R.string.thumbnail, it) }
         onPageByPage?.let { btnPageByPage.setup(R.drawable.ic_page_bypage, R.string.page_by_page, it) }
         onSlideShow?.let { btnSlideShow.setup(R.drawable.ic_slide_show, R.string.slide_show, it) }
+        onSlideList?.let { btnSlideList.setup(R.drawable.ic_page_bypage, R.string.slide_list, it) }
+        onExportPdf?.let { btnExportPdf.setup(R.drawable.ic_app_download, R.string.export_pdf, it) }
+        onExportImages?.let { btnExportImages.setup(R.drawable.ic_app_image, R.string.export_images, it) }
         btnRename.setup(R.drawable.ic_app_edit, R.string.file_action_rename, onRename)
         btnFavorite.setup(R.drawable.ic_app_fav, R.string.file_action_favorite, onFavorite)
         if (item.isFavorite) btnFavorite.imgIcon.imageTintList = null

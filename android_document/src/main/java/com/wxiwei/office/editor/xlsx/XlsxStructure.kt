@@ -11,7 +11,8 @@ import com.wxiwei.office.fc.dom4j.Element
  * Replays row/column inserts and deletes on the XML of an .xlsx: cells and rows move (deleted ones
  * go), every formula of the workbook is rewritten ([RefShifter]), and so are merged cells, the
  * dimension, hyperlinks, conditional formats, validations, filters, column widths, tables (with
- * their columns), drawing anchors, chart ranges and defined names.
+ * their columns), drawing anchors, chart ranges, defined names and pivot tables (their source
+ * range and where they sit).
  */
 internal class XlsxStructure(private val pkg: OoxmlPackage, private val sheetParts: List<String>) {
     private val workbook = "xl/workbook.xml"
@@ -31,6 +32,7 @@ internal class XlsxStructure(private val pkg: OoxmlPackage, private val sheetPar
             sheetParts.forEachIndexed { i, p -> if (p.isNotEmpty()) formulas(p, sheetNames.getOrElse(i) { "" }, change) }
             charts(change)
             definedNames(change)
+            pivots(part, change)
         }
     }
 
@@ -231,6 +233,27 @@ internal class XlsxStructure(private val pkg: OoxmlPackage, private val sheetPar
             for (f in descendants(root).filter { it.namespaceURI == c && it.name == "f" }.toList()) {
                 f.text?.let { f.text = RefShifter.shift(it, "", change) }
             }
+        }
+    }
+
+    /**
+     * Pivot caches reading a range of the changed sheet follow it (worksheetSource ref); pivot
+     * tables sitting on it move with their cells (location ref).
+     */
+    private fun pivots(part: String, change: RefShifter.Change) {
+        for (name in pkg.partNames().filter { it.startsWith("xl/pivotCache/pivotCacheDefinition") && it.endsWith(".xml") }) {
+            val src = descendants(pkg.xml(name).rootElement!!).firstOrNull { it.name == "worksheetSource" } ?: continue
+            val ref = src.attributeValue("ref") ?: continue
+            if (src.attributeValue("sheet") != change.sheet) continue
+            val moved = RefShifter.shift(ref, change.sheet, change)
+            // a source deleted whole keeps its old range (Excel would show #REF! in the pivot)
+            if (!moved.contains("#REF!")) src.addAttribute("ref", moved)
+        }
+        for (table in related(part, "/pivotTable")) {
+            val location = pkg.xml(table).rootElement!!.firstChild(SS, "location") ?: continue
+            val ref = location.attributeValue("ref") ?: continue
+            val moved = RefShifter.shift(ref, change.sheet, change)
+            if (!moved.contains("#REF!")) location.addAttribute("ref", moved)
         }
     }
 

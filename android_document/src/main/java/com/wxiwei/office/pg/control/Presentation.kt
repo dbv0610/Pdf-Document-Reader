@@ -1094,6 +1094,13 @@ open class Presentation(activity: Activity, pgModel: PGModel?, control: IControl
         }
     }
 
+    /** Slide [index] (0-based) for the app's slideshow, [width] px wide, see [SlideDrawKit.layers]. */
+    fun slideLayers(index: Int, width: Int, animated: Set<Int>): SlideDrawKit.Layers? {
+        val model = pgModel ?: return null
+        val slide = model.getSlide(index) ?: return null
+        return SlideDrawKit.instance().layers(model, getEditor(), slide, width, animated)
+    }
+
     /**
      * slideshow to image
      * @param slideIndex slide index(base 1)

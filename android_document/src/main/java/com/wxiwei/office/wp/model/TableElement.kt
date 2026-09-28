@@ -22,6 +22,14 @@ class TableElement : ParagraphElement() {
 
     fun rowCount(): Int = rowElement.size()
 
+    /** Puts [row] in at [index] (its offsets must already be right). */
+    fun insertRow(index: Int, row: RowElement) {
+        rowElement.insertElementForIndex(row, index)
+    }
+
+    /** Takes the row at [index] out. */
+    fun detachRowAt(index: Int): IElement? = rowElement.detachElementForIndex(index)
+
     override fun getText(doc: IDocument?): String = ""
 
     override fun appendLeaf(leafElem: LeafElement?) {

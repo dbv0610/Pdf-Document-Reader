@@ -185,6 +185,26 @@ class PptxEditor(private val source: File) {
             paragraphs(body, text, rp, newElement(A, "pPr").apply { addAttribute("algn", "ctr") })
         }) id else -1
     }
+    /**
+     * A preset shape [prst] (rect, roundRect, ellipse, triangle, rightArrow, line...) filled with
+     * [fillHex] (none when null; a line has none) and outlined in [lineHex], [lineWidthPt] wide.
+     */
+    fun addShape(slideIndex: Int, rectEmu: Rect, prst: String, fillHex: String?, lineHex: String, lineWidthPt: Float = 1.5f): Int {
+        val id = nextId(slideIndex); if (id < 0) return -1
+        return if (queue { pkg ->
+            val hex = Regex("[0-9a-fA-F]{6}")
+            require(prst.matches(Regex("[A-Za-z0-9]+")) && lineHex.matches(hex) && (fillHex == null || fillHex.matches(hex)) && lineWidthPt in 0f..100f) { "Invalid shape" }
+            val sp = tree(pkg, part(pkg, slideIndex)).child(P, "sp")
+            sp.child(P, "nvSpPr").apply { child(P, "cNvPr").addAttribute("id", "$id")!!.addAttribute("name", "Shape $id"); child(P, "cNvSpPr"); child(P, "nvPr") }
+            val spPr = sp.child(P, "spPr")
+            geometry(spPr.child(A, "xfrm"), rectEmu)
+            spPr.child(A, "prstGeom").addAttribute("prst", prst)!!.child(A, "avLst")
+            // CT_ShapeProperties: xfrm, geometry, fill, ln
+            if (fillHex == null || prst == "line") spPr.child(A, "noFill") else spPr.child(A, "solidFill").child(A, "srgbClr").addAttribute("val", fillHex.uppercase())
+            spPr.child(A, "ln").addAttribute("w", Math.round(lineWidthPt * 12700).toString())!!.child(A, "solidFill").child(A, "srgbClr").addAttribute("val", lineHex.uppercase())
+        }) id else -1
+    }
+
     fun addImage(slideIndex: Int, rectEmu: Rect, imageFile: File): Int {
         val id = nextId(slideIndex); if (id < 0) return -1
         val bytes = try { imageFile.readBytes() } catch (e: Exception) { lastError = failure(e); return -1 }
@@ -461,6 +481,86 @@ class PptxEditor(private val source: File) {
         if (old != null) parent.remove(old)
         (parent.content() as MutableList<Any?>).add(if (e.name == "graphicFrame") minOf(1, parent.content()!!.size) else 0, replacement)
     }
+    /**
+     * Z-order: moves the shape among its siblings (the slide's shape tree or its group) to the
+     * "front" or "back", or one step "forward" / "backward".
+     */
+    fun reorderShape(slideIndex: Int, shapeId: Int, where: String): Boolean = queue { pkg ->
+        val e = find(pkg, slideIndex, shapeId).first
+        val parent = e.parent!!
+        @Suppress("UNCHECKED_CAST")
+        val content = parent.content() as MutableList<Any?>
+        val siblings = content.filterIsInstance<Element>().filter { identity(it) != null }
+        val i = siblings.indexOf(e)
+        val target = when (where) {
+            "front" -> siblings.lastIndex
+            "back" -> 0
+            "forward" -> minOf(i + 1, siblings.lastIndex)
+            "backward" -> maxOf(i - 1, 0)
+            else -> throw IllegalArgumentException("Bad z-order move: $where")
+        }
+        if (target == i) throw IllegalStateException(if (target > 0) "Đã ở lớp trên cùng" else "Đã ở lớp dưới cùng")
+        content.remove(e)
+        val others = siblings.filter { it !== e }
+        if (target >= others.size) content.add(content.indexOf(others.last()) + 1, e) else content.add(content.indexOf(others[target]), e)
+    }
+
+    /** The slide's animation sequence (see [SlideTiming]). */
+    fun slideEffects(slideIndex: Int): List<SlideEffect> = read(emptyList()) { pkg -> SlideTiming.effects(pkg.xml(part(pkg, slideIndex)).rootElement!!) }
+    /** Replaces the slide's animation sequence; an empty list removes it. */
+    fun setSlideEffects(slideIndex: Int, effects: List<SlideEffect>): Boolean = queue { pkg ->
+        val part = part(pkg, slideIndex)
+        val ids = walk(tree(pkg, part)).mapNotNull { identity(it.first)?.num("id")?.toInt() }.toSet()
+        effects.firstOrNull { it.shapeId !in ids }?.let { throw NoSuchElementException("Shape ${it.shapeId} not found") }
+        SlideTiming.setEffects(pkg.xml(part).rootElement!!, effects)
+    }
+    fun slideTransition(slideIndex: Int): SlideTransition? = read(null) { pkg -> SlideTiming.transition(pkg.xml(part(pkg, slideIndex)).rootElement!!) }
+    /** Sets the transition of the slides [slideIndexes] (null or type "none" removes it). */
+    fun setSlideTransition(slideIndexes: List<Int>, t: SlideTransition?): Boolean = queue { pkg ->
+        for (i in slideIndexes) SlideTiming.setTransition(pkg.xml(part(pkg, i)).rootElement!!, t)
+    }
+    /** Titles, hidden flags, transitions, animations and links of every slide (queued edits included). */
+    fun showScript(): List<SlideScript> = read(emptyList()) { pkg ->
+        val count = pkg.xml("ppt/presentation.xml").rootElement!!.firstChild(P, "sldIdLst")?.childrenNamed(P, "sldId").orEmpty().size
+        val parts = (0 until count).map { part(pkg, it) }
+        parts.mapIndexed { i, part ->
+            val sld = pkg.xml(part).rootElement!!
+            val shapes = walk(tree(pkg, part))
+            fun textOf(e: Element) = descendants(e).filter { it.namespaceURI == A.uRI && it.name == "p" }
+                .joinToString(" ") { p -> descendants(p).filter { it.namespaceURI == A.uRI && it.name == "t" }.joinToString("") { it.text ?: "" } }.trim()
+            val title = shapes.firstOrNull { (e, _) -> placeholder(e)?.attributeValue("type") in setOf("title", "ctrTitle") && textOf(e).isNotEmpty() }?.let { textOf(it.first) }
+                ?: shapes.map { textOf(it.first) }.firstOrNull { it.isNotEmpty() } ?: ""
+            val links = shapes.mapNotNull { (e, t) ->
+                val hl = identity(e)?.firstChild(A, "hlinkClick") ?: descendants(e).firstOrNull { it.namespaceURI == A.uRI && it.name == "hlinkClick" } ?: return@mapNotNull null
+                val r = rect(xfrm(e))?.let { t.map(it) } ?: inherited(pkg, part, e) ?: return@mapNotNull null
+                linkOf(pkg, part, hl, parts, r)
+            }
+            SlideScript(i, title.take(200), sld.attributeValue("show") == "0", SlideTiming.transition(sld), SlideTiming.effects(sld), links)
+        }
+    }
+
+    private fun linkOf(pkg: OoxmlPackage, part: String, hl: Element, parts: List<String>, r: Rect): SlideLink? {
+        val action = hl.attributeValue("action") ?: ""
+        val rel = hl.attributeValue(QName("id", R))?.takeIf { it.isNotEmpty() }?.let { id -> pkg.relationships(part).firstOrNull { it.id == id } }
+        return when {
+            action.startsWith("ppaction://hlinkshowjump") -> when (action.substringAfter("jump=", "")) {
+                "nextslide" -> "next"; "previousslide", "lastslideviewed" -> "previous"; "firstslide" -> "first"; "lastslide" -> "last"; "endshow" -> "end"
+                else -> null
+            }?.let { SlideLink(r, jump = it) }
+            action.startsWith("ppaction://hlinksldjump") -> rel?.takeIf { it.targetMode != "External" }
+                ?.let { parts.indexOf(pkg.resolveTarget(part, it.target)) }?.takeIf { it >= 0 }?.let { SlideLink(r, slideIndex = it) }
+            action.isNotEmpty() -> null // macros, programs, other files: not run
+            rel != null && rel.targetMode == "External" -> SlideLink(r, url = rel.target)
+            else -> null
+        }
+    }
+
+    /** Reads the current state of the package (queued edits applied): what a slideshow plays. */
+    fun <T> readPackage(fallback: T, block: (OoxmlPackage) -> T): T = read(fallback, block)
+
+    /** Shape ids of the slide in drawing order (a group's shapes right after it). */
+    fun shapeOrder(slideIndex: Int): List<Int> = listShapes(slideIndex).map { it.id }
+
     fun deleteShape(slideIndex: Int, shapeId: Int): Boolean = queue { pkg ->
         val part = part(pkg, slideIndex); val e = find(pkg, slideIndex, shapeId).first
         val embeds = descendants(e).mapNotNull { it.attributeValue(QName("embed", R)) }.toSet()

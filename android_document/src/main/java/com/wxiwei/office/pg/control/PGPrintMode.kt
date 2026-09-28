@@ -141,8 +141,9 @@ class PGPrintMode : FrameLayout, IPageListViewListener {
     override fun exportImage(pageItem: APageListItem, srcBitmap: Bitmap?) {
         val page = pageItem ?: return
         val ctl = control ?: return
-        if (parent !is Presentation) return
-        val find = ctl.getFind() as? PGFind
+        val presentation = parent as? Presentation ?: return
+        // a repaint posted before the document closed: the view may be disposed already
+        val find = presentation.getFind()
         if (find?.isSetPointToVisible() == true) {
             find.setSetPointToVisible(false)
             val rect = editor?.modelToView(editor?.getHighlight()?.getSelectStart() ?: 0, Rectangle(), false) ?: Rectangle()

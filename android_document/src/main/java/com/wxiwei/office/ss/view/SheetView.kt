@@ -475,6 +475,8 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             scrollY = y
             updateScroller(sheet, Math.round(x), Math.round(y), true)
             drawThumbnail(canvas)
+            // the selected cell shows in the frozen panes too
+            drawActiveCellBorder(canvas)
         } finally {
             canvas.restoreToCount(save)
             scrollX = oldX
@@ -711,9 +713,6 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             //draw active cell border
             drawActiveCellBorder(canvas)
 
-            // frozen rows/columns stay in place over the scrolled cells
-            drawFrozenPanes(canvas, rightPos, bottomPos)
-
             //if(!moving)
             run {
                 //draw shape(textbox, pict, chart)
@@ -731,6 +730,10 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             //draw moving header line when changing header height or width
             drawMovingHeaderLine(canvas)
             canvas.restore()
+
+            // frozen rows/columns stay in place over the scrolled cells and floating shapes, with
+            // their own row numbers and column letters (outside the cell clip, which leaves out the headers)
+            drawFrozenPanes(canvas, rightPos, bottomPos)
         }
         if (tilesPending) spreadsheet?.postInvalidateOnAnimation()
         val elapsed = android.os.SystemClock.uptimeMillis() - drawStarted
@@ -752,12 +755,70 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
      */
     private fun drawActiveCellBorder(canvas: Canvas) {
         val sheet = this.sheet!!
+        sheet.getSelectionRange()?.let { return drawSelectionRange(canvas, it) }
         val area = ModelUtil.instance().getCellAnchor(
             this,
             sheet.getActiveCellRow(), sheet.getActiveCellColumn()
         )
 
         cellView!!.drawActiveCellBorder(canvas, area, sheet.getActiveCellType())
+    }
+
+    /** A selected range (edit mode): tinted, framed, with a handle at its bottom-right corner to drag. */
+    private fun drawSelectionRange(canvas: Canvas, range: CellRangeAddress) {
+        val r = RectF(ModelUtil.instance().getCellRangeAddressAnchor(this, range))
+        canvas.save()
+        canvas.clipRect(getRowHeaderWidth().toFloat(), getColumnHeaderHeight().toFloat(), canvas.clipBounds.right.toFloat(), canvas.clipBounds.bottom.toFloat())
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = SELECTION_TINT
+        canvas.drawRect(r, paint)
+        paint.color = SELECTION_COLOR
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        canvas.drawRect(r, paint)
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(r.right, r.bottom, SELECTION_HANDLE_RADIUS, paint)
+        paint.color = Color.WHITE
+        canvas.drawCircle(r.right, r.bottom, SELECTION_HANDLE_RADIUS * 0.5f, paint)
+        canvas.restore()
+    }
+
+    /** Where the handle of the selected range (or of the active cell) is, in view pixels. */
+    fun selectionHandle(): android.graphics.PointF {
+        val sheet = this.sheet!!
+        val range = sheet.getSelectionRange()
+        val r = if (range != null) ModelUtil.instance().getCellRangeAddressAnchor(this, range)
+            else ModelUtil.instance().getCellAnchor(this, sheet.getActiveCellRow(), sheet.getActiveCellColumn())
+        return android.graphics.PointF(r.right, r.bottom)
+    }
+
+    /** The cell under a point of the view (row, column), or null on the headers. */
+    fun cellAt(x: Float, y: Float): IntArray? {
+        if (getColumnHeaderHeight() > y || getRowHeaderWidth() > x) return null
+        val sheet = this.sheet!!
+        val info = getMinRowAndColumnInformation()!!
+        val zoom = getZoom()
+        val old = sheet.getWorkbook()!!.isBefore07Version()
+        val maxRows = if (old) com.wxiwei.office.ss.model.baseModel.Workbook.MAXROW_03 else com.wxiwei.office.ss.model.baseModel.Workbook.MAXROW_07
+        val maxColumns = if (old) com.wxiwei.office.ss.model.baseModel.Workbook.MAXCOLUMN_03 else com.wxiwei.office.ss.model.baseModel.Workbook.MAXCOLUMN_07
+        var top = getColumnHeaderHeight().toFloat()
+        var rowIndex = info.getMinRowIndex()
+        while (top <= y && rowIndex <= maxRows) {
+            val row = sheet.getRow(rowIndex)
+            if (row != null && row.isZeroHeight()) { rowIndex++; continue }
+            val height = Math.round((row?.getRowPixelHeight() ?: sheet.getDefaultRowHeight().toFloat()) * zoom).toFloat()
+            top += if (rowIndex == info.getMinRowIndex() && !info.isRowAllVisible()) Math.round(info.getVisibleRowHeight() * zoom).toFloat() else height
+            rowIndex++
+        }
+        var left = getRowHeaderWidth().toFloat()
+        var columnIndex = info.getMinColumnIndex()
+        while (left <= x && columnIndex <= maxColumns) {
+            if (sheet.isColumnHidden(columnIndex)) { columnIndex++; continue }
+            val width = Math.round(sheet.getColumnPixelWidth(columnIndex) * zoom).toFloat()
+            left += if (columnIndex == info.getMinColumnIndex() && !info.isColumnAllVisible()) Math.round(info.getVisibleColumnWidth() * zoom).toFloat() else width
+            columnIndex++
+        }
+        return intArrayOf(rowIndex - 1, columnIndex - 1)
     }
 
     /**
@@ -1814,6 +1875,10 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
     }
 
     companion object {
+        private const val SELECTION_COLOR = 0xFF1A73E8.toInt()
+        private const val SELECTION_TINT = 0x331A73E8
+        const val SELECTION_HANDLE_RADIUS = 14f
+
         // empty rows/columns kept after the last data cell so the grid does not end abruptly
         private const val EXTRA_EMPTY = 2
         private const val GROW_STEP = 5

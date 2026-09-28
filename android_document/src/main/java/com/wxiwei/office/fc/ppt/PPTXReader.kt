@@ -928,6 +928,9 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
         }
 
         this.key = null
+        // close the file now: left to the finalizer, closing a file deleted meanwhile (shared
+        // storage) fails with EIO and that exception kills the app
+        zipPackage?.revert()
         zipPackage = null
         packagePart = null
 
@@ -960,6 +963,9 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                     }
                     if (sb.indexOf(key) >= 0) {
                         this.key = null
+                        // close the file now: left to the finalizer, closing a file deleted meanwhile (shared
+                        // storage) fails with EIO and that exception kills the app
+                        zipPackage?.revert()
                         zipPackage = null
                         packagePart = null
                         searched = true
@@ -977,6 +983,9 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
                     )
                 ) {
                     this.key = null
+                    // close the file now: left to the finalizer, closing a file deleted meanwhile (shared
+                    // storage) fails with EIO and that exception kills the app
+                    zipPackage?.revert()
                     zipPackage = null
                     packagePart = null
                     searched = true
@@ -1000,6 +1009,9 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
             }
             pgModel = null
             filePath = null
+            // close the file now: left to the finalizer, closing a file deleted meanwhile (shared
+            // storage) fails with EIO and that exception kills the app
+            zipPackage?.revert()
             zipPackage = null
             packagePart = null
             //packageRel = null;

@@ -84,6 +84,20 @@ class WordSelection(private val word: Word) {
         return x to y
     }
 
+    /**
+     * The view of [type] holding [offset]. A page hands out a table whole (PageView.getView stops
+     * at it): go on down its rows and cells to the line, picture... asked for.
+     */
+    private fun viewAt(root: IView, offset: Long, type: Short, isBack: Boolean): IView? {
+        var v = root.getView(offset, type.toInt(), isBack)
+        while (v != null && v.getType() == WPViewConstant.TABLE_VIEW && type != WPViewConstant.TABLE_VIEW) {
+            val inner = v.getView(offset, type.toInt(), isBack) ?: return null
+            if (inner === v) return null
+            v = inner
+        }
+        return v
+    }
+
     /** A laid-out caret position: its line, the caret x and line top in page-root coordinates, and its page. */
     private class Spot(val line: IView, val x: Int, val top: Int, val left: Int, val page: IView?)
 
@@ -111,7 +125,7 @@ class WordSelection(private val word: Word) {
             val (lx, ly) = inPage(line, title)
             return Spot(line, page.getX() + px + r.x, page.getY() + ly, page.getX() + lx, page)
         }
-        val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), isBack) ?: return null
+        val line = viewAt(root, offset, WPViewConstant.LINE_VIEW, isBack) ?: return null
         val a = word.modelToView(offset, Rectangle(), isBack)
         val lineRect = WPViewKit.instance().getAbsoluteCoordinate(line, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
         var page: IView? = line
@@ -120,8 +134,8 @@ class WordSelection(private val word: Word) {
     }
     /**
      * Offset of the caret for a touch at ([viewX], [viewY]) in Word view coordinates, or -1. A
-     * touch right of a paragraph's last line (or below the text) puts it before that paragraph's
-     * mark, never after the document's last mark.
+     * touch right of a paragraph's last line (or below the text, or in an empty table cell) puts
+     * it before that paragraph's mark, never after the document's last mark.
      */
     fun offsetAt(viewX: Float, viewY: Float): Long {
         val raw = rawOffsetAt(viewX, viewY)
@@ -131,7 +145,9 @@ class WordSelection(private val word: Word) {
         if (o > 0 && doc.getText(o - 1, o) == "\n") {
             val before = caretRect(o - 1)
             val here = caretRect(o)
-            if (before != null && viewY >= before.top && viewY < before.bottom && (here == null || viewY < here.top || viewY >= here.bottom)) o -= 1
+            // [o] starts the next line below, or the next cell of the same table row, right of the touch
+            if (before != null && viewY >= before.top && viewY < before.bottom &&
+                (here == null || viewY < here.top || viewY >= here.bottom || viewX < here.left)) o -= 1
         }
         return o
     }
@@ -238,7 +254,7 @@ class WordSelection(private val word: Word) {
     fun bodyBottomAt(offset: Long): Int? {
         if (isStory(offset) || isTextbox(offset)) return null
         val root = root() ?: return null
-        val line = root.getView(offset, WPViewConstant.LINE_VIEW.toInt(), false) ?: return null
+        val line = viewAt(root, offset, WPViewConstant.LINE_VIEW, false) ?: return null
         var page: IView? = line
         while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
         page ?: return null
@@ -294,6 +310,115 @@ class WordSelection(private val word: Word) {
     /** The floating picture or shape under ([viewX], [viewY]) (Word view coordinates), topmost first, or null. */
     fun floatingShapeAt(viewX: Float, viewY: Float): PlacedShape? =
         placedShapes().lastOrNull { it.rect.contains(viewX.toInt(), viewY.toInt()) }
+
+    /**
+     * The box of the in-line picture whose one-char object is at [offset], in Word view
+     * coordinates, as it is drawn; null when it is not laid out in a line of the body. (The
+     * [rectsFor] box of its char is a caret-wide sliver the height of the line.)
+     */
+    fun inlineObjectRect(offset: Long): Rect? {
+        if (isStory(offset) || isTextbox(offset)) return null
+        val root = root() ?: return null
+        val obj = viewAt(root, offset, WPViewConstant.OBJ_VIEW, false) as? com.wxiwei.office.wp.view.ObjView ?: return null
+        if (!obj.isInline() || obj.getWidth() <= 0 || obj.getHeight() <= 0) return null
+        var page: IView? = obj
+        while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
+        val (dx, dy) = shift(root, page) ?: return null
+        val at = WPViewKit.instance().getAbsoluteCoordinate(obj, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
+        val z = word.getZoom()
+        return Rect(floor(at.x * z + dx).toInt(), floor(at.y * z + dy).toInt(),
+            ceil((at.x + obj.getWidth()) * z + dx).toInt(), ceil((at.y + obj.getHeight()) * z + dy).toInt())
+    }
+
+    /**
+     * The box of the body table holding [start, end) in Word view coordinates: from its part on
+     * the page of [start] to its part on the page of [end] - 1; null when it is not laid out.
+     */
+    fun tableRect(start: Long, end: Long): Rect? {
+        if (isStory(start) || isTextbox(start)) return null
+        val root = root() ?: return null
+        val z = word.getZoom()
+        var out: Rect? = null
+        for (offset in listOf(start, end - 1)) {
+            // the outermost table view holding the offset
+            var table: IView? = root.getView(offset, WPViewConstant.TABLE_VIEW.toInt(), false) ?: continue
+            var up = table?.getParentView()
+            while (up != null) { if (up.getType() == WPViewConstant.TABLE_VIEW) table = up; up = up.getParentView() }
+            val t = table ?: continue
+            var page: IView? = t
+            while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
+            val (dx, dy) = shift(root, page) ?: continue
+            val at = WPViewKit.instance().getAbsoluteCoordinate(t, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
+            val r = Rect(floor(at.x * z + dx).toInt(), floor(at.y * z + dy).toInt(),
+                ceil((at.x + t.getWidth()) * z + dx).toInt(), ceil((at.y + t.getHeight()) * z + dy).toInt())
+            out = out?.apply { union(r) } ?: r
+        }
+        return out
+    }
+
+    /** A column border of a table: after grid column [index] - 1, at [x]. */
+    class ColumnGuide(val index: Int, val x: Int)
+    /** A row of a table, from [top] to [bottom]; [start] is the row's first offset. */
+    class RowGuide(val start: Long, val top: Int, val bottom: Int)
+    /** The borders of a laid-out table that can be dragged, in Word view coordinates. */
+    class TableGuides(val left: Int, val top: Int, val right: Int, val bottom: Int, val columns: List<ColumnGuide>, val rows: List<RowGuide>)
+
+    /**
+     * The column borders (from its first row part shown) and the rows of the body table holding
+     * [start, end), in Word view coordinates; null when it is not laid out. A column border is
+     * the grid line after a column: where a merged cell hides it in some rows, the rows showing it
+     * give its place.
+     */
+    fun tableGuides(start: Long, end: Long): TableGuides? {
+        if (isStory(start) || isTextbox(start)) return null
+        val root = root() ?: return null
+        val z = word.getZoom()
+        val tableElem = (word.getDocument() as? com.wxiwei.office.wp.model.WPDocument)?.getParagraph0(start) ?: return null
+        // every part of the table (one per page it runs over)
+        val parts = ArrayList<IView>()
+        var offset = start
+        while (offset < end) {
+            var t: IView? = root.getView(offset, WPViewConstant.TABLE_VIEW.toInt(), false) ?: break
+            var up = t?.getParentView()
+            while (up != null) { if (up.getType() == WPViewConstant.TABLE_VIEW) t = up; up = up.getParentView() }
+            val part = t ?: break
+            if (part.getElement() !== tableElem || parts.any { it === part }) break
+            parts.add(part)
+            val next = part.getEndOffset(null)
+            if (next <= offset) break
+            offset = next
+        }
+        if (parts.isEmpty()) return null
+        val rows = ArrayList<RowGuide>()
+        val edges = HashMap<Int, Int>() // grid index -> smallest right edge seen (view x)
+        var left = Int.MAX_VALUE; var top = Int.MAX_VALUE; var right = Int.MIN_VALUE; var bottom = Int.MIN_VALUE
+        for (part in parts) {
+            var page: IView? = part
+            while (page != null && page.getType() != WPViewConstant.PAGE_VIEW) page = page.getParentView()
+            val (dx, dy) = shift(root, page) ?: continue
+            val at = WPViewKit.instance().getAbsoluteCoordinate(part, WPViewConstant.PAGE_ROOT.toInt(), Rectangle())
+            fun vx(x: Int) = floor(x * z + dx).toInt()
+            fun vy(y: Int) = floor(y * z + dy).toInt()
+            left = minOf(left, vx(at.x)); top = minOf(top, vy(at.y))
+            right = maxOf(right, vx(at.x + part.getWidth())); bottom = maxOf(bottom, vy(at.y + part.getHeight()))
+            var row = part.getChildView()
+            while (row != null) {
+                val ry = at.y + row.getY()
+                rows.add(RowGuide(row.getElement()?.getStartOffset() ?: row.getStartOffset(null), vy(ry), vy(ry + row.getHeight())))
+                var cell = row.getChildView()
+                var k = 0
+                while (cell != null) {
+                    val x = vx(at.x + row.getX() + cell.getX() + cell.getLayoutSpan(WPViewConstant.X_AXIS))
+                    edges[k + 1] = minOf(edges[k + 1] ?: Int.MAX_VALUE, x)
+                    k++
+                    cell = cell.getNextView()
+                }
+                row = row.getNextView()
+            }
+        }
+        if (rows.isEmpty()) return null
+        return TableGuides(left, top, right, bottom, edges.entries.sortedBy { it.key }.map { ColumnGuide(it.key, it.value) }, rows)
+    }
 
     /** The box of the floating shape anchored at [offset], or null. */
     fun floatingShapeRect(offset: Long): Rect? = placedShapes().firstOrNull { it.offset == offset }?.rect

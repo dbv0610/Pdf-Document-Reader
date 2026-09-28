@@ -158,13 +158,16 @@ class PageRoot(private var word: Word?) : AbstractView(), IRoot {
             var k = pages.indexOfLast { it.getStartOffset(null) <= paraStart }
             // a page continuing a table needs the table's break state: start before it
             while (k > 0 && pages[k - 1].endsWithBrokenTable) k--
-            if (k <= 0) return false
+            // an edit on the first page lays out again from it: the root (and the scroll) stays
+            if (k < 0) return false
             restart = k
             start = pages[k].getStartOffset(null)
             for (i in pages.lastIndex downTo k) deleteView(pages.removeAt(i), true)
         }
         viewContainer.removeFrom(start)
-        wpLayouter.restartAt(start, restart + 1, pages[restart - 1].getEndOffset(null))
+        wpLayouter.restartAt(start, restart + 1, if (restart > 0) pages[restart - 1].getEndOffset(null) else start)
+        // no page left: the first one is laid out now
+        if (pages.isEmpty()) wpLayouter.backLayout()
         while (!wpLayouter.isLayoutFinish()) {
             val last = pages.lastOrNull() ?: break
             // the next page would start below the screen
@@ -176,6 +179,27 @@ class PageRoot(private var word: Word?) : AbstractView(), IRoot {
         LayoutKit.instance().layoutAllPage(this, zoom)
         if (!wpLayouter.isLayoutFinish()) layoutThread.start()
         return true
+    }
+
+    /**
+     * Lays out pages now, until they reach [bottom] (page-root coordinates) or the document ends,
+     * so a view scrolled there after a full relayout stays there; the rest goes on in the background.
+     */
+    fun layoutDownTo(bottom: Int, zoom: Float) {
+        if (!layoutStarted) return
+        // the background layout takes the document's lock for every page
+        synchronized(getDocument() ?: this) { layoutPagesDownTo(bottom) }
+        LayoutKit.instance().layoutAllPage(this, zoom)
+    }
+
+    private fun layoutPagesDownTo(bottom: Int) {
+        while (!wpLayouter.isLayoutFinish()) {
+            val last = synchronized(this) { pages.lastOrNull() } ?: break
+            if (last.getY() + last.getHeight() > bottom) break
+            val before = pages.size
+            wpLayouter.backLayout()
+            if (pages.size == before) break
+        }
     }
 
     fun getPageView(pageIndex: Int): PageView? = if (pageIndex < 0 || pageIndex >= pages.size) null else pages[pageIndex]

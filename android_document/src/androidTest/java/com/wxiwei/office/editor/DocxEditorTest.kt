@@ -164,6 +164,27 @@ class DocxEditorTest {
         }
     }
 
+    /** The first table of sample.docx, moved before the first paragraph of the document. */
+    @Test
+    fun moveTable() {
+        val source = OpenDocument.copySample("sample.docx", "docx_table_move_source.docx")
+        val saved = OpenDocument.output("docx_table_move_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val session = onMain { com.wxiwei.office.editor.docx.LiveDocxSession(reader.control!!, source) }
+            val table = onMain {
+                val doc = (reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument
+                doc.getTableCollection(0)!!.getElementForIndex(0)!!.getStartOffset()
+            }
+            assertTrue("table found in the model", onMain { session.tableAt(table) } != null)
+            assertTrue(session.lastError?.toString(), onMain { session.moveTable(table, 0, after = false) })
+            assertTrue("shown live", onMain { !session.needsReopen })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val body = xml.indexOf("<w:body>") + "<w:body>".length
+        assertTrue("table first in the body", xml.startsWith("<w:tbl>", body))
+    }
+
     /** The picture of sample.docx: resized to 200 x 100 px and moved to the start of the document. */
     @Test
     fun resizeAndMovePicture() {
@@ -176,7 +197,8 @@ class DocxEditorTest {
             assertTrue("picture found in the model", onMain { session.shapeAt(at) } != null)
             assertTrue(session.lastError?.toString(), onMain { session.resizeObject(at, 200, 100) })
             assertTrue(session.lastError?.toString(), onMain { session.moveObject(at, 0) })
-            assertTrue(onMain { session.needsReopen })
+            // both shown at once now
+            assertTrue(onMain { !session.needsReopen })
             assertTrue(onMain { session.save(saved) } is EditResult.Ok)
         }
         val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }

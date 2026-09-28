@@ -43,6 +43,7 @@ class WorkbookReader private constructor() {
 
     @Throws(Exception::class)
     fun read(zipPackage: ZipPackage, packagePart: PackagePart, book: Workbook, iReader: SSReader) {
+        this.zipPackage?.takeIf { it !== zipPackage }?.let { close(it) }
         this.zipPackage = zipPackage
         this.book = book
         this.iReader = iReader
@@ -223,10 +224,20 @@ class WorkbookReader private constructor() {
         return SheetReader.instance().searchContent(zipPackage!!, iReader, part, key)
     }
 
+    /**
+     * Closes [pkg] (the document's file) once the sheet being read stops. Left to the finalizer, a
+     * file deleted meanwhile (shared storage) fails to close with EIO, which kills the app.
+     */
+    private fun close(pkg: ZipPackage) {
+        val job = sheetJob
+        if (job != null && !job.isCompleted) job.invokeOnCompletion { pkg.revert() } else pkg.revert()
+    }
+
     @Synchronized
     fun dispose() {
         cancelReading()
         SheetReader.instance().dispose()
+        zipPackage?.let { close(it) }
         zipPackage = null
         book = null
         iReader = null

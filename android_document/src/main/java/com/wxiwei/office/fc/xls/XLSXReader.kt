@@ -188,6 +188,7 @@ class XLSXReader(control: IControl, filePath: String) : SSReader() {
         super.dispose()
         filePath = null
         book = null
+        // not closed here: the workbook reads its other sheets from the package later
         zipPackage = null
         packagePart = null
         key = null

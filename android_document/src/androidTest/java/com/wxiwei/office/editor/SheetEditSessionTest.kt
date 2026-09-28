@@ -7,6 +7,7 @@ import com.wxiwei.office.ss.control.ExcelView
 import com.wxiwei.office.ss.model.baseModel.Workbook
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -236,5 +237,195 @@ class SheetEditSessionTest {
             }
         }
     }
-}
 
+    /** A sheet added after the last one: shown at once, typed into (text and a formula), undone and redone, saved, read again. */
+    @Test
+    fun addSheet() {
+        val source = OpenDocument.copySample("sample.xlsx", "add_sheet_source.xlsx")
+        val saved = OpenDocument.output("add_sheet_saved.xlsx")
+        var count = 0
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val book = book(reader)
+            count = onMain { book.getSheetCount() }
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            assertEquals("a name in use is refused", -1, onMain { session.addSheet(book.getSheet(0)!!.getSheetName()!!) })
+            assertTrue(onMain { session.sheetNameProblem("a/b") } != null)
+            val index = onMain { session.addSheet("Mới") }
+            assertEquals(count, index)
+            assertEquals(count + 1, onMain { book.getSheetCount() })
+            val excel = reader.control!!.getView() as ExcelView
+            onMain { excel.refreshSheetBar(index); excel.showSheet(index) }
+            delay(500)
+            assertTrue(session.lastError?.toString(), onMain { session.setCellInput(index, 0, 0, "xin chào") })
+            assertTrue(session.lastError?.toString(), onMain { session.setCellInput(index, 1, 0, "=2+3") })
+            assertEquals(5.0, onMain { num(book, index, 1, 0) }, 0.0)
+            // undo the formula, the text and the sheet; then redo all
+            repeat(3) { assertTrue(onMain { session.undo() }) }
+            assertEquals(count, onMain { book.getSheetCount() })
+            repeat(3) { assertTrue(onMain { session.redo() }) }
+            assertEquals(count + 1, onMain { book.getSheetCount() })
+            assertEquals(5.0, onMain { num(book, index, 1, 0) }, 0.0)
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val workbook = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("xl/workbook.xml")).readBytes().toString(Charsets.UTF_8) }
+        assertTrue("listed in the workbook: $workbook", workbook.contains("name=\"Mới\""))
+        OpenDocument.open(saved) { reader ->
+            loadAll(reader)
+            val book = book(reader)
+            assertEquals(count + 1, onMain { book.getSheetCount() })
+            assertEquals("Mới", onMain { book.getSheet(count)!!.getSheetName() })
+            assertEquals(5.0, onMain { num(book, count, 1, 0) }, 0.0)
+            assertEquals("xin chào", onMain { book.getSheet(count)!!.getRow(0)!!.getCell(0)!!.let { c -> SheetEditSession(reader.control!!, saved).getInput(count, 0, 0) } })
+        }
+    }
+
+    /** X2: justify and vertical center on a cell: in the model at once, saved, read back. */
+    @Test
+    fun justifyAndVerticalCenter() {
+        val source = OpenDocument.copySample("sample.xlsx", "align_source.xlsx")
+        val saved = OpenDocument.output("align_saved.xlsx")
+        fun style(reader: com.wxiwei.office.reader.OfficeReader) = onMain { book(reader).getSheet(0)!!.getRow(5)!!.getCell(3)!!.getCellStyle()!! }
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.setCellFormat(0, 5, 3, com.wxiwei.office.editor.xlsx.CellFormat(horizontal = "justify", vertical = "center")) })
+            val st = style(reader)
+            assertEquals(com.wxiwei.office.ss.model.style.CellStyle.ALIGN_JUSTIFY, onMain { st.getHorizontalAlign() })
+            assertEquals(com.wxiwei.office.ss.model.style.CellStyle.VERTICAL_CENTER, onMain { st.getVerticalAlign() })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val styles = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("xl/styles.xml")).readBytes().toString(Charsets.UTF_8) }
+        assertTrue("alignment saved", Regex("<alignment[^>]*horizontal=\"justify\"[^>]*vertical=\"center\"|<alignment[^>]*vertical=\"center\"[^>]*horizontal=\"justify\"").containsMatchIn(styles))
+        OpenDocument.open(saved) { reader ->
+            loadAll(reader)
+            val st = style(reader)
+            assertEquals(com.wxiwei.office.ss.model.style.CellStyle.ALIGN_JUSTIFY, onMain { st.getHorizontalAlign() })
+            assertEquals(com.wxiwei.office.ss.model.style.CellStyle.VERTICAL_CENTER, onMain { st.getVerticalAlign() })
+        }
+    }
+
+    /** Merge A201:C203 (the other values go), undo/redo, a range cutting it refused, saved, read back, split again. */
+    @Test
+    fun mergeAndUnmerge() {
+        val source = OpenDocument.copySample("sample.xlsx", "merge_source.xlsx")
+        val saved = OpenDocument.output("merge_saved.xlsx")
+        val split = OpenDocument.output("merge_split.xlsx")
+        fun mergeXml(f: java.io.File) = java.util.zip.ZipFile(f).use { z -> z.getInputStream(z.getEntry("xl/worksheets/sheet1.xml")).readBytes().toString(Charsets.UTF_8) }
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            val sheet = onMain { book(reader).getSheet(0)!! }
+            assertTrue(onMain { session.setCellInput(0, 200, 0, "top") && session.setCellInput(0, 201, 1, "x") })
+            assertTrue("drops a value", onMain { session.mergeDropsValues(0, 200, 0, 202, 2) })
+            assertTrue(session.lastError?.toString(), onMain { session.mergeCells(0, 200, 0, 202, 2) })
+            assertEquals("", onMain { session.getInput(0, 201, 1) })
+            assertEquals("top", onMain { session.getInput(0, 200, 0) })
+            assertTrue("merged", onMain { sheet.mergeIndexAt(202, 2) >= 0 && sheet.getRow(201)!!.getCell(1)!!.getRangeAddressIndex() >= 0 })
+            assertTrue(onMain { session.undo() })
+            assertEquals("value back", "x", onMain { session.getInput(0, 201, 1) })
+            assertTrue("split by undo", onMain { sheet.mergeIndexAt(202, 2) < 0 && sheet.getRow(201)!!.getCell(1)!!.getRangeAddressIndex() < 0 })
+            assertTrue(onMain { session.redo() })
+            assertTrue("merged again", onMain { sheet.mergeIndexAt(200, 0) >= 0 })
+            assertFalse("a range cutting the merged cell", onMain { session.mergeCells(0, 201, 1, 204, 3) })
+            // selecting across it grows over the whole merged cell
+            onMain { sheet.setActiveCellRowCol(199, 1); sheet.setSelectionEnd(201, 1) }
+            assertEquals("A200:C203", onMain { sheet.getSelectionRange()!!.let { com.wxiwei.office.editor.xlsx.A1FormulaShifter.address(it.getFirstRow(), it.getFirstColumn()) + ":" + com.wxiwei.office.editor.xlsx.A1FormulaShifter.address(it.getLastRow(), it.getLastColumn()) } })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = mergeXml(saved)
+        assertTrue("mergeCell saved", xml.contains("<mergeCell ref=\"A201:C203\"/>"))
+        assertTrue("before the page margins", xml.indexOf("<mergeCells") in 0 until xml.indexOf("<pageMargins").let { if (it < 0) Int.MAX_VALUE else it })
+        assertTrue("after sheetData", xml.indexOf("<mergeCells") > xml.indexOf("</sheetData>"))
+        OpenDocument.open(saved) { reader ->
+            loadAll(reader)
+            val sheet = onMain { book(reader).getSheet(0)!! }
+            assertTrue("read back merged", onMain { sheet.mergeIndexAt(201, 1) >= 0 })
+            val session = onMain { SheetEditSession(reader.control!!, saved) }
+            assertTrue(onMain { session.unmergeCells(0, 201, 1) })
+            assertTrue("split", onMain { sheet.mergeIndexAt(201, 1) < 0 })
+            assertTrue(onMain { session.save(split) } is EditResult.Ok)
+        }
+        assertFalse("split saved", mergeXml(split).contains("A201:C203"))
+    }
+
+    /** X6: a picture on sheet 1 (its drawing has charts) and on a new sheet (no drawing yet): shown, undo/redo, saved, read back. */
+    @Test
+    fun addPictures() {
+        val source = OpenDocument.copySample("sample.xlsx", "picture_source.xlsx")
+        val saved = OpenDocument.output("picture_saved.xlsx")
+        val png = java.io.File(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "sheet_pic.png")
+        android.graphics.Bitmap.createBitmap(60, 40, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.RED) }
+            .let { b -> png.outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) } }
+        var shapes0 = 0
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            val sheet = onMain { book(reader).getSheet(0)!! }
+            shapes0 = onMain { sheet.getShapeCount() }
+            assertTrue(session.lastError?.toString(), onMain { session.addPicture(0, 2, 1, png, 120, 80) })
+            assertEquals(shapes0 + 1, onMain { sheet.getShapeCount() })
+            val bounds = onMain { sheet.getShape(shapes0)!!.bounds!! }
+            assertEquals("size", 120 to 80, bounds.width to bounds.height)
+            assertTrue(onMain { session.undo() }); assertEquals(shapes0, onMain { sheet.getShapeCount() })
+            assertTrue(onMain { session.redo() }); assertEquals(shapes0 + 1, onMain { sheet.getShapeCount() })
+            val added = onMain { session.addSheet("Ảnh") }
+            assertTrue(onMain { session.addPicture(added, 0, 0, png, 60, 40) })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        java.util.zip.ZipFile(saved).use { z ->
+            val names = z.entries().toList().map { it.name }
+            val media = names.filter { it.startsWith("xl/media/image") }
+            assertTrue("two new media: $media", media.size >= 2)
+            val types = z.getInputStream(z.getEntry("[Content_Types].xml")).readBytes().toString(Charsets.UTF_8)
+            assertTrue("png type", types.contains("Extension=\"png\""))
+            val drawings = names.filter { it.matches(Regex("xl/drawings/drawing\\d+\\.xml")) }
+            val anchors = drawings.sumOf { d -> Regex("<xdr:oneCellAnchor").findAll(z.getInputStream(z.getEntry(d)).readBytes().toString(Charsets.UTF_8)).count() }
+            assertTrue("two anchors in $drawings", anchors >= 2)
+        }
+        OpenDocument.open(saved) { reader ->
+            loadAll(reader)
+            assertEquals("read back on sheet 1", shapes0 + 1, onMain { book(reader).getSheet(0)!!.getShapeCount() })
+            val last = onMain { book(reader).getSheetCount() - 1 }
+            assertEquals("read back on the new sheet", 1, onMain { book(reader).getSheet(last)!!.getShapeCount() })
+        }
+    }
+
+    /** X3: a red border all around one cell: shown, the cells sharing its old style unchanged, saved, read back. */
+    @Test
+    fun cellBorder() {
+        val source = OpenDocument.copySample("sample.xlsx", "border_source.xlsx")
+        val saved = OpenDocument.output("border_saved.xlsx")
+        var at = 0 to 0
+        var twin = 0 to 0
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val book = book(reader)
+            // a cell and another one with the same style
+            onMain {
+                val sheet = book.getSheet(0)!!
+                val cells = (0..40).flatMap { r -> (0..8).mapNotNull { c -> sheet.getRow(r)?.getCell(c)?.let { (r to c) to it } } }
+                val pair = cells.groupBy { it.second.getCellStyle() }.values.first { it.size >= 2 }
+                at = pair[0].first; twin = pair[1].first
+            }
+            fun style(p: Pair<Int, Int>) = book.getSheet(0)!!.getRow(p.first)!!.getCell(p.second)!!.getCellStyle()!!
+            val twinBefore = onMain { style(twin).getBorderLeft() to style(twin).getBorderTop() }
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.setCellFormat(0, at.first, at.second, com.wxiwei.office.editor.xlsx.CellFormat(border = "all", borderColor = "FF0000")) })
+            val st = onMain { style(at) }
+            assertEquals(com.wxiwei.office.ss.model.style.BorderStyle.BORDER_THIN, onMain { st.getBorderLeft() })
+            assertEquals(com.wxiwei.office.ss.model.style.BorderStyle.BORDER_THIN, onMain { st.getBorderBottom() })
+            assertEquals(0xFF0000, onMain { book.getColor(st.getBorderTopColorIdx().toInt()) and 0xFFFFFF })
+            assertEquals("the cell sharing its old style keeps its borders", twinBefore, onMain { style(twin).getBorderLeft() to style(twin).getBorderTop() })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val styles = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("xl/styles.xml")).readBytes().toString(Charsets.UTF_8) }
+        assertTrue("border saved", Regex("<left style=\"thin\"><color rgb=\"FFFF0000\"/></left><right style=\"thin\">").containsMatchIn(styles))
+        OpenDocument.open(saved) { reader ->
+            loadAll(reader)
+            val st = onMain { book(reader).getSheet(0)!!.getRow(at.first)!!.getCell(at.second)!!.getCellStyle()!! }
+            assertEquals(com.wxiwei.office.ss.model.style.BorderStyle.BORDER_THIN, onMain { st.getBorderRight() })
+            assertEquals(0xFF0000, onMain { book(reader).getColor(st.getBorderRightColorIdx().toInt()) and 0xFFFFFF })
+        }
+    }
+}

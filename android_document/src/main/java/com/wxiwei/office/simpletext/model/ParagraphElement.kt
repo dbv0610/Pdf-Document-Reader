@@ -50,6 +50,11 @@ open class ParagraphElement : AbstractElement() {
     /** Number of leaves (text runs, shapes, fields). */
     fun leafCount(): Int = leaf?.size() ?: 0
 
+    /** Puts [leafElem] in at [index] (its offsets must already be right). */
+    fun insertLeafAt(index: Int, leafElem: LeafElement) {
+        leaf!!.insertElementForIndex(leafElem, index)
+    }
+
     /** Takes the leaf at [index] out without disposing it. */
     fun detachLeafAt(index: Int): IElement? = leaf?.detachElementForIndex(index)
 

@@ -117,13 +117,14 @@ open class SlideDrawKit {
         slide: PGSlide?,
         slideNo: Int,
         zoom: Float,
-        shapeVisible: Map<Int, MutableMap<Int, IAnimation>?>?
+        shapeVisible: Map<Int, MutableMap<Int, IAnimation>?>?,
+        filter: ((IShape) -> Boolean)? = null,
     ) {
         if (slide != null) {
             val count = slide.getShapeCount()
             for (i in 0 until count) {
                 val shape = slide.getShape(i)!!
-                if (shape.isHidden) {
+                if (shape.isHidden || (filter != null && !filter(shape))) {
                     continue
                 }
 
@@ -594,6 +595,62 @@ open class SlideDrawKit {
      *
      * @return bitmap raw data
      */
+    /** A slide for the slideshow: its picture without the shapes [animated], and each of those alone. */
+    class Layers(val base: Bitmap, val shapes: Map<Int, Pair<Bitmap, Rect>>, val zoom: Float)
+
+    /**
+     * The slide [width] px wide in layers: background, master artwork and the shapes that do not
+     * move in [Layers.base]; every shape of [animated] (by id) on a transparent bitmap cropped to
+     * where it is drawn (a turned shape takes the square of its diagonal), with its place.
+     */
+    fun layers(pgModel: PGModel, editor: PGEditor, slide: PGSlide, width: Int, animated: Set<Int>): Layers {
+        synchronized(this) {
+            val b = PictureKit.instance().isDrawPictrue
+            PictureKit.instance().isDrawPictrue = true
+            try {
+                val d = pgModel.getPageSize()!!
+                val zoom = width.toFloat() / d.width
+                val w = width
+                val h = Math.round(d.height * zoom)
+                val base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(base)
+                brRect.set(0, 0, w, h)
+                if (!BackgroundDrawer.drawBackground(canvas, editor.getControl(), slide.getSlideNo(), slide.getBackgroundAndFill(), brRect, null, zoom)) {
+                    canvas.drawColor(Color.white.getRGB())
+                }
+                for (i in slide.getMasterIndexs()) drawShapes(canvas, pgModel, editor, pgModel.getSlideMaster(i), slide.getSlideNo(), zoom, null)
+                drawShapes(canvas, pgModel, editor, slide, slide.getSlideNo(), zoom, null) { it.shapeID !in animated }
+                val shapes = HashMap<Int, Pair<Bitmap, Rect>>()
+                for (id in animated) {
+                    val parts = slide.getShapes().filter { it.shapeID == id && !it.isHidden }
+                    if (parts.isEmpty()) continue
+                    var area: Rect? = null
+                    for (shape in parts) {
+                        val r = getShapeRect(shape, zoom)
+                        val grow = if (shape.rotation != 0f) {
+                            val diagonal = Math.hypot(r.width().toDouble(), r.height().toDouble())
+                            Math.round((diagonal - minOf(r.width(), r.height())) / 2).toInt()
+                        } else 0
+                        // lines, shadows and glow reach a little past the frame
+                        val margin = grow + maxOf(4, Math.round(maxOf(r.width(), r.height()) * 0.06f))
+                        r.inset(-margin, -margin)
+                        if (area == null) area = r else area.union(r)
+                    }
+                    val crop = Rect(area!!)
+                    if (!crop.intersect(0, 0, w, h) || crop.width() <= 0 || crop.height() <= 0) continue
+                    val layer = Bitmap.createBitmap(crop.width(), crop.height(), Bitmap.Config.ARGB_8888)
+                    val c = Canvas(layer)
+                    c.translate(-crop.left.toFloat(), -crop.top.toFloat())
+                    drawShapes(c, pgModel, editor, slide, slide.getSlideNo(), zoom, null) { it.shapeID == id }
+                    shapes[id] = layer to crop
+                }
+                return Layers(base, shapes, zoom)
+            } finally {
+                PictureKit.instance().isDrawPictrue = b
+            }
+        }
+    }
+
     fun slideToImage(pgModel: PGModel, editor: PGEditor?, slide: PGSlide?): Bitmap? {
         return slideToImage(pgModel, editor, slide, null)
     }

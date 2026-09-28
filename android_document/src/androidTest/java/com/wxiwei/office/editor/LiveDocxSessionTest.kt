@@ -793,4 +793,281 @@ class LiveDocxSessionTest {
             }
         }
     }
+
+    /** Paragraphs and their leaves of the main text tile the offsets with no gap or overlap; problems as text. */
+    private fun modelProblems(doc: com.wxiwei.office.wp.model.WPDocument): List<String> {
+        val bad = ArrayList<String>()
+        val end = doc.getAreaEnd(0)
+        var o = 0L
+        var prevEnd = 0L
+        while (o < end) {
+            val p = doc.getParagraph(o) as? com.wxiwei.office.simpletext.model.ParagraphElement ?: run { bad.add("no paragraph at $o"); return bad }
+            if (p.getStartOffset() != prevEnd) bad.add("paragraph [${p.getStartOffset()},${p.getEndOffset()}) after $prevEnd")
+            var at = p.getStartOffset()
+            for (i in 0 until p.leafCount()) {
+                val l = p.getElementForIndex(i)!!
+                if (l.getStartOffset() != at) bad.add("leaf $i of [${p.getStartOffset()},${p.getEndOffset()}) at ${l.getStartOffset()}, expected $at")
+                at = l.getEndOffset()
+            }
+            if (p !is com.wxiwei.office.wp.model.TableElement && p.leafCount() > 0 && at != p.getEndOffset()) bad.add("leaves of [${p.getStartOffset()},${p.getEndOffset()}) end at $at")
+            prevEnd = p.getEndOffset()
+            o = maxOf(o + 1, p.getEndOffset())
+            if (bad.size > 5) return bad
+        }
+        return bad
+    }
+
+    private fun shapeAtModel(doc: com.wxiwei.office.simpletext.model.IDocument, offset: Long): Boolean {
+        val leaf = doc.getLeaf(offset) ?: return false
+        return leaf.getStartOffset() == offset && leaf.getEndOffset() == offset + 1 && AttrManage.instance().getShapeID(leaf.getAttribute()) >= 0
+    }
+
+    /** sample.docx's in-line picture moved live (no reopen): up into the text above it, then undone; saved. */
+    @Test
+    fun movePictureLive() {
+        val source = OpenDocument.copySample("sample.docx", "docx_live_move_source.docx")
+        val saved = OpenDocument.output("docx_live_move_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val map = DocxSourceMap.get(source.absolutePath)!!
+            val pic = (0 until map.size).map { map.leaf(it) }.first { it.kind == DocxSourceMap.Kind.OBJECT && it.start < com.wxiwei.office.constant.wp.WPModelConstant.HEADER }.start
+            val target = offsetOf(source.absolutePath, "Hết tài liệu")
+            assertTrue(target in 1 until pic)
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            val doc = onMain { (reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument }
+            assertEquals(emptyList<String>(), onMain { modelProblems(doc) })
+            val textBefore = onMain { doc.getText(target, target + 12) }
+            assertTrue(session.lastError?.toString(), onMain { session.moveObject(pic, target) })
+            assertFalse("shown live", onMain { session.needsReopen })
+            assertEquals(emptyList<String>(), onMain { modelProblems(doc) })
+            assertTrue("picture at the target", onMain { shapeAtModel(doc, target) })
+            assertEquals("text after it", textBefore, onMain { doc.getText(target + 1, target + 13) })
+            // the pages after the edited one are laid out in the background
+            var laidOut = false
+            repeat(50) {
+                if (!laidOut) {
+                    laidOut = onMain {
+                        val w = reader.control!!.getView() as Word
+                        w.getRoot(w.getCurrentRootType())!!.getView(target, com.wxiwei.office.constant.wp.WPViewConstant.OBJ_VIEW.toInt(), false) is com.wxiwei.office.wp.view.ObjView
+                    }
+                    if (!laidOut) delay(200)
+                }
+            }
+            assertTrue("laid out as a picture there", laidOut)
+            // undo puts it back
+            assertTrue(onMain { session.undo() })
+            assertEquals(emptyList<String>(), onMain { modelProblems(doc) })
+            assertTrue("picture back", onMain { shapeAtModel(doc, pic) })
+            assertTrue(onMain { session.redo() })
+            assertTrue(onMain { shapeAtModel(doc, target) })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val drawing = xml.indexOf("<w:drawing>")
+        assertTrue("saved before 'Hết tài liệu'", drawing in 0 until xml.indexOf("Hết tài liệu"))
+    }
+
+    /** sample.docx's second table moved live to the top; text typed in one of its cells after that is saved in that cell. */
+    @Test
+    fun moveTableLive() {
+        val source = OpenDocument.copySample("sample.docx", "docx_live_table_source.docx")
+        val saved = OpenDocument.output("docx_live_table_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            val doc = onMain { (reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument }
+            val (start, end) = onMain { doc.getTableCollection(0)!!.getElementForIndex(1)!!.let { it.getStartOffset() to it.getEndOffset() } }
+            val tableText = onMain { doc.getText(start, end) }
+            val firstCell = tableText.substringBefore('\n')
+            android.util.Log.i("MoveDbg", "table [$start,$end) first cell '$firstCell'")
+            assertTrue(onMain { session.moveTable(start + 2, 0, after = false) })
+            assertFalse("shown live", onMain { session.needsReopen })
+            assertEquals(emptyList<String>(), onMain { modelProblems(doc) })
+            assertEquals("table text now first", tableText, onMain { doc.getText(0, end - start) })
+            assertEquals(0L until (end - start), onMain { session.movedTable })
+            delay(800)
+            assertTrue("laid out as a table", onMain {
+                val w = reader.control!!.getView() as Word
+                w.getRoot(w.getCurrentRootType())!!.getView(0, com.wxiwei.office.constant.wp.WPViewConstant.TABLE_VIEW.toInt(), false) != null
+            })
+            // undo and redo
+            assertTrue(onMain { session.undo() })
+            assertEquals(emptyList<String>(), onMain { modelProblems(doc) })
+            assertEquals(tableText, onMain { doc.getText(start, end) })
+            assertTrue(onMain { session.redo() })
+            assertEquals(tableText, onMain { doc.getText(0, end - start) })
+            // type at the start of its first cell
+            assertTrue(session.lastError?.toString(), onMain { session.insertText(0, "MỚI ") })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val body = xml.indexOf("<w:body>") + "<w:body>".length
+        assertTrue("table first in the body", xml.startsWith("<w:tbl>", body))
+        val plain = Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>").findAll(xml.substring(body, xml.indexOf("</w:tbl>", body))).joinToString("") { it.groupValues[1] }
+        assertTrue("typed text in the moved table's first cell: '${plain.take(40)}'", plain.startsWith("MỚI "))
+    }
+
+    /** The first table of sample.docx: its first column border moved right, its second row made taller; shown live, undone, saved. */
+    @Test
+    fun resizeTableColumnAndRow() {
+        val source = OpenDocument.copySample("sample.docx", "docx_table_size_source.docx")
+        val saved = OpenDocument.output("docx_table_size_saved.docx")
+        val xml0 = java.util.zip.ZipFile(source).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val grid0 = Regex("<w:gridCol w:w=\"(\\d+)\"").findAll(xml0.substring(xml0.indexOf("<w:tbl>"))).take(2).map { it.groupValues[1].toInt() }.toList()
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            val doc = onMain { (reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument }
+            val table = onMain { doc.getTableCollection(0)!!.getElementForIndex(0) as com.wxiwei.office.wp.model.TableElement }
+            fun width(row: Int, cell: Int) = onMain { AttrManage.instance().getTableCellWidth((table.getElementForIndex(row) as com.wxiwei.office.wp.model.RowElement).getElementForIndex(cell)!!.getAttribute()) }
+            val w0 = width(0, 0); val w1 = width(0, 1)
+            android.util.Log.i("MoveDbg", "grid $grid0 cells $w0 $w1")
+            assertEquals(grid0[0], w0)
+            // column border 1 by +600 twips
+            assertEquals(600, onMain { session.resizeTableColumn(table.getStartOffset(), 1, 600) })
+            assertFalse("shown live", onMain { session.needsReopen })
+            assertEquals(w0 + 600, width(0, 0)); assertEquals(w1 - 600, width(0, 1))
+            assertEquals(w0 + 600, width(2, 0))
+            // row 2 at least 1200 twips
+            val row = onMain { table.getElementForIndex(1)!! }
+            assertTrue(onMain { session.setTableRowHeight(row.getStartOffset(), 1200) })
+            assertEquals(1200, onMain { AttrManage.instance().getTableRowHeight(row.getAttribute()) })
+            delay(500)
+            val rowPx = onMain {
+                val w = reader.control!!.getView() as Word
+                val g = com.wxiwei.office.editor.word.WordSelection(w).tableGuides(table.getStartOffset(), table.getEndOffset())
+                g?.rows?.getOrNull(1)?.let { (it.bottom - it.top) / w.getZoom() }
+            }
+            android.util.Log.i("MoveDbg", "row 2 laid out $rowPx px")
+            assertTrue("row laid out taller: $rowPx", rowPx != null && rowPx >= 1200 / 15f - 2)
+            // undo both, redo both
+            assertTrue(onMain { session.undo() }); assertTrue(onMain { session.undo() })
+            // sample.docx gives the row no height of its own
+            assertEquals(w0, width(0, 0)); assertEquals(0, onMain { AttrManage.instance().getTableRowHeight(row.getAttribute()) })
+            assertTrue(onMain { session.redo() }); assertTrue(onMain { session.redo() })
+            assertEquals(w0 + 600, width(0, 0))
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val tbl = xml.substring(xml.indexOf("<w:tbl>"), xml.indexOf("</w:tbl>"))
+        val grid = Regex("<w:gridCol w:w=\"(\\d+)\"").findAll(tbl).take(2).map { it.groupValues[1].toInt() }.toList()
+        assertEquals(listOf(grid0[0] + 600, grid0[1] - 600), grid)
+        assertTrue("tcW of the first cell", Regex("<w:tcW w:w=\"${grid0[0] + 600}\" w:type=\"dxa\"").containsMatchIn(tbl) || Regex("<w:tcW w:type=\"dxa\" w:w=\"${grid0[0] + 600}\"").containsMatchIn(tbl))
+        val rows = tbl.split("<w:tr>", "<w:tr ").drop(1)
+        assertTrue("trHeight on row 2: ${rows[1].take(200)}", rows[1].contains("w:val=\"1200\""))
+    }
+
+    /** A touch in the middle of a table cell's text gives an offset in that cell (not the row below). */
+    @Test
+    fun tapInTableCell() {
+        val source = OpenDocument.copySample("sample.docx", "docx_cell_tap.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            delay(1500)
+            val bad = onMain {
+                val w = reader.control!!.getView() as Word
+                val doc = w.getDocument()
+                val text = doc.getText(0, (doc as com.wxiwei.office.wp.model.WPDocument).getAreaEnd(0))
+                val sel = com.wxiwei.office.editor.word.WordSelection(w)
+                val out = ArrayList<String>()
+                for (needle in listOf("WATCH", "PLAY_ALONG", "CHALLENGE", "Toàn bộ nốt", "Thử thách")) {
+                    val at = text.indexOf(needle).toLong()
+                    val r = sel.rectsFor(at, at + 1).first()
+                    val got = sel.offsetAt(r.exactCenterX(), r.exactCenterY())
+                    if (got !in at..(at + needle.length)) out.add("$needle: $at -> $got")
+                }
+                out
+            }
+            assertEquals(emptyList<String>(), bad)
+        }
+    }
+
+    /** sample.docx's second table (3 columns, 4 rows): a row added below "WATCH" and a column right of it; saved, read again. */
+    @Test
+    fun insertTableRowAndColumn() {
+        val source = OpenDocument.copySample("sample.docx", "docx_table_insert_source.docx")
+        val saved = OpenDocument.output("docx_table_insert_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            val at = offsetOf(source.absolutePath, "WATCH").toLong()
+            val place = onMain { session.cellAt(at) }!!
+            assertEquals(listOf(1, 1, 0, 1), listOf(place.table, place.row, place.cell, place.span))
+            assertTrue(session.lastError?.toString(), onMain { session.insertTableRow(at, below = true) })
+            assertTrue(session.lastError?.toString(), onMain { session.insertTableColumn(at, right = true) })
+            assertFalse("shown live (no merged cells)", onMain { session.needsReopen })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val first = xml.indexOf("<w:tbl>")
+        val start = xml.indexOf("<w:tbl>", first + 1)
+        val tbl = xml.substring(start, xml.indexOf("</w:tbl>", start))
+        assertEquals("4 grid columns", 4, Regex("<w:gridCol ").findAll(tbl).count())
+        val xml0 = java.util.zip.ZipFile(source).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val tbl0 = xml0.substring(xml0.indexOf("<w:tbl>", xml0.indexOf("<w:tbl>") + 1))
+        fun gridSum(t: String) = Regex("<w:gridCol w:w=\"(\\d+)\"").findAll(t.substring(0, t.indexOf("</w:tblGrid>"))).sumOf { it.groupValues[1].toInt() }
+        assertEquals("the table keeps its width", gridSum(tbl0), gridSum(tbl))
+        val rows = tbl.split(Regex("<w:tr[ >]")).drop(1)
+        assertEquals("5 rows", 5, rows.size)
+        rows.forEachIndexed { i, r -> assertEquals("cells in row $i", 4, Regex("<w:tc>").findAll(r).count()) }
+        fun texts(r: String) = Regex("<w:tc>.*?</w:tc>", RegexOption.DOT_MATCHES_ALL).findAll(r).map { c -> Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>").findAll(c.value).joinToString("") { it.groupValues[1] } }.toList()
+        assertEquals("row of WATCH: new empty cell after it", listOf("WATCH", ""), texts(rows[1]).take(2))
+        assertTrue("new row empty: ${texts(rows[2])}", texts(rows[2]).all { it.isEmpty() })
+        // the view reads it back: 5 rows of 4 cells
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val shape = onMain {
+                val t = ((reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument).getTableCollection(0)!!.getElementForIndex(1) as com.wxiwei.office.wp.model.TableElement
+                (0 until t.rowCount()).map { (t.getElementForIndex(it) as com.wxiwei.office.wp.model.RowElement).getCellNumber() }
+            }
+            assertEquals(listOf(4, 4, 4, 4, 4), shape)
+        }
+    }
+
+    /** sample.docx's second table (3 columns, 4 rows): the "PLAY_ALONG" row and the "Mô tả" column removed; saved, read again. */
+    @Test
+    fun deleteTableRowAndColumn() {
+        val source = OpenDocument.copySample("sample.docx", "docx_table_delete_source.docx")
+        val saved = OpenDocument.output("docx_table_delete_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.deleteTableRow(offsetOf(source.absolutePath, "PLAY_ALONG")) })
+            assertTrue(session.lastError?.toString(), onMain { session.deleteTableColumn(offsetOf(source.absolutePath, "Mô tả")) })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml0 = java.util.zip.ZipFile(source).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        fun second(x: String): String { val a = x.indexOf("<w:tbl>", x.indexOf("<w:tbl>") + 1); return x.substring(a, x.indexOf("</w:tbl>", a)) }
+        fun gridSum(t: String) = Regex("<w:gridCol w:w=\"(\\d+)\"").findAll(t).sumOf { it.groupValues[1].toInt() }
+        val tbl = second(xml)
+        assertEquals("2 grid columns", 2, Regex("<w:gridCol ").findAll(tbl).count())
+        assertEquals("the table keeps its width", gridSum(second(xml0)), gridSum(tbl))
+        fun texts(r: String) = Regex("<w:tc>.*?</w:tc>", RegexOption.DOT_MATCHES_ALL).findAll(r).map { c -> Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>").findAll(c.value).joinToString("") { it.groupValues[1] } }.toList()
+        val rows = tbl.split(Regex("<w:tr[ >]")).drop(1).map { texts(it) }
+        assertEquals(listOf(listOf("Chế độ", "Dùng khi"), listOf("WATCH", "Demo bài, học giai điệu lần đầu"), listOf("CHALLENGE", "Thử thách, thi đấu điểm")), rows)
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val shape = onMain {
+                val t = ((reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument).getTableCollection(0)!!.getElementForIndex(1) as com.wxiwei.office.wp.model.TableElement
+                (0 until t.rowCount()).map { (t.getElementForIndex(it) as com.wxiwei.office.wp.model.RowElement).getCellNumber() }
+            }
+            assertEquals(listOf(2, 2, 2), shape)
+        }
+    }
+
+    /** D10: a word shaded 92D050 (written as w:shd, not a named highlight) keeps its color when read back. */
+    @Test
+    fun shadingReadBack() {
+        val source = OpenDocument.copySample("sample.docx", "docx_shd_source.docx")
+        val saved = OpenDocument.output("docx_shd_saved.docx")
+        var at = 0L
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            at = offsetOf(source.absolutePath, "PianoLearn").toLong()
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            assertTrue(session.lastError?.toString(), onMain { session.highlight(at, at + 10, "92D050") })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        val xml = java.util.zip.ZipFile(saved).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
+        assertTrue("written as shading", xml.contains("w:fill=\"92D050\""))
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val color = onMain {
+                val doc = (reader.control!!.getView() as Word).getDocument()
+                AttrManage.instance().getFontHighLight(doc.getParagraph(at + 1)!!.getAttribute(), doc.getLeaf(at + 1)!!.getAttribute())
+            }
+            assertEquals("read back", 0xFF92D050.toInt(), color)
+        }
+    }
 }

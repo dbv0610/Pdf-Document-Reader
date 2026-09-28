@@ -114,8 +114,26 @@ class FontTypefaceManage {
         }
     }
 
+    /**
+     * A font the app offers for editing ([fontName] as written into the files): drawn with
+     * [typeface] in every document from now on, like a font embedded in it.
+     */
+    fun registerAppFont(fontName: String, typeface: Typeface) = addEmbeddedFont(fontName, typeface)
+
+    /** The name registered at [index] (see [addFontName]), or null. */
+    fun fontName(index: Int): String? = if (index < 0) null else sysFontName?.getOrNull(index)
+
     fun addEmbeddedFont(fontName: String, typeface: Typeface) {
         embeddedFonts[fontName] = typeface
+        styled.clear()
+    }
+
+    // the bold / italic / bold italic faces a document embeds for a family, by (name, Typeface style)
+    private val embeddedFaces = java.util.concurrent.ConcurrentHashMap<Pair<String, Int>, Typeface>()
+
+    /** A face of an embedded family in [style] (Typeface.BOLD, ITALIC, BOLD_ITALIC): drawn instead of a synthesized one. */
+    fun addEmbeddedFace(fontName: String, style: Int, typeface: Typeface) {
+        embeddedFaces[fontName to style] = typeface
         styled.clear()
     }
 
@@ -148,6 +166,8 @@ class FontTypefaceManage {
         if (style == Typeface.NORMAL) return base
         val key = (index.toLong() shl 8) or style.toLong()
         styled[key]?.let { return it }
+        // the document's own bold / italic face of the family
+        if (name != null) embeddedFaces[name to style]?.let { return it.also { t -> styled[key] = t } }
         val wantBold = style and Typeface.BOLD != 0
         val wantItalic = style and Typeface.ITALIC != 0
         val bundled = if (name == null || embeddedFonts.containsKey(name)) null else BUNDLED[name.trim().lowercase()]

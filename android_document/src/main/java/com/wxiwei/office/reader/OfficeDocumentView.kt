@@ -1,5 +1,6 @@
 package com.wxiwei.office.reader
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Parcel
@@ -130,6 +131,32 @@ class OfficeDocumentView @JvmOverloads constructor(
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked == MotionEvent.ACTION_DOWN) cancelRestore()
         return super.dispatchTouchEvent(event)
+    }
+
+    /**
+     * Takes over the touch in progress: the document gets a cancel, so it neither scrolls nor
+     * flings, and the rest of the gesture comes here (a picture dragged after a long press).
+     * Cleared when the finger is lifted.
+     */
+    var touchCapture: ((MotionEvent) -> Unit)? = null
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        val capture = touchCapture ?: return super.onInterceptTouchEvent(event)
+        when (event.actionMasked) {
+            // a new touch never belongs to an old one
+            MotionEvent.ACTION_DOWN -> { touchCapture = null; return super.onInterceptTouchEvent(event) }
+            // the event taken over with is not passed to onTouchEvent: the lift would be lost
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { capture(event); touchCapture = null }
+        }
+        return true
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val capture = touchCapture ?: return super.onTouchEvent(event)
+        capture(event)
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) touchCapture = null
+        return true
     }
 
     private fun cancelRestore() {

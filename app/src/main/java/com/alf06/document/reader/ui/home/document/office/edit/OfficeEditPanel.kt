@@ -88,31 +88,81 @@ internal abstract class OfficeEditPanel(
         launcher.launch(file.nameWithoutExtension + " (bản sao)." + file.extension)
     }
 
-    /** Asks for a color from a palette; [none] adds a "no color" choice (null). */
+    /**
+     * Asks for a color: Office's theme colors with their tints and shades, the standard colors, the
+     * last ones used, or a #RRGGBB code; [none] adds a "no color" choice (null). Hex without "#".
+     */
     protected fun pickColor(title: String, none: String? = null, onPick: (String?) -> Unit) {
-        val colors = listOf("000000", "404040", "7F7F7F", "BFBFBF", "FFFFFF", "C00000", "FF0000", "FFC000", "FFFF00",
-            "92D050", "00B050", "00B0F0", "0070C0", "002060", "7030A0", "FF66CC", "F4B183", "FFF2CC", "DDEBF7", "E2EFDA")
-        val grid = android.widget.GridLayout(context).apply { columnCount = 5; setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val prefs = context.getSharedPreferences("office_edit", Context.MODE_PRIVATE)
+        val recent = prefs.getString("recentColors", "")!!.split(',').filter { it.length == 6 }
+        val kit = dialogs
         var dialog: androidx.appcompat.app.AlertDialog? = null
-        for (c in colors) grid.addView(View(context).apply {
+        fun choose(c: String) {
+            prefs.edit().putString("recentColors", (listOf(c) + recent.filter { it != c }).take(10).joinToString(",")).apply()
+            dialog?.dismiss()
+            onPick(c)
+        }
+        fun swatch(c: String) = View(context).apply {
             background = GradientDrawable().apply {
-                cornerRadius = dp(6).toFloat(); setColor(0xFF000000.toInt() or c.toInt(16)); setStroke(dp(1), 0xFFBBBBBB.toInt())
+                cornerRadius = dp(4).toFloat(); setColor(0xFF000000.toInt() or c.toInt(16)); setStroke(dp(1), kit.style.divider)
             }
-            layoutParams = android.widget.GridLayout.LayoutParams().apply { width = dp(44); height = dp(44); setMargins(dp(5), dp(5), dp(5), dp(5)) }
-            contentDescription = c
-            setOnClickListener { dialog?.dismiss(); onPick(c) }
-        })
-        val builder = androidx.appcompat.app.AlertDialog.Builder(context).setTitle(title).setView(grid).setNegativeButton("Hủy", null)
-        if (none != null) builder.setNeutralButton(none) { _, _ -> onPick(null) }
-        dialog = builder.show()
+            layoutParams = android.widget.GridLayout.LayoutParams().apply { width = dp(26); height = dp(26); setMargins(dp(2), dp(2), dp(2), dp(2)) }
+            // read out by TalkBack (a plain square has nothing else to say)
+            contentDescription = "Màu #$c"
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            setOnClickListener { choose(c) }
+        }
+        fun grid(colors: List<String>) = android.widget.GridLayout(context).apply { columnCount = 10; colors.forEach { addView(swatch(it)) } }
+        dialog = kit.show(title) {
+            caption("Màu chủ đề")
+            // rows: the theme colors, then 80/60/40 % lighter, then 25/50 % darker (like Office)
+            val shades = listOf(0f, 0.8f, 0.6f, 0.4f, -0.25f, -0.5f)
+            view(grid(shades.flatMap { k -> THEME_COLORS.map { shade(it, k) } }))
+            caption("Màu chuẩn")
+            view(grid(STANDARD_COLORS))
+            if (recent.isNotEmpty()) { caption("Gần đây"); view(grid(recent)) }
+            caption("Mã màu")
+            val code = input("#RRGGBB").apply { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS }
+            val preview = View(context)
+            // the code field and its preview side by side
+            root.removeView(code)
+            view(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                addView(code, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(preview, LinearLayout.LayoutParams(dp(32), dp(32)))
+            })
+            code.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    val h = s.toString().trim().removePrefix("#")
+                    preview.background = if (h.matches(Regex("(?i)[0-9a-f]{6}"))) GradientDrawable().apply { setColor(0xFF000000.toInt() or h.toInt(16)); setStroke(dp(1), kit.style.divider); cornerRadius = dp(4).toFloat() } else null
+                }
+            })
+            negative()
+            positive("OK") {
+                val h = code.text.toString().trim().removePrefix("#").uppercase()
+                if (h.matches(Regex("[0-9A-F]{6}"))) choose(h) else if (h.isNotEmpty()) toast("Mã màu phải có dạng #RRGGBB")
+            }
+            if (none != null) neutral(none) { onPick(null) }
+        }
     }
+
+    /** [hex] made lighter (k > 0: that share of the way to white) or darker (k < 0: that share less). */
+    private fun shade(hex: String, k: Float): String {
+        if (k == 0f) return hex
+        val c = hex.toInt(16)
+        fun ch(v: Int) = (if (k > 0) v + (255 - v) * k else v * (1 + k)).toInt().coerceIn(0, 255)
+        return "%02X%02X%02X".format(ch(c shr 16 and 255), ch(c shr 8 and 255), ch(c and 255))
+    }
+
+    /** Every dialog of the panel is built by this kit (one look, see [DialogStyle]). */
+    protected val dialogs get() = DialogKit(context)
 
     /** Asks for a font size in points. */
     protected fun pickSize(onPick: (Float) -> Unit) {
         val sizes = floatArrayOf(8f, 9f, 10f, 11f, 12f, 14f, 16f, 18f, 20f, 24f, 28f, 32f, 36f, 40f, 48f, 60f, 72f)
-        androidx.appcompat.app.AlertDialog.Builder(context).setTitle("Cỡ chữ")
-            .setItems(sizes.map { (if (it % 1f == 0f) it.toInt().toString() else it.toString()) + " pt" }.toTypedArray()) { _, i -> onPick(sizes[i]) }
-            .setNegativeButton("Hủy", null).show()
+        dialogs.pick("Cỡ chữ", sizes.map { (if (it % 1f == 0f) it.toInt().toString() else it.toString()) + " pt" }) { i -> onPick(sizes[i]) }
     }
 
     /** Keeps the unsaved edits in a draft (the app may be killed in the background). */
@@ -170,6 +220,19 @@ internal abstract class OfficeEditPanel(
     /** Called when the panel is hidden; stop listening to the document. Call super. */
     open fun close() {
         keepAboveKeyboard(false)
+        autosave.cancel()
+    }
+
+    /**
+     * Every [autosaveMs] while the bar is open, the unsaved edits go to a draft too: a crash (not
+     * only the app going to the background) then loses at most that much; reopening the document
+     * offers the draft back.
+     */
+    private val autosave = activity.lifecycleScope.launch {
+        while (true) {
+            kotlinx.coroutines.delay(autosaveMs)
+            if (!reopening && hasChanges()) saveDraft()
+        }
     }
 
     // The app draws edge to edge, so the keyboard does not resize the window: lift the panel's
@@ -295,6 +358,11 @@ internal abstract class OfficeEditPanel(
     }
 
     companion object {
+        /** How often the open edits are kept in a draft (shorter in tests). */
+        @JvmStatic internal var autosaveMs = 120_000L
+        /** Office's theme colors: background/text light and dark, then accents 1-6. */
+        private val THEME_COLORS = listOf("FFFFFF", "000000", "E7E6E6", "44546A", "4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47")
+        private val STANDARD_COLORS = listOf("C00000", "FF0000", "FFC000", "FFFF00", "92D050", "00B050", "00B0F0", "0070C0", "002060", "7030A0")
         /**
          * Saves through a temporary sibling file and then replaces [original], so a failed save
          * never leaves a half written document behind.

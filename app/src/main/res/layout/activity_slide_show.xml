@@ -8,8 +8,8 @@
     android:background="@color/black"
     tools:context=".ui.home.document.office.SlideShowActivity">
 
-    <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/viewPager2"
+    <FrameLayout
+        android:id="@+id/stageHost"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
@@ -31,6 +31,7 @@
             app:layout_constraintTop_toTopOf="parent" />
 
         <LinearLayout
+            android:id="@+id/bottomBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#80000000"

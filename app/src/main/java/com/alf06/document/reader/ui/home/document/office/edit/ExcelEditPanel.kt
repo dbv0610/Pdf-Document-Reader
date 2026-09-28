@@ -29,7 +29,10 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
     private var row = -1
     private var col = -1
 
-    private val cellName = label("A1")
+    private val cellName = label("A1").apply {
+        contentDescription = "Ô / vùng chọn"
+        setOnClickListener { askRange() }
+    }
     private val value = input("Giá trị hoặc =công thức").apply {
         imeOptions = EditorInfo.IME_ACTION_DONE
         setOnEditorActionListener { _, _, _ -> applyValue(); true }
@@ -49,10 +52,13 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("⇤") { format(CellFormat(horizontal = "left")) },
             button("↔") { format(CellFormat(horizontal = "center")) },
             button("⇥") { format(CellFormat(horizontal = "right")) },
-            button("⤒") { format(CellFormat(vertical = "top")) },
-            button("⤓") { format(CellFormat(vertical = "bottom")) },
+            button("Căn lề…") { pickAlignment() },
             button("Xuống dòng") { toggleWrap() },
+            button("Xoay chữ") { pickRotation() },
+            button("Viền") { pickBorder() },
             button("Định dạng số") { pickNumberFormat() },
+            button("Gộp ô") { mergeOrSplit() },
+            button("+ Ảnh") { pickImage() },
             button("Xóa ô") { if (sheet >= 0 && session.clearCell(sheet, row, col)) refresh(true) },
         ))
         addView(toolRow(
@@ -68,8 +74,9 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("+ Cột trái") { structural { session.insertColumns(sheet, col, 1) } },
             button("+ Cột phải") { structural { session.insertColumns(sheet, col + 1, 1) } },
             button("− Cột") { structural { session.deleteColumns(sheet, col, 1) } },
-            button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") else refresh(true) },
-            button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") else refresh(true) },
+            button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") else { syncSheets(); refresh(true) } },
+            button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") else { syncSheets(); refresh(true) } },
+            button("+ Sheet") { askNewSheet() },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { commitTyped(); save() },
             button("Lưu bản sao") { commitTyped(); saveCopy() },
         ))
@@ -77,6 +84,32 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     init {
         keepAboveKeyboard(true)
+        // a range: long press a cell and drag, or drag the round handle of the selection
+        reader.onDocumentGesture = gesture@{ type, event ->
+            val ss = excel.getSpreadsheet() ?: return@gesture false
+            val sv = ss.getSheetView() ?: return@gesture false
+            when (type) {
+                com.wxiwei.office.system.IMainFrame.ON_DOWN -> {
+                    if (sv.getCurrentSheet()?.getSelectionRange() == null) return@gesture false
+                    val h = sv.selectionHandle()
+                    val p = sheetPoint(event.rawX, event.rawY)
+                    if (Math.hypot((p.x - h.x).toDouble(), (p.y - h.y).toDouble()) > dp(24)) return@gesture false
+                    reader.touchCapture = { e -> dragSelection(e) }
+                    true
+                }
+                com.wxiwei.office.system.IMainFrame.ON_LONG_PRESS -> {
+                    val p = sheetPoint(event.rawX, event.rawY)
+                    val at = sv.cellAt(p.x, p.y) ?: return@gesture false
+                    commitTyped()
+                    sv.getCurrentSheet()!!.setActiveCellRowCol(at[0], at[1])
+                    sv.getCurrentSheet()!!.setSelectionEnd(at[0], at[1])
+                    ss.postInvalidate()
+                    reader.touchCapture = { e -> dragSelection(e) }
+                    true
+                }
+                else -> false
+            }
+        }
         // the sheet selects a cell on tap; follow it
         watcher = activity.lifecycleScope.launch {
             while (isActive) {
@@ -86,8 +119,15 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         }
     }
 
+    private companion object {
+        const val MAX_PICTURE_PX = 320
+    }
+
     override fun close() {
         super.close()
+        reader.onDocumentGesture = null
+        reader.touchCapture = null
+        excel.getSpreadsheet()?.getSheetView()?.getCurrentSheet()?.let { it.setActiveCellRowCol(it.getActiveCellRow(), it.getActiveCellColumn()) }
         watcher.cancel()
     }
 
@@ -104,6 +144,9 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         val r = current.getActiveCellRow()
         val c = current.getActiveCellColumn()
         val tapped = Triple(s, r, c)
+        val range = current.getSelectionRange()
+        cellName.text = range?.let { A1FormulaShifter.address(it.getFirstRow(), it.getFirstColumn()) + ":" + A1FormulaShifter.address(it.getLastRow(), it.getLastColumn()) }
+            ?: A1FormulaShifter.address(r, c)
         if (!force && tapped == seen) return
         seen = tapped
         val typed = value.text.toString()
@@ -113,7 +156,6 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             applyValue()
         }
         sheet = s; row = r; col = c
-        cellName.text = A1FormulaShifter.address(r, c)
         loaded = session.getInput(s, r, c)
         tappedRef = null
         value.setText(loaded)
@@ -154,22 +196,126 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             "Hàng nghìn #,##0.00" to "#,##0.00", "Phần trăm 0%" to "0%", "Phần trăm 0.00%" to "0.00%",
             "Tiền ₫" to "#,##0 \"₫\"", "Tiền $" to "\$#,##0.00", "Ngày d/m/yyyy" to "d/m/yyyy",
             "Ngày giờ d/m/yyyy h:mm" to "d/m/yyyy h:mm", "Giờ h:mm:ss" to "h:mm:ss", "Chữ (@)" to "@")
-        androidx.appcompat.app.AlertDialog.Builder(context).setTitle("Định dạng số")
-            .setItems(formats.map { it.first }.toTypedArray()) { _, i -> format(CellFormat(numberFormat = formats[i].second)) }
-            .setNegativeButton("Hủy", null).show()
+        dialogs.pick("Định dạng số", formats.map { it.first }) { i -> format(CellFormat(numberFormat = formats[i].second)) }
     }
 
-    /** Asks for a number, starting from [current]. */
+    /** Borders of the cell: all around (thin or thick), at the bottom, or none; then their color. */
+    private fun pickBorder() {
+        if (sheet < 0) return
+        val choices = listOf("Viền quanh" to "all", "Viền quanh đậm" to "thick", "Viền dưới" to "bottom", "Không viền" to "none")
+        dialogs.pick("Viền ô", choices.map { it.first }) { i ->
+            val kind = choices[i].second
+            if (kind == "none") format(CellFormat(border = "none"))
+            else pickColor("Màu viền") { c -> format(CellFormat(border = kind, borderColor = c ?: "000000")) }
+        }
+    }
+
+    /**
+     * Excel's alignment tab: horizontal (general, left, center, right, fill, justify, center across
+     * selection, distributed), vertical (top, center, bottom, justify, distributed), indent and wrap,
+     * starting from the cell's current values; applied as one undoable step.
+     */
+    private fun pickAlignment() {
+        if (sheet < 0) return
+        val style = currentStyle()
+        val horizontals = listOf("Chung" to "general", "Trái" to "left", "Giữa" to "center", "Phải" to "right",
+            "Lặp đầy ô" to "fill", "Đều hai bên" to "justify", "Giữa vùng chọn" to "centerContinuous", "Phân tán" to "distributed")
+        val verticals = listOf("Trên" to "top", "Giữa" to "center", "Dưới" to "bottom", "Đều hai bên" to "justify", "Phân tán" to "distributed")
+        val nowH = when (style?.getHorizontalAlign()) {
+            CellStyle.ALIGN_LEFT -> "left"; CellStyle.ALIGN_CENTER -> "center"; CellStyle.ALIGN_RIGHT -> "right"
+            CellStyle.ALIGN_FILL -> "fill"; CellStyle.ALIGN_JUSTIFY -> "justify"; CellStyle.ALIGN_CENTER_SELECTION -> "centerContinuous"
+            else -> "general"
+        }
+        val nowV = when (style?.getVerticalAlign()) {
+            CellStyle.VERTICAL_TOP -> "top"; CellStyle.VERTICAL_CENTER -> "center"; CellStyle.VERTICAL_JUSTIFY -> "justify"
+            else -> "bottom"
+        }
+        val nowIndent = style?.getIndent()?.toInt() ?: 0
+        val nowWrap = style?.isWrapText() == true
+        dialogs.show("Căn lề") {
+            caption("Căn ngang")
+            val hGroup = choices(horizontals.map { it.first }, horizontals.indexOfFirst { it.second == nowH })
+            caption("Căn dọc")
+            val vGroup = choices(verticals.map { it.first }, verticals.indexOfFirst { it.second == nowV })
+            caption("Thụt lề (Trái / Phải / Phân tán)")
+            val indent = stepper(nowIndent, 0..15, "Giảm thụt lề", "Tăng thụt lề")
+            val wrap = check("Xuống dòng khi chữ dài hơn ô", nowWrap)
+            positive("Áp dụng") {
+                val h = horizontals.getOrNull(hGroup.picked)?.second
+                val v = verticals.getOrNull(vGroup.picked)?.second
+                // only what changed, so the file keeps the rest of the cell's alignment as it was
+                val f = CellFormat(
+                    horizontal = h?.takeIf { it != nowH },
+                    vertical = v?.takeIf { it != nowV },
+                    indent = indent().takeIf { it != nowIndent },
+                    wrap = wrap.isChecked.takeIf { it != nowWrap },
+                )
+                if (f.changesAlignment) format(f)
+            }
+            negative()
+        }
+    }
+
+    /** Turns the text of the cell: flat, 45° / 90° up or down, or letters stacked. */
+    private fun pickRotation() {
+        if (sheet < 0) return
+        val choices = listOf("Nằm ngang" to 0, "Nghiêng lên 45°" to 45, "Dọc lên (90°)" to 90, "Nghiêng xuống 45°" to 135, "Dọc xuống (90°)" to 180, "Chữ xếp dọc" to 255)
+        dialogs.pick("Xoay chữ", choices.map { it.first }) { i ->
+            val rotation = choices[i].second
+            format(CellFormat(rotation = rotation))
+            fitRowToTurnedText(rotation)
+        }
+    }
+
+    /** Like Excel: a row too low for the turned text of the cell grows to hold it. */
+    private fun fitRowToTurnedText(rotation: Int) {
+        if (rotation == 0) return
+        val text = session.getInput(sheet, row, col).takeIf { it.isNotEmpty() } ?: return
+        val book = excel.getSpreadsheet()?.getWorkbook() ?: return
+        val sizePt = (currentStyle()?.let { book.getFont(it.getFontIndex().toInt()) }?.getFontSize() ?: 11.0).toFloat()
+        // points: a paint whose text size is the font size measures in points
+        val paint = android.graphics.Paint().apply { textSize = sizePt }
+        val width = paint.measureText(text)
+        val line = paint.fontMetrics.let { it.descent - it.ascent }
+        val needed = if (rotation == 255) line * text.length else {
+            val rad = Math.toRadians((if (rotation <= 90) rotation else rotation - 90).toDouble())
+            (Math.abs(Math.sin(rad)) * width + Math.abs(Math.cos(rad)) * line).toFloat()
+        } + 4f
+        if (needed > session.rowHeight(sheet, row)) structural { session.setRowHeight(sheet, row, minOf(409.0, needed.toDouble())) }
+    }
+
+    /** Asks the new sheet's name, adds it after the last one and shows it. */
+    private fun askNewSheet() {
+        dialogs.show("Thêm sheet") {
+            val field = input("Tên sheet", session.nextSheetName()).apply { selectAll() }
+            positive("Thêm") {
+                val index = session.addSheet(field.text.toString().trim())
+                if (index < 0) return@positive toast(session.lastError?.message ?: "Không thêm được sheet")
+                excel.refreshSheetBar(index)
+                excel.showSheet(index)
+                refresh(true)
+            }
+            negative()
+        }
+    }
+
+    /** The sheet tabs after an undo/redo added or took out a sheet; a sheet gone shows the last one. */
+    private fun syncSheets() {
+        val ss = excel.getSpreadsheet() ?: return
+        val book = ss.getWorkbook() ?: return
+        val shown = ss.getSheetView()?.getCurrentSheet()?.let { book.getSheetIndex(it) } ?: -1
+        val focus = if (shown in 0 until book.getSheetCount()) shown else book.getSheetCount() - 1
+        excel.refreshSheetBar(focus)
+        if (focus != shown) excel.showSheet(focus)
+    }
+
     private fun askSize(title: String, current: Double, onSet: (Double) -> Unit) {
         if (sheet < 0) return
-        val field = input("").apply {
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-            setText("%.1f".format(java.util.Locale.ROOT, current))
-            selectAll()
+        dialogs.show(title) {
+            val field = input("", "%.1f".format(java.util.Locale.ROOT, current), numeric = true).apply { selectAll() }
+            positive("OK") { field.text.toString().replace(',', '.').toDoubleOrNull()?.let(onSet) ?: toast("Số không hợp lệ") }
+            negative()
         }
-        androidx.appcompat.app.AlertDialog.Builder(context).setTitle(title).setView(field)
-            .setPositiveButton("OK") { _, _ -> field.text.toString().replace(',', '.').toDoubleOrNull()?.let(onSet) ?: toast("Số không hợp lệ") }
-            .setNegativeButton("Hủy", null).show()
     }
 
     private fun structural(action: () -> Boolean) {
@@ -181,9 +327,114 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         }
     }
 
+    /** The selected range (or null for one cell) of the shown sheet. */
+    private fun range(): com.wxiwei.office.ss.model.CellRangeAddress? =
+        excel.getSpreadsheet()?.getSheetView()?.getCurrentSheet()?.getSelectionRange()
+
+    /** Formats the selected range, or the cell. */
     private fun format(f: CellFormat) {
         if (sheet < 0) return
-        if (!session.setCellFormat(sheet, row, col, f)) toast(session.lastError?.message ?: "Không định dạng được")
+        val r = range()
+        val ok = if (r != null) session.setRangeFormat(sheet, r.getFirstRow(), r.getFirstColumn(), r.getLastRow(), r.getLastColumn(), f)
+            else session.setCellFormat(sheet, row, col, f)
+        if (!ok) toast(session.lastError?.message ?: "Không định dạng được")
+    }
+
+    /** Where a screen point falls in the sheet view. */
+    private fun sheetPoint(rawX: Float, rawY: Float): android.graphics.PointF {
+        val loc = IntArray(2)
+        excel.getSpreadsheet()!!.getLocationOnScreen(loc)
+        return android.graphics.PointF(rawX - loc[0], rawY - loc[1])
+    }
+
+    /** The finger moves the far corner of the range; near an edge the sheet scrolls along. */
+    private fun dragSelection(e: android.view.MotionEvent) {
+        val ss = excel.getSpreadsheet() ?: return
+        val sv = ss.getSheetView() ?: return
+        val p = sheetPoint(e.rawX, e.rawY)
+        val edge = dp(32).toFloat()
+        val dx = when { p.x > ss.width - edge -> dp(12).toFloat(); p.x < sv.getRowHeaderWidth() + edge / 2 -> -dp(12).toFloat(); else -> 0f }
+        val dy = when { p.y > ss.height - edge -> dp(12).toFloat(); p.y < sv.getColumnHeaderHeight() + edge / 2 -> -dp(12).toFloat(); else -> 0f }
+        if (dx != 0f || dy != 0f) sv.scrollBy(dx / sv.getZoom(), dy / sv.getZoom(), true)
+        val at = sv.cellAt(p.x.coerceAtLeast(sv.getRowHeaderWidth() + 1f), p.y.coerceAtLeast(sv.getColumnHeaderHeight() + 1f)) ?: return
+        sv.getCurrentSheet()!!.setSelectionEnd(at[0], at[1])
+        ss.abortDrawing()
+        ss.postInvalidate()
+    }
+
+    /** The name box: type a cell ("B3") or a range ("A1:C10") to select it. */
+    private fun askRange() {
+        dialogs.show("Chọn ô / vùng") {
+            val field = input("A1 hoặc A1:C10", cellName.text.toString()).apply { selectAll() }
+            positive("Chọn") { selectRange(field.text.toString()) }
+            negative()
+        }
+    }
+
+    private fun selectRange(text: String) {
+        val m = Regex("(?i)^\\s*\\$?([A-Z]{1,3})\\$?(\\d{1,7})(?:\\s*:\\s*\\$?([A-Z]{1,3})\\$?(\\d{1,7}))?\\s*$").find(text)
+            ?: return toast("Vùng không hợp lệ")
+        fun col(s: String) = s.uppercase().fold(0) { n, ch -> n * 26 + (ch - 'A' + 1) } - 1
+        val (c1, r1) = col(m.groupValues[1]) to m.groupValues[2].toInt() - 1
+        val (c2, r2) = if (m.groupValues[3].isEmpty()) c1 to r1 else col(m.groupValues[3]) to m.groupValues[4].toInt() - 1
+        if (minOf(r1, r2) < 0 || maxOf(r1, r2) >= 1048576 || maxOf(c1, c2) >= 16384) return toast("Vùng không hợp lệ")
+        val ss = excel.getSpreadsheet() ?: return
+        val current = ss.getSheetView()?.getCurrentSheet() ?: return
+        commitTyped()
+        current.setActiveCellRowCol(r1, c1)
+        if (r2 != r1 || c2 != c1) current.setSelectionEnd(r2, c2)
+        ss.getSheetView()?.goToCell(minOf(r1, r2), minOf(c1, c2))
+        ss.postInvalidate()
+        refresh(true)
+    }
+
+    /** Picks a picture from the device and puts it at the selected cell. */
+    private fun pickImage() {
+        if (sheet < 0) return toast("Chọn một ô trước")
+        var launcher: androidx.activity.result.ActivityResultLauncher<String>? = null
+        launcher = activity.activityResultRegistry.register("sheet-image-" + System.nanoTime(),
+            androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+            launcher?.unregister()
+            if (uri != null) addImage(uri)
+        }
+        launcher.launch("image/*")
+    }
+
+    private fun addImage(uri: android.net.Uri) {
+        val type = context.contentResolver.getType(uri) ?: "image/jpeg"
+        val ext = when { type.contains("png") -> "png"; type.contains("gif") -> "gif"; type.contains("bmp") -> "bmp"; else -> "jpeg" }
+        val image = File(context.cacheDir, "sheet-image-" + System.nanoTime() + "." + ext)
+        try {
+            context.contentResolver.openInputStream(uri)!!.use { input -> image.outputStream().use { input.copyTo(it) } }
+        } catch (e: Exception) {
+            return toast("Không đọc được ảnh")
+        }
+        addImageFile(image)
+    }
+
+    /** The picture at the selected cell: its own size, at most [MAX_PICTURE_PX] wide or high at 100%. */
+    internal fun addImageFile(image: File): Boolean {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(image.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { toast("Không đọc được ảnh"); return false }
+        val scale = minOf(1f, MAX_PICTURE_PX.toFloat() / maxOf(bounds.outWidth, bounds.outHeight))
+        val w = maxOf(1, Math.round(bounds.outWidth * scale)); val h = maxOf(1, Math.round(bounds.outHeight * scale))
+        commitTyped()
+        if (!session.addPicture(sheet, row, col, image, w, h)) { toast(session.lastError?.message ?: "Không thêm được ảnh"); return false }
+        return true
+    }
+
+    /** "Gộp ô": merges the selected range (asks when values would be dropped); on a merged cell, splits it. */
+    private fun mergeOrSplit() {
+        if (sheet < 0) return
+        val r = range()
+        if (r == null) {
+            if (session.mergeAt(sheet, row, col) == null) return toast("Nhấn giữ một ô rồi kéo để chọn vùng cần gộp")
+            return structural { session.unmergeCells(sheet, row, col) }
+        }
+        val merge = { structural { session.mergeCells(sheet, r.getFirstRow(), r.getFirstColumn(), r.getLastRow(), r.getLastColumn()) } }
+        if (!session.mergeDropsValues(sheet, r.getFirstRow(), r.getFirstColumn(), r.getLastRow(), r.getLastColumn())) return merge()
+        dialogs.confirm("Gộp ô", "Gộp ô chỉ giữ giá trị của ô trên cùng bên trái, các giá trị khác sẽ bị xóa.", "Gộp") { merge() }
     }
 
     private fun currentStyle(): CellStyle? =

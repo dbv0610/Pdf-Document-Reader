@@ -28,6 +28,11 @@ sealed class CellWrite {
 data class StructureWrite(val sheetIndex: Int, val rows: Boolean, val at: Int, val count: Int)
 
 /** A column width in characters (Excel's unit) or a row height in points, at final coordinates. */
+/** A picture put on a sheet: top-left corner at cell [row], [col], [cxEmu] x [cyEmu] in size. */
+private val XDR: com.wxiwei.office.fc.dom4j.Namespace = com.wxiwei.office.fc.dom4j.Namespace.get("xdr", "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing")!!
+
+data class PictureWrite(val sheetIndex: Int, val row: Int, val col: Int, val cxEmu: Long, val cyEmu: Long, val image: File)
+
 data class SizeWrite(val sheetIndex: Int, val rows: Boolean, val index: Int, val size: Double)
 
 /** A format change for one cell, relative to the cell's format in the original file. */
@@ -42,13 +47,17 @@ data class StyleWrite(val sheetIndex: Int, val row: Int, val col: Int, val forma
 class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: Int, row: Int, col: Int) -> String? = { _, _, _ -> null }) {
 
     fun save(target: File, writes: Collection<CellWrite>, styles: Collection<StyleWrite> = emptyList(),
-             structure: List<StructureWrite> = emptyList(), sizes: List<SizeWrite> = emptyList()): EditResult {
+             structure: List<StructureWrite> = emptyList(), sizes: List<SizeWrite> = emptyList(),
+             newSheets: List<String> = emptyList(), merges: Map<Int, List<String>> = emptyMap(),
+             pictures: List<PictureWrite> = emptyList()): EditResult {
         if (!source.extension.equals("xlsx", true) && !source.extension.equals("xlsm", true))
             return EditResult.Error(Reason.UNSUPPORTED_FORMAT, "Only .xlsx/.xlsm can be saved")
         if (source.canonicalFile == target.canonicalFile)
             return EditResult.Error(Reason.INVALID_ARGUMENT, "Save to a new file")
         return runEdit {
             val pkg = OoxmlPackage.open(source)
+            // sheets added after the last one first: the writes below may go into them
+            newSheets.forEach { addSheet(pkg, it) }
             val parts = sheetParts(pkg)
             // rows/columns first: the cell writes use the coordinates after them
             if (structure.isNotEmpty()) XlsxStructure(pkg, parts).apply(structure)
@@ -59,6 +68,14 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
                     val data = root.firstChild(SS, "sheetData") ?: error("Missing sheetData in $part")
                     rowElement(data, w.index).addAttribute("ht", sizeText(w.size))!!.addAttribute("customHeight", "1")
                 } else columnWidth(root, w.index, w.size)
+            }
+            for (p in pictures) {
+                val part = parts.getOrNull(p.sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet ${p.sheetIndex} not found")
+                addPicture(pkg, part, p)
+            }
+            for ((sheetIndex, refs) in merges) {
+                val part = parts.getOrNull(sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
+                mergeCells(pkg.xml(part).rootElement!!, refs)
             }
             for ((sheetIndex, cells) in writes.groupBy { it.sheetIndex }) {
                 val part = parts.getOrNull(sheetIndex) ?: return@runEdit EditResult.Error(Reason.NOT_FOUND, "Sheet $sheetIndex not found")
@@ -80,6 +97,112 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
             }
             dropCalcChain(pkg)
             pkg.saveTo(target)
+        }
+    }
+
+    /** The sheet's drawing part, created (part, relationship, `<drawing>`, content type) when it has none. */
+    private fun drawingOf(pkg: OoxmlPackage, sheetPart: String): String {
+        pkg.relationships(sheetPart).firstOrNull { it.type.endsWith("/drawing") && it.targetMode == null }?.let { return pkg.resolveTarget(sheetPart, it.target) }
+        var n = 1
+        while (pkg.has("xl/drawings/drawing$n.xml")) n++
+        val part = "xl/drawings/drawing$n.xml"
+        val doc = com.wxiwei.office.fc.dom4j.DocumentHelper.createDocument()!!
+        val root = doc.addElement(QName("wsDr", XDR))!!
+        root.addNamespace("a", com.wxiwei.office.editor.ooxml.A.uRI)
+        root.addNamespace("r", R.uRI)
+        pkg.putXml(part, doc)
+        pkg.ensureOverride(part, "application/vnd.openxmlformats-officedocument.drawing+xml")
+        val id = pkg.addRelationship(sheetPart, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing", "../drawings/drawing$n.xml")
+        val ws = pkg.xml(sheetPart).rootElement!!
+        if (ws.getNamespaceForURI(R.uRI) == null) ws.addNamespace("r", R.uRI)
+        val drawing = com.wxiwei.office.editor.ooxml.newElement(SS, "drawing")
+        drawing.addAttribute(QName("id", R), id)
+        val after = listOf("legacyDrawing", "legacyDrawingHF", "drawingHF", "picture", "oleObjects", "controls", "webPublishItems", "tableParts", "extLst")
+        @Suppress("UNCHECKED_CAST")
+        val content = ws.content() as MutableList<Any?>
+        val next = content.indexOfFirst { it is Element && it.name in after }
+        if (next < 0) content.add(drawing) else content.add(next, drawing)
+        return part
+    }
+
+    /** A picture anchored at one cell (it moves with the cell, keeps its size), like Excel's Insert > Picture. */
+    private fun addPicture(pkg: OoxmlPackage, sheetPart: String, p: PictureWrite) {
+        val drawing = drawingOf(pkg, sheetPart)
+        val media = pkg.addMedia("xl/media", p.image.readBytes(), p.image.extension.lowercase().let { if (it == "jpg") "jpeg" else it })
+        val embed = pkg.addRelationship(drawing, com.wxiwei.office.editor.ooxml.REL_IMAGE, "../media/" + media.substringAfterLast('/'))
+        val root = pkg.xml(drawing).rootElement!!
+        if (root.getNamespaceForURI(R.uRI) == null) root.addNamespace("r", R.uRI)
+        fun all(e: Element): Sequence<Element> = sequenceOf(e) + e.elements()!!.filterIsInstance<Element>().asSequence().flatMap { all(it) }
+        val ids = all(root).mapNotNull { e -> if (e.name == "cNvPr") e.attributeValue("id")?.toIntOrNull() else null }.toList()
+        val id = (ids.maxOrNull() ?: 1) + 1
+        val a = com.wxiwei.office.editor.ooxml.A
+        val anchor = root.addElement(QName("oneCellAnchor", XDR))!!
+        anchor.addElement(QName("from", XDR))!!.apply {
+            addElement(QName("col", XDR))!!.setText(p.col.toString())
+            addElement(QName("colOff", XDR))!!.setText("0")
+            addElement(QName("row", XDR))!!.setText(p.row.toString())
+            addElement(QName("rowOff", XDR))!!.setText("0")
+        }
+        anchor.addElement(QName("ext", XDR))!!.addAttribute("cx", p.cxEmu.toString())!!.addAttribute("cy", p.cyEmu.toString())
+        val pic = anchor.addElement(QName("pic", XDR))!!
+        pic.addElement(QName("nvPicPr", XDR))!!.apply {
+            addElement(QName("cNvPr", XDR))!!.addAttribute("id", id.toString())!!.addAttribute("name", "Picture ${id - 1}")
+            addElement(QName("cNvPicPr", XDR))!!.addElement(QName("picLocks", a))!!.addAttribute("noChangeAspect", "1")
+        }
+        pic.addElement(QName("blipFill", XDR))!!.apply {
+            addElement(QName("blip", a))!!.addAttribute(QName("embed", R), embed)
+            addElement(QName("stretch", a))!!.addElement(QName("fillRect", a))
+        }
+        pic.addElement(QName("spPr", XDR))!!.apply {
+            addElement(QName("xfrm", a))!!.apply {
+                addElement(QName("off", a))!!.addAttribute("x", "0")!!.addAttribute("y", "0")
+                addElement(QName("ext", a))!!.addAttribute("cx", p.cxEmu.toString())!!.addAttribute("cy", p.cyEmu.toString())
+            }
+            addElement(QName("prstGeom", a))!!.addAttribute("prst", "rect")!!.addElement(QName("avLst", a))
+        }
+        anchor.addElement(QName("clientData", XDR))
+    }
+
+    /** Replaces the worksheet's `<mergeCells>` with [refs] ("A1:C3"), in its place in CT_Worksheet order. */
+    private fun mergeCells(root: Element, refs: List<String>) {
+        root.firstChild(SS, "mergeCells")?.let { root.remove(it) }
+        if (refs.isEmpty()) return
+        val mc = com.wxiwei.office.editor.ooxml.newElement(SS, "mergeCells")
+        mc.addAttribute("count", refs.size.toString())
+        for (ref in refs) mc.addElement(QName("mergeCell", SS))!!.addAttribute("ref", ref)
+        val after = listOf("phoneticPr", "conditionalFormatting", "dataValidations", "hyperlinks", "printOptions", "pageMargins",
+            "pageSetup", "headerFooter", "rowBreaks", "colBreaks", "customProperties", "cellWatches", "ignoredErrors", "smartTags",
+            "drawing", "legacyDrawing", "legacyDrawingHF", "picture", "oleObjects", "controls", "webPublishItems", "tableParts", "extLst")
+        @Suppress("UNCHECKED_CAST")
+        val content = root.content() as MutableList<Any?>
+        val next = content.indexOfFirst { it is Element && it.name in after }
+        if (next < 0) content.add(mc) else content.add(next, mc)
+    }
+
+    /** An empty worksheet [name] after the last sheet: its part, relationship, content type and entry in the workbook. */
+    private fun addSheet(pkg: OoxmlPackage, name: String) {
+        val workbook = "xl/workbook.xml"
+        var n = 1
+        while (pkg.has("xl/worksheets/sheet$n.xml")) n++
+        val part = "xl/worksheets/sheet$n.xml"
+        val doc = com.wxiwei.office.fc.dom4j.DocumentHelper.createDocument()!!
+        val root = doc.addElement(QName("worksheet", SS))!!
+        root.addNamespace("r", R.uRI)
+        root.addElement(QName("dimension", SS))!!.addAttribute("ref", "A1")
+        root.addElement(QName("sheetViews", SS))!!.addElement(QName("sheetView", SS))!!.addAttribute("workbookViewId", "0")
+        root.addElement(QName("sheetFormatPr", SS))!!.addAttribute("defaultRowHeight", "15")
+        root.addElement(QName("sheetData", SS))
+        root.addElement(QName("pageMargins", SS))!!.apply {
+            addAttribute("left", "0.7"); addAttribute("right", "0.7"); addAttribute("top", "0.75")
+            addAttribute("bottom", "0.75"); addAttribute("header", "0.3"); addAttribute("footer", "0.3")
+        }
+        pkg.putXml(part, doc)
+        pkg.ensureOverride("/$part", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml")
+        val rel = pkg.addRelationship(workbook, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", "worksheets/sheet$n.xml")
+        val sheets = pkg.xml(workbook).rootElement!!.firstChild(SS, "sheets") ?: error("No sheets in the workbook")
+        val id = (sheets.childrenNamed(SS, "sheet").maxOfOrNull { it.attributeValue("sheetId")?.toIntOrNull() ?: 0 } ?: 0) + 1
+        sheets.addElement(QName("sheet", SS))!!.apply {
+            addAttribute("name", name); addAttribute("sheetId", id.toString()); addAttribute(QName("id", R), rel)
         }
     }
 
@@ -139,6 +262,10 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
                 xf.addAttribute("numFmtId", numFmt(it).toString())
                 xf.addAttribute("applyNumberFormat", "1")
             }
+            f.border?.let {
+                xf.addAttribute("borderId", border(xf.attributeValue("borderId")?.toIntOrNull() ?: 0, it, f.borderColor).toString())
+                xf.addAttribute("applyBorder", "1")
+            }
             if (f.changesAlignment) {
                 val a = xf.firstChild(SS, "alignment") ?: com.wxiwei.office.editor.ooxml.newElement(SS, "alignment").also {
                     (xf.content() as MutableList<Any?>).add(0, it)
@@ -146,9 +273,33 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
                 f.horizontal?.let { if (it == "general") a.attribute("horizontal")?.let { at -> a.remove(at) } else a.addAttribute("horizontal", it) }
                 f.vertical?.let { a.addAttribute("vertical", it) }
                 f.wrap?.let { a.addAttribute("wrapText", if (it) "1" else "0") }
+                f.rotation?.let { if (it == 0) a.attribute("textRotation")?.let { at -> a.remove(at) } else a.addAttribute("textRotation", it.toString()) }
+                f.indent?.let { if (it == 0) a.attribute("indent")?.let { at -> a.remove(at) } else a.addAttribute("indent", it.toString()) }
                 xf.addAttribute("applyAlignment", "1")
             }
             append(xfs, "xf", xf)
+        }
+
+        /** A copy of border [base] with [kind]'s sides (see [CellFormat.border]) in [color]. */
+        private fun border(base: Int, kind: String, color: String?): Int {
+            val borders = list("borders")
+            val b = items(borders, "border").getOrNull(base)?.createCopy() ?: com.wxiwei.office.editor.ooxml.newElement(SS, "border")
+            val style = when (kind) { "thick" -> "medium"; "none" -> null; else -> "thin" }
+            val sides = if (kind == "bottom") listOf("bottom") else listOf("left", "right", "top", "bottom")
+            // CT_Border: left, right, top, bottom, diagonal (start/end are their OOXML-strict twins)
+            val order = listOf("start", "left", "end", "right", "top", "bottom", "diagonal", "vertical", "horizontal")
+            for (side in sides) {
+                b.childrenNamed(SS, side).forEach { b.remove(it) }
+                val e = com.wxiwei.office.editor.ooxml.newElement(SS, side)
+                if (style != null) {
+                    e.addAttribute("style", style)
+                    e.add(com.wxiwei.office.editor.ooxml.newElement(SS, "color").apply { addAttribute("rgb", "FF" + (color ?: "000000").removePrefix("#").uppercase()) })
+                }
+                val content = b.content() as MutableList<Any?>
+                val next = b.elements()!!.filterIsInstance<Element>().firstOrNull { order.indexOf(it.name) > order.indexOf(side) }
+                if (next == null) content.add(e) else content.add(content.indexOf(next), e)
+            }
+            return append(borders, "border", b)
         }
 
         private fun font(base: Int, f: CellFormat): Int {

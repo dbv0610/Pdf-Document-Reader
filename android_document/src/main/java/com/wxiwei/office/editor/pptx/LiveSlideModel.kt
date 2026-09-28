@@ -29,6 +29,7 @@ import java.io.File
 interface LiveSlideDisplay {
     fun addTextBox(slideIndex: Int, id: Int, rectEmu: Rect, text: String, sizePt: Float, rgbHex: String, bold: Boolean): Boolean
     fun addImage(slideIndex: Int, id: Int, rectEmu: Rect, imageFile: File): Boolean
+    fun addShape(slideIndex: Int, id: Int, rectEmu: Rect, prst: String, fillHex: String?, lineHex: String, lineWidthPt: Float): Boolean
     /** Current text of a shape, or null when it has no text body in the model. */
     fun shapeText(slideIndex: Int, id: Int): String?
     /** [where]: the shape's box, for a shape the view does not draw yet (an empty text box). */
@@ -43,6 +44,8 @@ interface LiveSlideDisplay {
     fun moveShape(slideIndex: Int, id: Int, rectEmu: Rect): Boolean
     /** Remove the model shapes with [id]; returns a token that [restoreShape] puts back, or null. */
     fun removeShape(slideIndex: Int, id: Int): Any?
+    /** Puts the shapes of the slide (and of its groups) in the drawing order of [order] (shape ids). */
+    fun reorder(slideIndex: Int, order: List<Int>): Boolean = false
     fun restoreShape(slideIndex: Int, token: Any): Boolean
     /** Formats the shape's text; returns a token for [restoreFormat], or null when not shown live. */
     /** Rotation in degrees of the shape, or null when it cannot be shown live. */
@@ -221,6 +224,35 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
             sectionAttr, null, null, false)
         setText(box, text, paraAttr, leafAttr, sectionAttr)
         slide.appendShapes(box)
+        repaint()
+        return true
+    }
+
+    /** Built like ShapeManage.processAutoShape builds one of the file: an AutoShape, or a LineShape for a line. */
+    override fun addShape(slideIndex: Int, id: Int, rectEmu: Rect, prst: String, fillHex: String?, lineHex: String, lineWidthPt: Float): Boolean {
+        val slide = slide(slideIndex) ?: return false
+        val type = com.wxiwei.office.common.autoshape.AutoShapeTypes.instance().getAutoShapeType(prst)
+        val outline = com.wxiwei.office.common.borders.Line().apply {
+            backgroundAndFill = com.wxiwei.office.common.bg.BackgroundAndFill().apply {
+                fillType = com.wxiwei.office.common.bg.BackgroundAndFill.FILL_SOLID
+                foregroundColor = Color.parseColor("#" + lineHex)
+            }
+            lineWidth = maxOf(1, Math.round(lineWidthPt * 96f / 72f))
+        }
+        val shape: com.wxiwei.office.common.shape.AbstractShape = if (type == com.wxiwei.office.common.shape.ShapeTypes.Line) {
+            com.wxiwei.office.common.shape.LineShape().apply { shapeType = type; line = outline }
+        } else {
+            com.wxiwei.office.common.shape.AutoShape(type).apply {
+                line = outline
+                if (fillHex != null) backgroundAndFill = com.wxiwei.office.common.bg.BackgroundAndFill().apply {
+                    fillType = com.wxiwei.office.common.bg.BackgroundAndFill.FILL_SOLID
+                    foregroundColor = Color.parseColor("#" + fillHex)
+                }
+            }
+        }
+        shape.bounds = rectangle(rectEmu)
+        shape.shapeID = id
+        slide.appendShapes(shape)
         repaint()
         return true
     }
@@ -438,6 +470,27 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         // not drawn at all (an empty text box): nothing to take away
         if (removed.isNotEmpty()) repaint()
         return Removed(removed)
+    }
+
+    override fun reorder(slideIndex: Int, order: List<Int>): Boolean {
+        val slide = slide(slideIndex) ?: return false
+        val pos = order.withIndex().associate { it.value to it.index }
+        // the shapes the file orders take each other's places; others (and several model shapes of
+        // one file shape) keep theirs
+        fun sort(list: List<IShape>, remove: (IShape) -> Unit, insert: (Int, IShape) -> Unit) {
+            val slots = list.indices.filter { pos.containsKey(list[it].shapeID) }
+            val sorted = slots.map { list[it] }.sortedBy { pos[it.shapeID] }
+            if (sorted != slots.map { list[it] }) {
+                val rebuilt = list.toMutableList()
+                slots.forEachIndexed { k, slot -> rebuilt[slot] = sorted[k] }
+                list.forEach(remove)
+                rebuilt.forEachIndexed { i, s -> insert(i, s) }
+            }
+            list.filterIsInstance<GroupShape>().forEach { g -> sort(g.getShapes().toList(), { g.removeShape(it) }, { i, s -> g.insertShape(i, s) }) }
+        }
+        sort(slide.getShapes().toList(), { slide.removeShape(it) }, { i, s -> slide.insertShape(i, s) })
+        repaint()
+        return true
     }
 
     override fun restoreShape(slideIndex: Int, token: Any): Boolean {

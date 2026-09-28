@@ -52,6 +52,12 @@ open class ElementCollectionImpl(capacity: Int) : IElementCollection {
         size++
     }
 
+    /** Puts the elements back in order of their start offsets (after offsets were moved around). */
+    fun sortByOffset() {
+        val arr = elems ?: return
+        java.util.Arrays.sort(arr, 0, size, compareBy<IElement?> { it?.getStartOffset() ?: Long.MAX_VALUE })
+    }
+
     /**
      *
      */

@@ -128,44 +128,10 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
 
     private fun checkClickedCell(event: MotionEvent): Boolean {
         val ss = spreadsheet ?: return false
-        val x = event.x
-        val y = event.y
         val sheetView = ss.getSheetView()!!
-        if (sheetView.columnHeaderHeight > y || sheetView.rowHeaderWidth > x) return false
-        val cellInfo = DrawingCell()
-        cellInfo.left = sheetView.rowHeaderWidth.toFloat()
-        cellInfo.top = sheetView.columnHeaderHeight.toFloat()
-        cellInfo.rowIndex = sheetView.minRowAndColumnInformation.minRowIndex
-        cellInfo.columnIndex = sheetView.minRowAndColumnInformation.minColumnIndex
-        val maxRows = if (sheetView.currentSheet.workbook.isBefore07Version()) Workbook.MAXROW_03 else Workbook.MAXROW_07
-        while (cellInfo.top <= y && cellInfo.rowIndex <= maxRows) {
-            val row = sheetView.currentSheet.getRow(cellInfo.rowIndex)
-            if (row != null && row.isZeroHeight()) {
-                cellInfo.rowIndex++
-                continue
-            }
-            cellInfo.height = Math.round((if (row == null) sheetView.currentSheet.defaultRowHeight.toFloat() else row.getRowPixelHeight()) * sheetView.zoom).toFloat()
-            cellInfo.visibleHeight = if (cellInfo.rowIndex == sheetView.minRowAndColumnInformation.minRowIndex && !sheetView.minRowAndColumnInformation.isRowAllVisible) {
-                Math.round(sheetView.minRowAndColumnInformation.visibleRowHeight * sheetView.zoom).toFloat()
-            } else cellInfo.height
-            cellInfo.top += cellInfo.visibleHeight
-            cellInfo.rowIndex++
-        }
-        val maxColumns = if (sheetView.currentSheet.workbook.isBefore07Version()) Workbook.MAXCOLUMN_03 else Workbook.MAXCOLUMN_07
-        while (cellInfo.left <= x && cellInfo.columnIndex <= maxColumns) {
-            if (sheetView.currentSheet.isColumnHidden(cellInfo.columnIndex)) {
-                cellInfo.columnIndex++
-                continue
-            }
-            cellInfo.width = Math.round(sheetView.currentSheet.getColumnPixelWidth(cellInfo.columnIndex) * sheetView.zoom).toFloat()
-            cellInfo.visibleWidth = if (cellInfo.columnIndex == sheetView.minRowAndColumnInformation.minColumnIndex && !sheetView.minRowAndColumnInformation.isColumnAllVisible) {
-                Math.round(sheetView.minRowAndColumnInformation.visibleColumnWidth * sheetView.zoom).toFloat()
-            } else cellInfo.width
-            cellInfo.left += cellInfo.visibleWidth
-            cellInfo.columnIndex++
-        }
+        val at = sheetView.cellAt(event.x, event.y) ?: return false
         sheetView.currentSheet.setActiveCellType(Sheet.ACTIVECELL_SINGLE)
-        sheetView.selectedCell(cellInfo.rowIndex - 1, cellInfo.columnIndex - 1)
+        sheetView.selectedCell(at[0], at[1])
         ss.getControl().actionEvent(EventConstant.APP_CONTENT_SELECTED, null)
         ss.abortDrawing()
         ss.postInvalidate()

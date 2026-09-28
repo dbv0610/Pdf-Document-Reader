@@ -44,6 +44,12 @@ class CellBorder {
 
     fun getBottomBorder(): BorderStyle? = bottom
 
+    /** A copy with its own sides: styles share one CellBorder per borderId of the file. */
+    fun copy(): CellBorder = CellBorder().also { c ->
+        fun dup(b: BorderStyle?) = b?.let { BorderStyle(it.getStyle(), it.getColor()) }
+        c.left = dup(left); c.top = dup(top); c.right = dup(right); c.bottom = dup(bottom)
+    }
+
     /**
      *
      */

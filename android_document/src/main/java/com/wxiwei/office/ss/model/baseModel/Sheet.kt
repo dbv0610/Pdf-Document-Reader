@@ -186,7 +186,7 @@ open class Sheet {
             hi = when { hi < at -> hi; hi >= end -> hi + delta; else -> at - 1 }
         }
         val alive = hi >= lo
-        if (!alive) { lo = if (rows) 1048575 else 16383; hi = lo }
+        if (!alive) { lo = if (rows) PARKED_ROW else PARKED_COLUMN; hi = lo }
         if (rows) { range.setFirstRow(lo); range.setLastRow(hi) } else { range.setFirstColumn(lo); range.setLastColumn(hi) }
         return alive
     }
@@ -224,6 +224,87 @@ open class Sheet {
         merges!!.add(range)
         return merges!!.size
     }
+
+    // ---- a selected range (edit mode): from the active cell to this corner ----
+    private var selectionEndRow = -1
+    private var selectionEndColumn = -1
+
+    /** Selects from the active cell to [row], [col]; a new active cell ends the range. */
+    fun setSelectionEnd(row: Int, col: Int) {
+        selectionEndRow = row
+        selectionEndColumn = col
+    }
+
+    /**
+     * The selected range, grown to cover the merged cells it cuts (like Excel), or null when only
+     * the active cell (or its merged range) is selected.
+     */
+    fun getSelectionRange(): CellRangeAddress? {
+        if (selectionEndRow < 0 || selectionEndColumn < 0) return null
+        var r1 = minOf(activeCellRow, selectionEndRow); var r2 = maxOf(activeCellRow, selectionEndRow)
+        var c1 = minOf(activeCellColumn, selectionEndColumn); var c2 = maxOf(activeCellColumn, selectionEndColumn)
+        var grown = true
+        while (grown) {
+            grown = false
+            for (m in merges!!) {
+                if (m.getFirstRow() > r2 || m.getLastRow() < r1 || m.getFirstColumn() > c2 || m.getLastColumn() < c1) continue
+                if (m.getFirstRow() < r1) { r1 = m.getFirstRow(); grown = true }
+                if (m.getLastRow() > r2) { r2 = m.getLastRow(); grown = true }
+                if (m.getFirstColumn() < c1) { c1 = m.getFirstColumn(); grown = true }
+                if (m.getLastColumn() > c2) { c2 = m.getLastColumn(); grown = true }
+            }
+        }
+        val range = CellRangeAddress(r1, c1, r2, c2)
+        // a single cell or exactly one merged range is not a range selection
+        if (r1 == r2 && c1 == c2) return null
+        if (merges!!.any { it.getFirstRow() == r1 && it.getLastRow() == r2 && it.getFirstColumn() == c1 && it.getLastColumn() == c2 }) return null
+        return range
+    }
+
+    /** Index of the live merged range containing the cell, or -1. */
+    fun mergeIndexAt(row: Int, col: Int): Int {
+        for (i in merges!!.indices) if (isLiveMerge(merges!![i]) && merges!![i].isInRange(row, col)) return i
+        return -1
+    }
+
+    /** False for a range parked by [shiftRange] or [parkMerge] (deleted/unmerged, kept to keep indexes). */
+    fun isLiveMerge(range: CellRangeAddress): Boolean =
+        !(range.getFirstRow() == PARKED_ROW && range.getLastRow() == PARKED_ROW) &&
+            !(range.getFirstColumn() == PARKED_COLUMN && range.getLastColumn() == PARKED_COLUMN)
+
+    /** Marks the cells of merged range [index] (they must exist) as merged. */
+    fun markMerge(index: Int) {
+        val m = merges!![index]
+        for (r in m.getFirstRow()..m.getLastRow()) {
+            val row = getRow(r) ?: continue
+            for (c in m.getFirstColumn()..m.getLastColumn()) row.getCell(c, false)?.setRangeAddressIndex(index)
+            row.setInitExpandedRangeAddress(false)
+        }
+        removeSTRoot()
+    }
+
+    /** Unmerges range [index]: its cells become single again, the entry is parked (indexes stay). */
+    fun parkMerge(index: Int) {
+        val m = merges!![index]
+        for (r in m.getFirstRow()..m.getLastRow()) {
+            val row = getRow(r) ?: continue
+            for (c in m.getFirstColumn()..m.getLastColumn()) row.getCell(c, false)?.let { if (it.getRangeAddressIndex() == index) it.setRangeAddressIndex(-1) }
+            row.setInitExpandedRangeAddress(false)
+        }
+        m.setFirstRow(PARKED_ROW); m.setLastRow(PARKED_ROW)
+        removeSTRoot()
+    }
+
+    /** Puts a parked range [index] back at [bounds] and marks its cells. */
+    fun restoreMerge(index: Int, bounds: CellRangeAddress) {
+        val m = merges!![index]
+        m.setFirstRow(bounds.getFirstRow()); m.setLastRow(bounds.getLastRow())
+        m.setFirstColumn(bounds.getFirstColumn()); m.setLastColumn(bounds.getLastColumn())
+        markMerge(index)
+    }
+
+    /** Live merged ranges, as the file lists them. */
+    fun liveMerges(): List<CellRangeAddress> = merges!!.filter { isLiveMerge(it) }
 
     /**
      * get merge range count of this sheet
@@ -652,6 +733,8 @@ open class Sheet {
      */
     fun setActiveCellRowCol(row: Int, col: Int) {
         activeCellType = ACTIVECELL_SINGLE
+        selectionEndRow = -1
+        selectionEndColumn = -1
         activeCellRow = row
         activeCellColumn = col
         checkActiveRowAndColumnBounds()
@@ -697,6 +780,11 @@ open class Sheet {
      */
     fun appendShapes(shape: IShape) {
         this.shapesList!!.add(shape)
+    }
+
+    /** Takes [shape] off the sheet (a picture added in edit mode, undone). */
+    fun removeShape(shape: IShape) {
+        this.shapesList!!.remove(shape)
     }
 
     /**
@@ -981,6 +1069,9 @@ open class Sheet {
     }
 
     companion object {
+        /** Where deleted or unmerged merged ranges are parked (their list index must not change). */
+        const val PARKED_ROW = 1048575
+        const val PARKED_COLUMN = 16383
         /**
          * normal sheet
          */

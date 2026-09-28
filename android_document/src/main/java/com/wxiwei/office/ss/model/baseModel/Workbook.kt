@@ -78,6 +78,14 @@ open class Workbook(before07: Boolean) {
         sheets!![index] = sheet
     }
 
+    /** Takes out the last sheet (one added while editing); false for any other. */
+    fun removeLastSheet(sheet: Sheet): Boolean {
+        val last = sheets!!.size - 1
+        if (last <= 0 || sheets!![last] !== sheet) return false
+        sheets!!.remove(last)
+        return true
+    }
+
     /**
      * set reader handler
      * @param readerHandler

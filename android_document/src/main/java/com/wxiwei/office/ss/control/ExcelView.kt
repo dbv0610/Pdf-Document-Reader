@@ -95,6 +95,11 @@ class ExcelView(context: Context, filepath: String?, book: Workbook?, control: I
         }
     }
 
+    /** The sheet tabs again, after a sheet was added or removed; [focus] is shown. */
+    fun refreshSheetBar(focus: Int) {
+        if (isDefaultSheetBar) bar?.refresh(focus)
+    }
+
     /**
      * 显示指定的sheet
      *
