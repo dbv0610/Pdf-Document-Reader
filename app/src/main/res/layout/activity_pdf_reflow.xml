@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/color_bg_app"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/lnHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:paddingVertical="@dimen/_6sdp">
+
+        <ImageView
+            android:id="@+id/icBack"
+            android:layout_width="@dimen/_28sdp"
+            android:layout_height="@dimen/_28sdp"
+            android:contentDescription="@string/pdf_tool_close"
+            android:padding="@dimen/_4sdp"
+            android:src="@drawable/ic_app_back"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:id="@+id/txtTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_8sdp"
+            android:layout_weight="1"
+            android:fontFamily="@font/rb_400"
+            android:singleLine="true"
+            android:text="@string/pdf_reflow"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_14sdp" />
+
+        <TextView
+            android:id="@+id/btnSmaller"
+            android:layout_width="@dimen/_32sdp"
+            android:layout_height="@dimen/_32sdp"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="@string/pdf_reflow_smaller"
+            android:gravity="center"
+            android:text="A−"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_12sdp" />
+
+        <TextView
+            android:id="@+id/btnLarger"
+            android:layout_width="@dimen/_32sdp"
+            android:layout_height="@dimen/_32sdp"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="@string/pdf_reflow_larger"
+            android:gravity="center"
+            android:text="A+"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_15sdp" />
+
+        <TextView
+            android:id="@+id/btnTheme"
+            android:layout_width="@dimen/_32sdp"
+            android:layout_height="@dimen/_32sdp"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="@string/pdf_reading_colors"
+            android:gravity="center"
+            android:text="◐"
+            android:textColor="@color/text_primary"
+            android:textSize="@dimen/_15sdp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/txtStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="@dimen/_12sdp"
+        android:textColor="@color/text_secondary"
+        android:textSize="@dimen/_10sdp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rcvText"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingHorizontal="@dimen/_14sdp"
+        android:paddingBottom="@dimen/_24sdp" />
+</LinearLayout>

@@ -39,7 +39,8 @@ class PdfSourceException(val source: PdfSource, cause: Throwable) :
  */
 class PdfTools(context: Context) {
 
-    private val pdfium = PdfiumCore(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val pdfium = PdfiumCore(appContext)
 
     /** Only used on [dispatcher]; the ML Kit client is created on first OCR and kept for the app's life. */
     private val ocr = PageOcr()
@@ -211,6 +212,362 @@ class PdfTools(context: Context) {
         }
     }
 
+    // ---- whole document edits: each writes a new file at output, the source is not changed ----
+
+    /**
+     * One page of an organized document: page [page] of source [source] turned [quarterTurns]
+     * more clockwise, or, with a negative [source], an empty page of [blankWidth] x [blankHeight].
+     */
+    data class PageRef(
+        val source: Int,
+        val page: Int,
+        val quarterTurns: Int = 0,
+        val blankWidth: Float = A4_WIDTH,
+        val blankHeight: Float = A4_HEIGHT,
+    )
+
+    /** A document made of [pages], in that order, taken from [sources] (see [PageRef]). */
+    suspend fun organize(sources: List<PdfSource>, pages: List<PageRef>, output: File) = withContext(dispatcher) {
+        require(pages.isNotEmpty()) { "No pages" }
+        val opened = ArrayList<PdfDocument>()
+        val dest = pdfium.newEmptyDocument()
+        try {
+            for (source in sources) opened += open(source)
+            for (ref in pages) {
+                currentCoroutineContext().ensureActive()
+                val ok = if (ref.source < 0) pdfium.insertBlankPage(dest, -1, ref.blankWidth, ref.blankHeight)
+                else pdfium.importPages(dest, opened[ref.source], intArrayOf(ref.page))
+                if (!ok) throw IOException("Cannot add page ${ref.page + 1}")
+                if (ref.quarterTurns % 4 != 0) {
+                    val index = pdfium.getPageCount(dest) - 1
+                    pdfium.setPageRotation(dest, index, pdfium.getPageRotation(dest, index) + ref.quarterTurns)
+                }
+            }
+            save(dest, output)
+        } finally {
+            pdfium.closeDocument(dest)
+            opened.forEach { pdfium.closeDocument(it) }
+        }
+    }
+
+    /**
+     * A copy of [source] whose scanned pages (pages without a text layer) get their text, found
+     * by OCR, as invisible words over the picture: the text can then be found, selected and
+     * copied in any PDF reader. Returns the number of pages recognized.
+     */
+    suspend fun addTextLayer(source: PdfSource, output: File, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): Int =
+        withContext(dispatcher) {
+            val doc = open(source)
+            try {
+                val count = pdfium.getPageCount(doc)
+                var recognized = 0
+                for (index in 0 until count) {
+                    currentCoroutineContext().ensureActive()
+                    val layer = pdfium.getPageTextLayout(doc, index)
+                    if (layer != null && DocumentTextIndex.needsOcr(layer.text)) {
+                        val bitmap = renderForOcr(doc, index, layer.pageWidth, layer.pageHeight)
+                        if (bitmap != null) {
+                            val lines = try { ocr.recognize(bitmap) } finally { bitmap.recycle() }
+                            if (addWords(doc, index, lines, null)) recognized++
+                        }
+                    }
+                    onProgress(index + 1, count)
+                }
+                save(doc, output)
+                recognized
+            } finally {
+                pdfium.closeDocument(doc)
+            }
+        }
+
+    /** OCR words of page [index] (boxes relative to the page as shown) put in as invisible text, leaving out words in [skip]. */
+    private fun addWords(doc: PdfDocument, index: Int, lines: List<com.reader.pdfviewer.search.OcrLine>, skip: List<android.graphics.RectF>?): Boolean {
+        val words = ArrayList<String>()
+        val boxes = ArrayList<Float>()
+        val size = pdfium.getPagePointSize(doc, index) ?: return false
+        // a grid 100 times the page size keeps 0.01 point precision through the int mapping
+        val gw = size.width * 100
+        val gh = size.height * 100
+        pdfium.openPage(doc, index)
+        try {
+            for (line in lines) for (word in line.words) {
+                val box = word.box
+                if (skip?.any { android.graphics.RectF.intersects(it, box) } == true) continue
+                val a = pdfium.deviceToPageCoords(doc, index, 0, 0, gw, gh, 0, (box.left * gw).toInt(), (box.top * gh).toInt()) ?: continue
+                val b = pdfium.deviceToPageCoords(doc, index, 0, 0, gw, gh, 0, (box.right * gw).toInt(), (box.bottom * gh).toInt()) ?: continue
+                words += line.text.substring(word.start, word.end)
+                boxes += minOf(a.x, b.x); boxes += minOf(a.y, b.y); boxes += maxOf(a.x, b.x); boxes += maxOf(a.y, b.y)
+            }
+        } finally {
+            pdfium.closePage(doc, index)
+        }
+        if (words.isEmpty()) return false
+        return pdfium.addInvisibleWords(doc, index, words.toTypedArray(), boxes.toFloatArray(), unicodeFont(), pdfium.getPageRotation(doc, index))
+    }
+
+    /** How much [compress] shrinks pictures: those shown at more than [dpi] are scaled down, JPEG [quality]. */
+    enum class Compression(val dpi: Int, val quality: Int) { LOW(200, 85), MEDIUM(144, 72), HIGH(96, 55) }
+
+    /**
+     * A copy of [source] with its pictures stored smaller: scaled down to [level]'s resolution
+     * where they are shown and saved as JPEG, only when that is smaller than what they were.
+     * Transparent pictures are kept as they are. Returns the number of pictures changed.
+     */
+    suspend fun compress(source: PdfSource, output: File, level: Compression,
+                         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): Int = withContext(dispatcher) {
+        val doc = open(source)
+        try {
+            val count = pdfium.getPageCount(doc)
+            var changed = 0
+            for (index in 0 until count) {
+                for (image in pdfium.getPageImages(doc, index)) {
+                    currentCoroutineContext().ensureActive()
+                    if (image.pixelWidth.toLong() * image.pixelHeight > MAX_COMPRESS_PIXELS) continue
+                    val scale = minOf(1f,
+                        level.dpi * image.shownWidth / 72f / image.pixelWidth,
+                        level.dpi * image.shownHeight / 72f / image.pixelHeight).coerceAtLeast(0.05f)
+                    val jpeg = recompress(doc, index, image, scale, level.quality) ?: continue
+                    if (jpeg.size < image.storedBytes * 0.9 && pdfium.replaceImage(doc, index, image, jpeg)) changed++
+                }
+                onProgress(index + 1, count)
+            }
+            save(doc, output)
+            changed
+        } finally {
+            pdfium.closeDocument(doc)
+        }
+    }
+
+    private fun recompress(doc: PdfDocument, page: Int, image: PdfiumCore.PageImage, scale: Float, quality: Int): ByteArray? {
+        val full = try { createBitmap(image.pixelWidth, image.pixelHeight) } catch (e: OutOfMemoryError) { return null }
+        try {
+            if (!pdfium.getImagePixels(doc, page, image, full)) return null
+            val w = maxOf(1, (image.pixelWidth * scale).toInt())
+            val h = maxOf(1, (image.pixelHeight * scale).toInt())
+            val scaled = if (scale < 0.95f) Bitmap.createScaledBitmap(full, w, h, true) else full
+            try {
+                return ByteArrayOutputStream().use { out ->
+                    if (!scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)) return null
+                    out.toByteArray()
+                }
+            } finally {
+                if (scaled !== full) scaled.recycle()
+            }
+        } finally {
+            full.recycle()
+        }
+    }
+
+    /** Where a [TextStamp] goes on the page as it is shown. */
+    enum class StampPosition { CENTER, TOP_LEFT, TOP_CENTER, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT }
+
+    /**
+     * Text put on pages: a watermark (CENTER, turned [angle] degrees), a page number or a
+     * header / footer. [text] gets the page number (1 based) and the page count.
+     */
+    class TextStamp(
+        val position: StampPosition,
+        val size: Float,
+        val color: Int,
+        val angle: Float = 0f,
+        val margin: Float = 28f,
+        val text: (page: Int, count: Int) -> String,
+    )
+
+    /** A copy of [source] with [stamps] on each page of [pages] (zero based; null for all). */
+    suspend fun stamp(source: PdfSource, output: File, stamps: List<TextStamp>, pages: Set<Int>? = null,
+                      onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }) = withContext(dispatcher) {
+        require(stamps.isNotEmpty()) { "Nothing to add" }
+        val doc = open(source)
+        try {
+            val count = pdfium.getPageCount(doc)
+            val font = unicodeFont()
+            for (index in 0 until count) {
+                currentCoroutineContext().ensureActive()
+                if (pages != null && index !in pages) continue
+                val size = pdfium.getPagePointSize(doc, index) ?: continue
+                val turns = pdfium.getPageRotation(doc, index)
+                for (stamp in stamps) {
+                    val text = stamp.text(index + 1, count).takeIf { it.isNotBlank() } ?: continue
+                    val w = size.width.toFloat(); val h = size.height.toFloat(); val m = stamp.margin
+                    // the anchor on the page as shown (origin top left), then into page space
+                    val (x, y, anchor) = when (stamp.position) {
+                        StampPosition.CENTER -> Triple(w / 2, h / 2, 1)
+                        StampPosition.TOP_LEFT -> Triple(m, m + stamp.size * 0.8f, 0)
+                        StampPosition.TOP_CENTER -> Triple(w / 2, m + stamp.size * 0.8f, 1)
+                        StampPosition.TOP_RIGHT -> Triple(w - m, m + stamp.size * 0.8f, 2)
+                        StampPosition.BOTTOM_LEFT -> Triple(m, h - m, 0)
+                        StampPosition.BOTTOM_CENTER -> Triple(w / 2, h - m, 1)
+                        StampPosition.BOTTOM_RIGHT -> Triple(w - m, h - m, 2)
+                    }
+                    pdfium.openPage(doc, index)
+                    val at = try {
+                        pdfium.deviceToPageCoords(doc, index, 0, 0, size.width * 10, size.height * 10, 0, (x * 10).toInt(), (y * 10).toInt())
+                    } finally {
+                        pdfium.closePage(doc, index)
+                    } ?: continue
+                    // a page turned clockwise shows its content turned: turn the text the other way
+                    val angle = stamp.angle + turns * 90f
+                    val centered = if (stamp.position == StampPosition.CENTER) 1 else anchor
+                    if (pdfium.addPageText(doc, index, text, stamp.size, stamp.color, at.x, at.y, angle, centered, font) == null)
+                        throw IOException("Cannot add text to page ${index + 1}")
+                }
+                onProgress(index + 1, count)
+            }
+            save(doc, output)
+        } finally {
+            pdfium.closeDocument(doc)
+        }
+    }
+
+    /**
+     * A copy of [source] where [areas] (per page, boxes relative to the page as shown, 0..1) are
+     * blacked out for good: those pages become pictures with the boxes painted over, so nothing
+     * of what was under them is left in the file; the rest of their text is recognized again
+     * (OCR) and kept, invisible, so it can still be found. Other pages are copied as they are.
+     */
+    suspend fun redact(source: PdfSource, output: File, areas: Map<Int, List<android.graphics.RectF>>,
+                       onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }) = withContext(dispatcher) {
+        require(areas.values.any { it.isNotEmpty() }) { "Nothing to black out" }
+        val src = open(source)
+        val dest = pdfium.newEmptyDocument()
+        try {
+            val count = pdfium.getPageCount(src)
+            for (index in 0 until count) {
+                currentCoroutineContext().ensureActive()
+                val boxes = areas[index].orEmpty()
+                if (boxes.isEmpty()) {
+                    if (!pdfium.importPages(dest, src, intArrayOf(index))) throw IOException("Cannot copy page ${index + 1}")
+                } else {
+                    val size = pdfium.getPagePointSize(src, index) ?: throw IOException("Cannot read page ${index + 1}")
+                    val scale = REDACT_DPI / 72f
+                    val bitmap = createBitmap(maxOf(1, (size.width * scale).toInt()), maxOf(1, (size.height * scale).toInt()))
+                    try {
+                        if (!pdfium.renderPageBitmapOnce(src, bitmap, index, renderAnnot = true)) throw IOException("Cannot draw page ${index + 1}")
+                        val canvas = Canvas(bitmap)
+                        val black = android.graphics.Paint().apply { color = Color.BLACK }
+                        for (b in boxes) canvas.drawRect(b.left * bitmap.width, b.top * bitmap.height, b.right * bitmap.width, b.bottom * bitmap.height, black)
+                        val jpeg = ByteArrayOutputStream().use { out -> bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out); out.toByteArray() }
+                        if (!pdfium.addJpegPage(dest, jpeg, size.width.toFloat(), size.height.toFloat())) throw IOException("Cannot add page ${index + 1}")
+                        val lines = try { ocr.recognize(bitmap) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+                        addWords(dest, pdfium.getPageCount(dest) - 1, lines, boxes)
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+                onProgress(index + 1, count)
+            }
+            save(dest, output)
+        } finally {
+            pdfium.closeDocument(dest)
+            pdfium.closeDocument(src)
+        }
+    }
+
+    /** A copy of [source] (opened with its password) that opens without one. */
+    suspend fun removePassword(source: PdfSource, output: File) = withContext(dispatcher) {
+        val doc = open(source)
+        try {
+            currentCoroutineContext().ensureActive()
+            val temp = File(output.parentFile, "${output.name}.tmp")
+            try {
+                if (!pdfium.saveWithoutSecurity(doc, temp.path)) throw IOException("Cannot write ${output.name}")
+                if (!temp.renameTo(output)) throw IOException("Cannot move ${temp.name} to ${output.name}")
+            } finally {
+                temp.delete()
+            }
+        } finally {
+            pdfium.closeDocument(doc)
+        }
+    }
+
+    /**
+     * A copy of [source] that asks for [userPassword] to open (AES 256). [ownerPassword] unlocks
+     * the rights left out (printing, copying text); when null a random one is used, so those
+     * limits hold for whoever opens the file with the user password.
+     */
+    suspend fun setPassword(source: PdfSource, output: File, userPassword: String, ownerPassword: String? = null,
+                            allowPrint: Boolean = true, allowCopy: Boolean = true) = withContext(dispatcher) {
+        require(userPassword.isNotEmpty()) { "Empty password" }
+        val plain = File(output.parentFile, "${output.name}.plain")
+        val temp = File(output.parentFile, "${output.name}.tmp")
+        try {
+            // pdfium writes the document without its old protection, PdfBox encrypts it
+            val doc = open(source)
+            try {
+                if (!pdfium.saveWithoutSecurity(doc, plain.path)) throw IOException("Cannot write ${output.name}")
+            } finally {
+                pdfium.closeDocument(doc)
+            }
+            currentCoroutineContext().ensureActive()
+            com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(appContext)
+            com.tom_roush.pdfbox.pdmodel.PDDocument.load(plain).use { pd ->
+                val rights = com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission().apply {
+                    setCanPrint(allowPrint)
+                    setCanPrintFaithful(allowPrint)
+                    setCanExtractContent(allowCopy)
+                    setCanExtractForAccessibility(true)
+                }
+                val owner = ownerPassword ?: java.util.UUID.randomUUID().toString()
+                val policy = com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy(owner, userPassword, rights)
+                policy.encryptionKeyLength = 256
+                pd.protect(policy)
+                pd.save(temp)
+            }
+            if (!temp.renameTo(output)) throw IOException("Cannot move ${temp.name} to ${output.name}")
+        } finally {
+            plain.delete()
+            temp.delete()
+        }
+    }
+
+    /** A copy of [source] whose annotations and form fields are part of the pages (no longer editable). */
+    suspend fun flatten(source: PdfSource, output: File) = withContext(dispatcher) {
+        val doc = open(source)
+        try {
+            for (index in 0 until pdfium.getPageCount(doc)) {
+                currentCoroutineContext().ensureActive()
+                pdfium.flattenPage(doc, index)
+            }
+            save(doc, output)
+        } finally {
+            pdfium.closeDocument(doc)
+        }
+    }
+
+    /** Number of pages of [source]. */
+    suspend fun pageCount(source: PdfSource): Int = withContext(dispatcher) {
+        val doc = open(source)
+        try { pdfium.getPageCount(doc) } finally { pdfium.closeDocument(doc) }
+    }
+
+    /**
+     * Pages [pages] of [source] drawn [width] pixels wide (annotations included), handed one at a
+     * time to [onPage] with their index; the bitmap is recycled when it returns.
+     */
+    suspend fun renderPages(source: PdfSource, pages: List<Int>, width: Int, onPage: suspend (index: Int, bitmap: Bitmap) -> Unit) =
+        withContext(dispatcher) {
+            val doc = open(source)
+            try {
+                for (index in pages) {
+                    currentCoroutineContext().ensureActive()
+                    val size = pdfium.getPagePointSize(doc, index) ?: continue
+                    if (size.width <= 0 || size.height <= 0) continue
+                    val bitmap = createBitmap(width, maxOf(1, (width.toLong() * size.height / size.width).toInt()))
+                    try {
+                        bitmap.eraseColor(Color.WHITE)
+                        if (pdfium.renderPageBitmapOnce(doc, bitmap, index, renderAnnot = true)) onPage(index, bitmap)
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+            } finally {
+                pdfium.closeDocument(doc)
+            }
+        }
+
+    private fun unicodeFont(): String? = com.reader.pdfviewer.util.SystemFonts.unicode()
+
     /** Adds image pages to a PDF being created by [createFromImages]. */
     class ImagePageWriter internal constructor(private val pdfium: PdfiumCore, private val doc: PdfDocument) {
         var pageCount = 0
@@ -260,6 +617,10 @@ class PdfTools(context: Context) {
         private const val OCR_RENDER_MAX_HEIGHT = 2800
 
         const val A4_WIDTH = 595f
+        const val A4_HEIGHT = 842f
+        // 24 million pixels are ~96 MB decoded: bigger pictures are left as they are
+        private const val MAX_COMPRESS_PIXELS = 24_000_000L
+        private const val REDACT_DPI = 200f
 
         /**
          * The one thread all tool work runs on, so tools never take more than one IO thread.

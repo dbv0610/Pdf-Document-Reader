@@ -109,6 +109,14 @@
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />
         <activity
+            android:name=".ui.home.document.pdf.tools.PdfOrganizeActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false" />
+        <activity
+            android:name=".ui.home.document.pdf.tools.PdfReflowActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false" />
+        <activity
             android:name=".ui.home.document.office.ReadDocumentActivity"
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />

@@ -74,6 +74,14 @@
                     android:src="@drawable/ic_app_rotate" />
 
                 <ImageView
+                    android:id="@+id/icPdfTools"
+                    android:layout_width="@dimen/_22sdp"
+                    android:layout_height="@dimen/_22sdp"
+                    android:contentDescription="@string/pdf_tools"
+                    android:padding="@dimen/_2sdp"
+                    android:src="@drawable/ic_pdf_tools" />
+
+                <ImageView
                     android:id="@+id/icAppEdit"
                     android:layout_width="@dimen/_22sdp"
                     android:layout_height="@dimen/_22sdp"

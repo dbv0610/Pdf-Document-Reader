@@ -431,8 +431,8 @@ class SheetEditSession internal constructor(
 
     // ---- pictures ---------------------------------------------------------------------------
 
-    private class NewPicture(val sheet: Int, val row: Int, val col: Int, val widthPx: Int, val heightPx: Int, val file: File)
-    /** Pictures added in this session, in order: [save] writes them into the sheets' drawings. */
+    private class NewPicture(val sheet: Int, val shape: com.wxiwei.office.common.shape.PictureShape, val file: File)
+    /** Pictures added in this session, in order: [save] writes them into the sheets' drawings where they are then. */
     private val pictures = ArrayList<NewPicture>()
 
     /**
@@ -455,13 +455,69 @@ class SheetEditSession internal constructor(
             setWidth(widthPx); setHeight(heightPx)
         }
         shape.bounds = com.wxiwei.office.ss.util.ModelUtil.instance().getCellAnchor(sheet, anchor)
-        val added = NewPicture(sheetIndex, row, col, widthPx, heightPx, image)
+        val added = NewPicture(sheetIndex, shape, image)
         fun add() { sheet.appendShapes(shape); pictures.add(added); repaint() }
         fun remove() { sheet.removeShape(shape); pictures.remove(added); repaint() }
         add()
         undoStack.add(Step.Structure(apply = { add() }, revert = { remove() })); redoStack.clear()
         lastError = null
         return true
+    }
+
+    /** True for a picture added in this session: it can be moved, resized and removed. */
+    fun isAddedPicture(shape: IShape?): Boolean = shape != null && pictures.any { it.shape === shape }
+
+    /** Moves and/or resizes a picture added in this session to [bounds] (sheet pixels at 100%); one undoable step. */
+    fun setPictureBounds(shape: IShape, bounds: Rectangle): Boolean {
+        if (!isAddedPicture(shape)) return fail(Reason.INVALID_ARGUMENT, "Not a picture added in this session")
+        if (bounds.width <= 0 || bounds.height <= 0) return fail(Reason.INVALID_ARGUMENT, "Bad picture size")
+        val before = shape.bounds!!.let { Rectangle(it.x, it.y, it.width, it.height) }
+        val after = Rectangle(maxOf(0, bounds.x), maxOf(0, bounds.y), bounds.width, bounds.height)
+        if (before == after) { lastError = null; return true }
+        fun place(r: Rectangle) { shape.bounds = Rectangle(r.x, r.y, r.width, r.height); repaint() }
+        place(after)
+        undoStack.add(Step.Structure(apply = { place(after) }, revert = { place(before) })); redoStack.clear()
+        lastError = null
+        return true
+    }
+
+    /** Takes a picture added in this session off its sheet; one undoable step. */
+    fun removePicture(shape: IShape): Boolean {
+        val added = pictures.firstOrNull { it.shape === shape } ?: return fail(Reason.INVALID_ARGUMENT, "Not a picture added in this session")
+        val sheet = book.getSheet(added.sheet) ?: return fail(Reason.NOT_FOUND, "Sheet ${added.sheet} not found")
+        val at = pictures.indexOf(added)
+        fun remove() { sheet.removeShape(shape); pictures.remove(added); repaint() }
+        fun add() { sheet.appendShapes(shape); pictures.add(at.coerceAtMost(pictures.size), added); repaint() }
+        remove()
+        undoStack.add(Step.Structure(apply = { remove() }, revert = { add() })); redoStack.clear()
+        lastError = null
+        return true
+    }
+
+    /** The cell holding a sheet point (sheet pixels at 100%) and the point's offset in it: row, dy, column, dx. */
+    private fun cellOffset(sheet: Sheet, x: Int, y: Int): IntArray {
+        var col = 0
+        var left = 0f
+        while (col < 16383) {
+            if (!sheet.isColumnHidden(col)) {
+                val w = sheet.getColumnPixelWidth(col)
+                if (left + w > x) break
+                left += w
+            }
+            col++
+        }
+        var row = 0
+        var top = 0f
+        while (row < 1048575) {
+            val r = sheet.getRow(row)
+            if (r == null || !r.isZeroHeight()) {
+                val h = r?.getRowPixelHeight() ?: sheet.getDefaultRowHeight().toFloat()
+                if (top + h > y) break
+                top += h
+            }
+            row++
+        }
+        return intArrayOf(row, maxOf(0, Math.round(y - top)), col, maxOf(0, Math.round(x - left)))
     }
 
     // ---- merged cells ---------------------------------------------------------------------
@@ -639,7 +695,12 @@ class SheetEditSession internal constructor(
                 mergedSheets.associateWith { i -> book.getSheet(i)?.liveMerges().orEmpty().map { m ->
                     A1FormulaShifter.address(m.getFirstRow(), m.getFirstColumn()) + ":" + A1FormulaShifter.address(m.getLastRow(), m.getLastColumn())
                 } },
-                pictures.map { PictureWrite(it.sheet, it.row, it.col, it.widthPx * EMU_PER_PX, it.heightPx * EMU_PER_PX, it.file) })
+                pictures.mapNotNull { p ->
+                    val sheet = book.getSheet(p.sheet) ?: return@mapNotNull null
+                    val b = p.shape.bounds ?: return@mapNotNull null
+                    val (row, dy, col, dx) = cellOffset(sheet, b.x, b.y)
+                    PictureWrite(p.sheet, row, col, b.width * EMU_PER_PX, b.height * EMU_PER_PX, p.file, dx * EMU_PER_PX, dy * EMU_PER_PX)
+                })
         return if (result is EditResult.Ok) result.copy(warnings = warnings) else result
     }
 

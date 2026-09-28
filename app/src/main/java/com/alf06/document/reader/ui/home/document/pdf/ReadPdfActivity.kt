@@ -37,6 +37,9 @@ import com.alf06.document.reader.ui.dialog.DocumentPasswordDialog
 import com.alf06.document.reader.ui.dialog.FileOptionsBottomSheet
 import com.alf06.document.reader.ui.dialog.RenameFileDialog
 import com.alf06.document.reader.ui.home.document.layoutThumbnailStrip
+import com.alf06.document.reader.ui.home.document.pdf.tools.PdfOrganizeActivity
+import com.alf06.document.reader.ui.home.document.pdf.tools.PdfReaderTools
+import com.alf06.document.reader.ui.home.document.pdf.tools.PdfReadingPrefs
 import com.alf06.document.reader.viewmodel.DocumentViewModel
 import com.reader.pdfviewer.pdfium.PdfPasswordException
 import com.ui.baselib.api.parcelable
@@ -72,6 +75,11 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
     private var selectedInkWidth = 1
 
     private val loadingDialog by lazy { DialogProcess(this) }
+    private val readingPrefs by lazy { PdfReadingPrefs(this) }
+    private lateinit var pdfTools: PdfReaderTools
+    private val organizeLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == RESULT_OK) reloadDocument()
+    }
     private val thumbnailAdapter by lazy {
         DocumentPreviewAdapter(lifecycleScope, viewModel::thumbnail) { jumpToPageWhenReady(it.index) }
     }
@@ -97,6 +105,11 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
         }
         binding.fileName.text = File(document.path).name
         viewModel.setDocument(document)
+        // back where the reader left off, unless a page was asked for
+        if (viewModel.page <= 1) readingPrefs.lastPage(document.path).takeIf { it > 0 }?.let { viewModel.page = it + 1 }
+        pdfTools = PdfReaderTools(this, binding.pdfRead, binding.lnPdfRead, readerHost)
+        binding.lnInkToolbar.addView(pdfTools.toolRow, 0)
+        pdfTools.applyTheme()
         binding.rcvFrameData.adapter = thumbnailAdapter
         layoutThumbnailStrip(resources.configuration)
         loadPdf()
@@ -158,8 +171,9 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
                 else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
         icAppEdit.click {
-            setInkMode(true)
+            pdfTools.startAnnotating()
         }
+        icPdfTools.click { pdfTools.showMenu(::openOrganizer) }
         icBackSearch.click { closeSearch() }
         icSearchData.click { startSearch(edtSearchData.text.toString().trim()) }
         icOpenTools.click { showFileOptions() }
@@ -169,9 +183,41 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
     override fun backPressed() {
         when {
             binding.lnSearchData.isVisible -> closeSearch()
+            ::pdfTools.isInitialized && pdfTools.closeBar() -> Unit
             binding.pdfRead.hasUnsavedChanges -> showDiscardChangesDialog()
-            binding.pdfRead.isDrawingMode -> setInkMode(false)
+            ::pdfTools.isInitialized && pdfTools.annotating -> pdfTools.stopAnnotating()
             else -> finish()
+        }
+    }
+
+    /** What the reader's tools need from the activity. */
+    private val readerHost = object : PdfReaderTools.Host {
+        override val file: File? get() = viewModel.pdfPath?.let(::File)
+        override val password: String? get() = pdfPassword
+        override val loaded: Boolean get() = pdfLoaded && !readerDisposed
+        override val inkColor: Int get() = INK_COLORS[selectedInkColor]
+        override val inkWidth: Float get() = INK_WIDTHS[selectedInkWidth]
+        override fun saveEdits(done: (Boolean) -> Unit) = saveMarkups { saved -> updateInkButtons(); done(saved) }
+        override fun reload() = reloadDocument()
+        override fun editsChanged() = updateInkButtons()
+        override fun showAnnotationBar(show: Boolean) = setInkMode(show)
+        override fun jumpTo(page: Int) = jumpToPageWhenReady(page)
+    }
+
+    private fun openOrganizer() {
+        val file = viewModel.pdfPath?.let(::File) ?: return
+        organizeLauncher.launch(PdfOrganizeActivity.intent(this, file, pdfPassword))
+    }
+
+    /** The file changed on disk (pages organized): open it again near the same page. */
+    private fun reloadDocument() {
+        if (readerDisposed) return
+        pdfTools.stopModes()
+        pdfLoaded = false
+        lifecycleScope.launch {
+            viewModel.invalidateThumbnails()
+            thumbnailAdapter.refreshThumbnails()
+            loadPdf()
         }
     }
 
@@ -208,6 +254,7 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
                     .takeIf { pageState != PageViewType.Thumbnail },
                 onPageByPage = { viewModel.setPageState(PageViewType.PageByPage) }
                     .takeIf { pageState != PageViewType.PageByPage },
+                onExportImages = { pdfTools.exportImages() },
             ).show()
         }
     }
@@ -220,6 +267,7 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
                     return@renameFile
                 }
                 if (readerDisposed || isFinishing) return@renameFile
+                readingPrefs.moved(document.path, renamed.path)
                 viewModel.setDocument(renamed)
                 binding.fileName.text = File(renamed.path).name
             }
@@ -257,6 +305,8 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
             .onLoad { pageCount ->
                 if (readerDisposed || isFinishing) return@onLoad
                 pdfLoaded = true
+                // loading resets the page colors
+                pdfTools.applyTheme()
                 binding.txtNumberPage.text = "${viewModel.page}/$pageCount"
                 pendingPage?.let(::jumpToPageWhenReady)
                 showPendingSearchResult()
@@ -266,6 +316,7 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
             .onPageChange { page, pageCount ->
                 if (readerDisposed || isFinishing) return@onPageChange
                 viewModel.page = page + 1
+                viewModel.document?.path?.let { readingPrefs.setLastPage(it, page) }
                 thumbnailAdapter.setCurrentPage(page)
                 binding.txtNumberPage.text = "${page + 1}/$pageCount"
                 scrollThumbnailTo(page)
@@ -417,7 +468,7 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
                 }
             })
         }
-        binding.icInkClose.click { setInkMode(false) }
+        binding.icInkClose.click { pdfTools.stopAnnotating() }
         binding.icInkUndo.setOnClickListener { binding.pdfRead.undoInk() }
         binding.icInkRedo.setOnClickListener { binding.pdfRead.redoInk() }
         binding.icInkSave.setOnClickListener {
@@ -430,9 +481,9 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
         updateInkOptions()
     }
 
+    /** Shows the annotation toolbar; the tools turn the pen on or off. */
     private fun setInkMode(enabled: Boolean) {
         if (!pdfLoaded || readerDisposed) return
-        binding.pdfRead.setDrawingMode(enabled)
         binding.lnInkToolbar.isVisible = enabled
         binding.txtNumberPage.isVisible = !enabled
         if (enabled) {
@@ -490,6 +541,7 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
         passwordDialog?.setOnDismissListener(null)
         passwordDialog?.dismiss()
         passwordDialog = null
+        if (::pdfTools.isInitialized) pdfTools.release()
         readerDisposed = true
         pdfLoaded = false
         pendingPage = null

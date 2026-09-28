@@ -447,6 +447,27 @@ Người dùng chọn các mục 1, 2, 4, 5, 6, 8 trong đề xuất. Cách làm
 - [x] **S6. Danh sách tiêu đề slide** (28/09) để nhảy nhanh (chế độ đọc và trình chiếu).
 - [x] **S8. Xuất cả bài** (28/09) ra PDF (vector) hoặc ảnh PNG từ chế độ đọc.
 
+## 12.6 PDF — tính năng nâng cao (làm 28/09/2026)
+
+Engine: pdfium tự build (`jni/src/mainJNILib.cpp`, `.so` đầy đủ API form/edit/flatten) + `PdfTools` (công cụ ghi tệp mới) + `PDFView` (sửa trực tiếp). Chỉ riêng **đặt mật khẩu** dùng PdfBox-Android, vì pdfium không mã hóa được khi lưu.
+
+- [x] P-A1 Chú thích: ghi chú dán, chữ, hình chữ nhật/elip/đường/mũi tên, tẩy, danh sách chú thích; chọn → **di chuyển / đổi cỡ** (xóa + thêm lại, hoàn tác được); tô sáng/gạch chân/gạch ngang có sẵn từ trước.
+- [x] P-A2 Ký tên: vẽ chữ ký (lưu `filesDir/signatures`, dùng lại), đặt lên trang hoặc vào ô chữ ký của form; chèn ảnh.
+- [x] P-A3 Điền form AcroForm: ô chữ, checkbox, radio, combo/list; pdfium form-fill (`FPDF_FFLDraw`), lưu bằng Lưu; **làm phẳng** ra tệp mới.
+- [x] P-A4 OCR ghi lớp chữ vô hình (ML Kit), đúng cả trang /Rotate.
+- [x] P-A5 Sắp xếp trang (`PdfOrganizeActivity`): kéo thả, xoay, nhân bản, xóa, trang trắng, trang từ tệp khác; lưu đè hoặc tệp mới.
+- [x] P-B1 Nén (3 mức: DPI + JPEG, bỏ qua ảnh trong suốt). Bỏ ý "bỏ font trùng" (pdfium không hỗ trợ).
+- [x] P-B2 Mật khẩu: đặt (AES-256, chặn in/sao chép bằng mật khẩu chủ ngẫu nhiên) / gỡ (pdfium `FPDF_REMOVE_SECURITY`).
+- [x] P-B3 Che thông tin thật: trang có vùng che thành ảnh (200 dpi) + OCR lại phần còn lại.
+- [x] P-B4 Xuất ảnh các trang (PNG/JPG, 3 mức); **Word → PDF** (vector) và **Excel → PDF** (A4 ngang, cắt theo cột/hàng, không tiêu đề hàng/cột). PDF → Word: để sau.
+- [x] P-B5 Watermark, số trang (3 kiểu), header/footer.
+- [x] P-C1 Màu trang: thường/đêm/sepia (nhớ lựa chọn); tự cuộn (tốc độ 1–10); chế độ đọc chữ (reflow, `PdfReflowActivity`).
+- [x] P-C2 Đọc to (TextToSpeech, tô sáng câu đang đọc, tự sang trang, tốc độ 0.75–2×).
+- [x] P-C3 Mục lục (outline), đánh dấu trang, nhớ trang đang đọc.
+
+Tệp chính: `app/.../document/pdf/tools/*` (menu `PdfReaderTools`, lớp phủ `PdfOverlayView` + `AnnotateMode`/`FormMode`/`RedactMode`, `ReadAloud`, `Signatures`, `PdfTaskRunner`), `office/OfficePdfExport.kt`.
+Test: `PdfToolsTest` (14), `PdfViewEditTest` (3), app `PdfReaderToolsTest` (5, có ảnh chụp trong `files/pdf-tools-ui`).
+
 ## 13. Nhật ký tiến độ
 
 | Ngày | Task | Kết quả / ghi chú |
@@ -514,6 +535,10 @@ Người dùng chọn các mục 1, 2, 4, 5, 6, 8 trong đề xuất. Cách làm
 | 28/09/2026 | **Chế độ đọc PowerPoint: danh sách slide, xuất cả bài, chạm link (S6, S8, S5)** | Menu tùy chọn (file .ppt/.pptx) thêm "Slide list" (tiêu đề, chạm để tới slide), "Export to PDF" (mọi slide thành một PDF vector, chọn nơi lưu), "Export slides as images" (PNG 1920 px vào `Pictures/<tên bài>` qua MediaStore); vẽ trên luồng vẽ trang, có hộp tiến độ hủy được. Chạm hình có link khi không mở thanh sửa: nhảy slide; link web hỏi "Mở liên kết?". **Lỗi cũ tìm ra**: `writeSlide` (nút "Xuất PNG/PDF" của thanh sửa) truyền chỉ số 0 vào `Presentation.drawSlide` vốn đếm từ 1 → xuất nhầm slide trước đó (slide 1 báo "Chưa mở xong") — đã sửa. **Crash cũ**: `PGPrintMode.exportImage` chạy sau khi đóng tài liệu → `PGControl.getFind()` NPE — giờ lấy `find` từ `Presentation` (có thể null). Test `slideListInReadingMode`, `exportWholeDeck` (PDF 10 trang, 3 trang đầu khác nhau; 10 ảnh trong Pictures), `linkInReadingMode`. |
 | 28/09/2026 | **Hồi quy toàn bộ trên SM-A165F** | Thư viện **70/70 pass**, app **47/47 pass** (trước khi làm lại dialog). |
 | 28/09/2026 | **Dialog thanh sửa + trình chiếu: DialogKit** | Mọi dialog của thanh sửa Word/Excel/PowerPoint, chế độ đọc và trình chiếu (≈28 cái: Căn lề, Đoạn văn, Giãn dòng, Font, Tìm & thay, Chèn bảng, bảng màu, Cỡ chữ, Định dạng số, Viền, Xoay chữ, Gộp ô, Thêm sheet, Chọn vùng, Danh sách hình/z-order, Hiệu ứng, Thêm hiệu ứng, Chuyển slide, Thêm hình, Lưu thay đổi, Khôi phục nháp, Mở liên kết, Danh sách slide, Tiến độ xuất, Tự chuyển) dựng bằng `edit/DialogKit.kt`: dialog chỉ khai báo nội dung (`caption`, `text`, `choices`, `input`, `check`, `stepper`, `items`, `row` + nút hành động, `view`, nút `positive/negative/neutral`, `keepOpenOnButtons`), kiểu dáng gom ở `DialogStyle` (nền bo góc, màu tiêu đề/chữ/chú thích/nhấn/đường kẻ, cỡ chữ, khoảng cách, font) lấy từ `res/values/colors_dialog.xml` + bản `values-night`; đổi toàn bộ bằng `DialogStyle.current`. Giữ nguyên chữ hiển thị. Đã kiểm `alignmentDialog` (pass, ảnh chụp đúng giao diện mới). **Chưa chạy lại hồi quy toàn bộ app sau khi đổi dialog.** |
+| 28/09/2026 | **Bug Excel: ảnh vừa thêm không chọn/di chuyển được** | Ảnh chỉ được vẽ, không có thao tác. Nay: chạm ảnh thêm trong phiên để chọn (khung + 4 góc, ảnh mới thêm được chọn sẵn), kéo để di chuyển, kéo góc để đổi cỡ giữ tỉ lệ, "Xóa ô" xóa ảnh đang chọn; mỗi thao tác 1 bước hoàn tác (`SheetEditSession.setPictureBounds/removePicture`, `SheetView.selectedShape/shapeAt`). Lưu: ô neo + `colOff/rowOff` tính từ vị trí hiện tại của ảnh (nên cũng đúng sau chèn/xóa hàng cột). Ảnh có sẵn trong file vẫn chưa di chuyển được. Test `SheetEditSessionTest.movePicture` + `addPictures` pass trên SM-A165F. |
+| 28/09/2026 | **PDF nâng cao (mục 12.6)** | Đủ 3 nhóm: chú thích + ký + form + OCR + sắp xếp trang; nén, mật khẩu, che thông tin, xuất ảnh, Word/Excel → PDF, watermark/số trang; màu trang, tự cuộn, reflow, đọc to, mục lục, bookmark, nhớ trang. Native mới: xoay/chèn/xóa trang, chữ vào nội dung trang, chữ vô hình OCR, ảnh (đọc/ghi JPEG), ghi chú, hình, form-fill, flatten, lưu bỏ mã hóa. |
+| 28/09/2026 | **Bug tìm được khi test PDF** | (1) Kéo để di chuyển chú thích lại thành đổi cỡ (`onUp` đặt NONE trước khi tính khung). (2) Màu đêm/sepia mất khi tải lại tệp (Configurator đặt lại night mode). (3) Chèn ảnh/chữ ký khi đang bật Bút thì vẽ nét thay vì đặt ảnh. (4) Nhấn giữ ở Sắp xếp trang khởi động kéo 2 lần. Đã sửa cả 4. |
+| 28/09/2026 | **Sửa theo review** | Chú thích "di chuyển được" cũ giữ tài liệu đã đóng sau khi tải lại (xóa khi `recycle`); R8 release thiếu lớp JPEG2000 của PdfBox (thêm `-dontwarn` + giữ lớp mã hóa); hạn chế in/sao chép vô tác dụng (mật khẩu chủ = mật khẩu mở → nay ngẫu nhiên); hoàn tác xóa chú thích gốc làm mất giá trị form vừa điền (bỏ bản chụp khỏi lịch sử khi điền form); OCR trang /Rotate chữ nằm ngang sai hướng; dữ liệu ô form tách bằng tab/UTF-8 sửa đổi → mảng UTF-16; xuất Excel chặn luồng UI (nhường giữa các trang); xoay màn hình ở Sắp xếp trang mất thay đổi; giảm gọi native khi vẽ khung chọn; gộp danh sách font và hàm lưu ảnh. |
 
 ### Tiến độ tổng (cập nhật 28/09/2026)
 Khoảng **95%** roadmap đã xong — mọi việc làm được mà **không cần ảnh tham chiếu** đã xong; phần còn lại là nhóm B (chờ ảnh WPS) và 2 việc hiệu năng/biên ở nhóm C. Còn lại:

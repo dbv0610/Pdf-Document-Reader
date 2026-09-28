@@ -502,6 +502,41 @@ class PdfFile(
         return pdfiumCore!!.addImage(pdfDocument, docPage, rect, bitmap, name)
     }
 
+    private inline fun <T> onPage(pageIndex: Int, fallback: T, block: (docPage: Int) -> T): T {
+        val docPage = documentPage(pageIndex)
+        if (docPage < 0) return fallback
+        try { openPage(pageIndex) } catch (ignored: PageRenderingException) { return fallback }
+        return block(docPage)
+    }
+
+    fun addNote(pageIndex: Int, x: Float, y: Float, color: Int, contents: String?, name: String): Boolean =
+        onPage(pageIndex, false) { pdfiumCore!!.addNote(pdfDocument, it, x, y, color, contents, name) }
+
+    fun addShape(pageIndex: Int, kind: Int, coords: FloatArray, stroke: Int, width: Float, fill: Int, name: String): Boolean =
+        onPage(pageIndex, false) { pdfiumCore!!.addShape(pdfDocument, it, kind, coords, stroke, width, fill, name) }
+
+    fun getAnnotContents(pageIndex: Int, index: Int): String? =
+        onPage(pageIndex, null) { pdfiumCore!!.getAnnotContents(pdfDocument, it, index) }
+
+    fun setAnnotContents(pageIndex: Int, index: Int, contents: String): Boolean =
+        onPage(pageIndex, false) { pdfiumCore!!.setAnnotContents(pdfDocument, it, index, contents) }
+
+    /** The document has an interactive form. */
+    val hasForm: Boolean get() = pdfDocument.hasForms
+
+    fun getFormFields(pageIndex: Int): List<com.reader.pdfviewer.pdfium.PdfFormField> =
+        if (!pdfDocument.hasForms) emptyList()
+        else onPage(pageIndex, emptyList()) { doc -> pdfiumCore!!.getFormFields(pdfDocument, doc).map { it.copy(page = pageIndex) } }
+
+    fun setFormText(pageIndex: Int, field: com.reader.pdfviewer.pdfium.PdfFormField, text: String): Boolean =
+        onPage(pageIndex, false) { pdfiumCore!!.setFormText(pdfDocument, it, field, text) }
+
+    fun clickFormField(pageIndex: Int, field: com.reader.pdfviewer.pdfium.PdfFormField): Boolean =
+        onPage(pageIndex, false) { pdfiumCore!!.clickFormField(pdfDocument, it, field) }
+
+    fun setFormChoice(pageIndex: Int, field: com.reader.pdfviewer.pdfium.PdfFormField, option: Int): Boolean =
+        onPage(pageIndex, false) { pdfiumCore!!.setFormChoice(pdfDocument, it, field, option) }
+
     /** getAnnotations: map the viewer page to its document page before accessing annotations. */
     fun getAnnotations(pageIndex: Int): List<com.reader.pdfviewer.model.PdfAnnotationInfo> {
         val docPage = documentPage(pageIndex)

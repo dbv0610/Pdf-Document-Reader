@@ -21,6 +21,8 @@ using namespace android;
 #include <fpdf_save.h>
 #include <fpdf_edit.h>
 #include <fpdf_ppo.h>
+#include <fpdf_formfill.h>
+#include <fpdf_flatten.h>
 #include <map>
 #include <algorithm>
 #include <string>
@@ -65,11 +67,26 @@ class DocumentFile {
     std::vector<unsigned char> editSnapshotBytes;
     std::map<std::string, FPDF_FONT> editFonts;
     std::map<std::string, std::vector<unsigned char>> editFontBytes;
+    // Interactive form of the document, set up by nativeInitForms; NULL without one.
+    FPDF_FORMHANDLE form = NULL;
+    FPDF_FORMFILLINFO* formInfo = NULL;
 
     DocumentFile() { initLibraryIfNeed(); }
     ~DocumentFile();
 };
+// Pages loaded while a document has a form, with that form: rendering draws the fields over them.
+static std::map<FPDF_PAGE, FPDF_FORMHANDLE> sPageForms;
+
 DocumentFile::~DocumentFile(){
+    if(form != NULL){
+        for (auto it = sPageForms.begin(); it != sPageForms.end();) {
+            if (it->second == form) it = sPageForms.erase(it); else ++it;
+        }
+        FPDFDOC_ExitFormFillEnvironment(form);
+        form = NULL;
+    }
+    delete formInfo;
+    formInfo = NULL;
     if(pdfDocument != NULL){
         for (auto& entry : editFonts) FPDFFont_Close(entry.second);
         editFonts.clear();
@@ -306,6 +323,10 @@ static jlong loadPageInternal(JNIEnv *env, DocumentFile *doc, int pageIndex){
             if (page == NULL) {
                 throw "Loaded page is null";
             }
+            if (doc->form != NULL) {
+                FORM_OnAfterLoadPage(page, doc->form);
+                sPageForms[page] = doc->form;
+            }
             return reinterpret_cast<jlong>(page);
         }else{
             throw "Get page pdf document null";
@@ -321,7 +342,21 @@ static jlong loadPageInternal(JNIEnv *env, DocumentFile *doc, int pageIndex){
     }
 }
 
-static void closePageInternal(jlong pagePtr) { FPDF_ClosePage(reinterpret_cast<FPDF_PAGE>(pagePtr)); }
+static void closePageInternal(jlong pagePtr) {
+    FPDF_PAGE page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    auto found = sPageForms.find(page);
+    if (found != sPageForms.end()) {
+        FORM_OnBeforeClosePage(page, found->second);
+        sPageForms.erase(found);
+    }
+    FPDF_ClosePage(page);
+}
+
+/** Draws the form fields of [page] (their current values) over what FPDF_RenderPageBitmap drew. */
+static void drawFormFields(FPDF_BITMAP bitmap, FPDF_PAGE page, int startX, int startY, int sizeX, int sizeY, int flags) {
+    auto found = sPageForms.find(page);
+    if (found != sPageForms.end()) FPDF_FFLDraw(found->second, bitmap, page, startX, startY, sizeX, sizeY, 0, flags);
+}
 
 JNI_FUNC(jlong, PdfiumCore, nativeLoadPage)(JNI_ARGS, jlong docPtr, jint pageIndex){
     DocumentFile *doc = reinterpret_cast<DocumentFile*>(docPtr);
@@ -436,6 +471,8 @@ static void renderPageInternal( FPDF_PAGE page,
                            startX, startY,
                            drawSizeHor, drawSizeVer,
                            0, flags );
+    if(renderAnnot) drawFormFields(pdfBitmap, page, startX, startY, drawSizeHor, drawSizeVer, flags);
+    FPDFBitmap_Destroy(pdfBitmap);
 }
 
 JNI_FUNC(void, PdfiumCore, nativeRenderPage)(JNI_ARGS, jlong pagePtr, jobject objSurface,
@@ -557,6 +594,8 @@ JNI_FUNC(void, PdfiumCore, nativeRenderPageBitmap)(JNI_ARGS, jlong pagePtr, jobj
                            startX, startY,
                            (int)drawSizeHor, (int)drawSizeVer,
                            0, flags );
+    if(renderAnnot) drawFormFields(pdfBitmap, page, (int)startX, (int)startY, (int)drawSizeHor, (int)drawSizeVer, flags);
+    FPDFBitmap_Destroy(pdfBitmap);
 
     if (info.format == ANDROID_BITMAP_FORMAT_RGB_565) {
         rgbBitmapTo565(tmp, sourceStride, addr, &info);
@@ -1338,6 +1377,570 @@ JNI_FUNC(jobjectArray, PdfiumCore, nativeGetPageTextLayout)(JNI_ARGS, jlong docP
     env->SetObjectArrayElement(result, 1, boxArray);
     env->SetObjectArrayElement(result, 2, sizeArray);
     return result;
+}
+
+// ---- page edits ---------------------------------------------------------------------------
+
+/** Sets the /Rotate of a page: 0, 1, 2, 3 for 0, 90, 180, 270 degrees clockwise. */
+JNI_FUNC(jboolean, PdfiumCore, nativeSetPageRotation)(JNI_ARGS, jlong docPtr, jint pageIndex, jint rotation) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument) return JNI_FALSE;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return JNI_FALSE;
+    FPDFPage_SetRotation(page, ((rotation % 4) + 4) % 4);
+    FPDF_ClosePage(page);
+    return JNI_TRUE;
+}
+
+JNI_FUNC(jint, PdfiumCore, nativeGetPageRotation)(JNI_ARGS, jlong docPtr, jint pageIndex) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument) return 0;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return 0;
+    int rotation = FPDFPage_GetRotation(page);
+    FPDF_ClosePage(page);
+    return rotation;
+}
+
+/** Inserts an empty page of width x height points at index (< 0 appends). */
+JNI_FUNC(jboolean, PdfiumCore, nativeInsertBlankPage)(JNI_ARGS, jlong docPtr, jint index, jfloat width, jfloat height) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument || !(width > 0) || !(height > 0)) return JNI_FALSE;
+    int at = index < 0 ? FPDF_GetPageCount(doc->pdfDocument) : index;
+    FPDF_PAGE page = FPDFPage_New(doc->pdfDocument, at, width, height);
+    if (!page) return JNI_FALSE;
+    bool ok = FPDFPage_GenerateContent(page);
+    FPDF_ClosePage(page);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+/** Deletes a page. */
+JNI_FUNC(jboolean, PdfiumCore, nativeDeletePage)(JNI_ARGS, jlong docPtr, jint index) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument || index < 0 || index >= FPDF_GetPageCount(doc->pdfDocument)) return JNI_FALSE;
+    FPDFPage_Delete(doc->pdfDocument, index);
+    return JNI_TRUE;
+}
+
+/** Makes the annotations and form fields of every page part of its content (they can no longer be edited). */
+JNI_FUNC(jboolean, PdfiumCore, nativeFlattenPage)(JNI_ARGS, jlong docPtr, jint pageIndex) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument) return JNI_FALSE;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return JNI_FALSE;
+    int result = FPDFPage_Flatten(page, FLAT_PRINT);
+    FPDF_ClosePage(page);
+    return result == FLATTEN_FAIL ? JNI_FALSE : JNI_TRUE;
+}
+
+/** Saves without the encryption of the document (it was opened with its password). */
+JNI_FUNC(jboolean, PdfiumCore, nativeSaveWithoutSecurity)(JNI_ARGS, jlong docPtr, jstring path) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument || !path) return JNI_FALSE;
+    const char* cpath = env->GetStringUTFChars(path, NULL);
+    FILE* file = fopen(cpath, "wb");
+    env->ReleaseStringUTFChars(path, cpath);
+    if (!file) return JNI_FALSE;
+    FileWriter writer;
+    writer.version = 1;
+    writer.WriteBlock = &writeBlock;
+    writer.file = file;
+    bool ok = FPDF_SaveAsCopy(doc->pdfDocument, &writer, FPDF_NO_INCREMENTAL | FPDF_REMOVE_SECURITY);
+    ok = (fflush(file) == 0) && ok;
+    ok = (fclose(file) == 0) && ok;
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// ---- text in the page content: watermark, page numbers, OCR layer --------------------------
+
+/**
+ * One line of text in the content of a page. The anchor point (x, y, in page points, origin at
+ * the bottom left of the unrotated page) is where the text's anchor goes: anchor 0 left of the
+ * baseline, 1 its center, 2 right. The text turns angle degrees counter-clockwise around it.
+ * Returns {left, top, right, bottom} of the text, or NULL.
+ */
+JNI_FUNC(jfloatArray, PdfiumCore, nativeAddPageText)(JNI_ARGS, jlong docPtr, jint pageIndex, jstring fontPath,
+        jstring text, jfloat size, jint r, jint g, jint b, jint a, jfloat x, jfloat y, jfloat angle, jint anchor) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument || !text || !(size > 0)) return NULL;
+    FPDF_FONT font = editFont(doc, env, fontPath);
+    if (!font) return NULL;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return NULL;
+    auto value = annotName(env, text);
+    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc->pdfDocument, font, size);
+    bool ok = obj && FPDFText_SetText(obj, value.data()) && FPDFPageObj_SetFillColor(obj, r, g, b, a);
+    float l = 0, bt = 0, rt = 0, tp = 0;
+    ok = ok && FPDFPageObj_GetBounds(obj, &l, &bt, &rt, &tp);
+    jfloatArray result = NULL;
+    if (ok) {
+        float w = rt - l;
+        float dx = anchor == 1 ? -w / 2 : anchor == 2 ? -w : 0;
+        float dy = anchor == 1 ? -size * 0.35f : 0;
+        double rad = angle * M_PI / 180.0;
+        float c = (float) cos(rad), sn = (float) sin(rad);
+        // move the anchor to the origin, turn, then put it at (x, y)
+        FPDFPageObj_Transform(obj, 1, 0, 0, 1, dx - l, dy);
+        FPDFPageObj_Transform(obj, c, sn, -sn, c, x, y);
+        FPDFPage_InsertObject(page, obj);
+        ok = FPDFPage_GenerateContent(page);
+        FPDFPageObj_GetBounds(obj, &l, &bt, &rt, &tp);
+        jfloat values[] = {l, tp, rt, bt};
+        result = env->NewFloatArray(4);
+        env->SetFloatArrayRegion(result, 0, 4, values);
+    } else if (obj) {
+        FPDFPageObj_Destroy(obj);
+    }
+    FPDF_ClosePage(page);
+    return ok ? result : NULL;
+}
+
+/**
+ * Invisible words over a scanned page, so its text can be found, selected and copied: each word
+ * is stretched to its box (left, bottom, right, top in page points, 4 floats per word). On a page
+ * shown turned [turns] quarters clockwise, the words run the way they are read on screen.
+ */
+JNI_FUNC(jboolean, PdfiumCore, nativeAddInvisibleWords)(JNI_ARGS, jlong docPtr, jint pageIndex, jstring fontPath,
+        jobjectArray words, jfloatArray boxes, jint turns) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument || !words || !boxes) return JNI_FALSE;
+    jsize count = env->GetArrayLength(words);
+    if (env->GetArrayLength(boxes) != count * 4) return JNI_FALSE;
+    FPDF_FONT font = editFont(doc, env, fontPath);
+    if (!font) return JNI_FALSE;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return JNI_FALSE;
+    std::vector<jfloat> box(count * 4);
+    env->GetFloatArrayRegion(boxes, 0, count * 4, box.data());
+    int added = 0;
+    int q = ((turns % 4) + 4) % 4;
+    for (jsize i = 0; i < count; ++i) {
+        auto word = (jstring) env->GetObjectArrayElement(words, i);
+        float left = box[i * 4], bottom = box[i * 4 + 1], right = box[i * 4 + 2], top = box[i * 4 + 3];
+        // along: the length of the word as read; across: its height
+        float along = q % 2 == 0 ? right - left : top - bottom;
+        float across = q % 2 == 0 ? top - bottom : right - left;
+        if (!word || !(along > 0) || !(across > 0)) { if (word) env->DeleteLocalRef(word); continue; }
+        auto value = annotName(env, word);
+        env->DeleteLocalRef(word);
+        FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc->pdfDocument, font, across);
+        if (!obj) continue;
+        float l, b, r, t;
+        if (!FPDFText_SetText(obj, value.data()) || !FPDFTextObj_SetTextRenderMode(obj, FPDF_TEXTRENDERMODE_INVISIBLE) ||
+            !FPDFPageObj_GetBounds(obj, &l, &b, &r, &t) || !(r > l)) {
+            FPDFPageObj_Destroy(obj);
+            continue;
+        }
+        // stretched to its length, the start of its baseline at the origin
+        float sx = along / (r - l);
+        FPDFPageObj_Transform(obj, sx, 0, 0, 1, -l * sx, 0);
+        // turned as the page is shown, then its baseline (a fifth of the height above the
+        // bottom of the word as read) put in place
+        float base = across * 0.2f;
+        float ox, oy, c, sn;
+        switch (q) {
+            case 1: ox = right - base; oy = bottom; c = 0; sn = 1; break;   // reads upward
+            case 2: ox = right; oy = top - base; c = -1; sn = 0; break;     // reads leftward
+            case 3: ox = left + base; oy = top; c = 0; sn = -1; break;      // reads downward
+            default: ox = left; oy = bottom + base; c = 1; sn = 0; break;
+        }
+        FPDFPageObj_Transform(obj, c, sn, -sn, c, ox, oy);
+        FPDFPage_InsertObject(page, obj);
+        ++added;
+    }
+    bool ok = added == 0 || FPDFPage_GenerateContent(page);
+    FPDF_ClosePage(page);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// ---- pictures of a page (compression) -------------------------------------------------------
+
+/**
+ * Pictures placed directly on the page: 6 floats each, {object index, pixel width, pixel height,
+ * shown width, shown height (points), stored bytes}. Pictures with transparency are left out.
+ */
+JNI_FUNC(jfloatArray, PdfiumCore, nativeGetPageImages)(JNI_ARGS, jlong docPtr, jint pageIndex) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument) return NULL;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return NULL;
+    std::vector<jfloat> values;
+    int count = FPDFPage_CountObjects(page);
+    for (int i = 0; i < count; ++i) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
+        if (!obj || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
+        unsigned int w = 0, h = 0;
+        if (!FPDFImageObj_GetImagePixelSize(obj, &w, &h) || w < 16 || h < 16) continue;
+        float l, b, r, t;
+        if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
+        // a picture with a mask would lose its transparency when stored as JPEG
+        FPDF_BITMAP shown = FPDFImageObj_GetRenderedBitmap(doc->pdfDocument, page, obj);
+        bool transparent = !shown;
+        if (shown) {
+            if (FPDFBitmap_GetFormat(shown) == FPDFBitmap_BGRA) {
+                int bw = FPDFBitmap_GetWidth(shown), bh = FPDFBitmap_GetHeight(shown), stride = FPDFBitmap_GetStride(shown);
+                auto px = static_cast<unsigned char*>(FPDFBitmap_GetBuffer(shown));
+                for (int y = 0; y < bh && !transparent; ++y)
+                    for (int x = 0; x < bw; ++x) if (px[y * stride + x * 4 + 3] != 255) { transparent = true; break; }
+            }
+            FPDFBitmap_Destroy(shown);
+        }
+        if (transparent) continue;
+        unsigned long stored = FPDFImageObj_GetImageDataRaw(obj, NULL, 0);
+        values.insert(values.end(), {(float) i, (float) w, (float) h, r - l, t - b, (float) stored});
+    }
+    FPDF_ClosePage(page);
+    auto result = env->NewFloatArray(values.size());
+    env->SetFloatArrayRegion(result, 0, values.size(), values.data());
+    return result;
+}
+
+/** The pixels of picture [objIndex] into [bitmap] (ARGB_8888 of its pixel size). */
+JNI_FUNC(jboolean, PdfiumCore, nativeGetImagePixels)(JNI_ARGS, jlong docPtr, jint pageIndex, jint objIndex, jobject bitmap) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument || !bitmap) return JNI_FALSE;
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return JNI_FALSE;
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, objIndex);
+    FPDF_BITMAP image = obj && FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_IMAGE ? FPDFImageObj_GetBitmap(obj) : NULL;
+    bool ok = false;
+    AndroidBitmapInfo info;
+    void* pixels = NULL;
+    if (image && AndroidBitmap_getInfo(env, bitmap, &info) == ANDROID_BITMAP_RESULT_SUCCESS &&
+        info.format == ANDROID_BITMAP_FORMAT_RGBA_8888 &&
+        (int) info.width == FPDFBitmap_GetWidth(image) && (int) info.height == FPDFBitmap_GetHeight(image) &&
+        AndroidBitmap_lockPixels(env, bitmap, &pixels) == ANDROID_BITMAP_RESULT_SUCCESS) {
+        int format = FPDFBitmap_GetFormat(image);
+        int stride = FPDFBitmap_GetStride(image);
+        auto src = static_cast<unsigned char*>(FPDFBitmap_GetBuffer(image));
+        ok = format == FPDFBitmap_Gray || format == FPDFBitmap_BGR || format == FPDFBitmap_BGRx || format == FPDFBitmap_BGRA;
+        for (uint32_t y = 0; ok && y < info.height; ++y) {
+            auto row = src + y * stride;
+            auto dst = static_cast<unsigned char*>(pixels) + y * info.stride;
+            for (uint32_t x = 0; x < info.width; ++x) {
+                unsigned char rr, gg, bb;
+                if (format == FPDFBitmap_Gray) { rr = gg = bb = row[x]; }
+                else if (format == FPDFBitmap_BGR) { bb = row[x * 3]; gg = row[x * 3 + 1]; rr = row[x * 3 + 2]; }
+                else { bb = row[x * 4]; gg = row[x * 4 + 1]; rr = row[x * 4 + 2]; }
+                dst[x * 4] = rr; dst[x * 4 + 1] = gg; dst[x * 4 + 2] = bb; dst[x * 4 + 3] = 255;
+            }
+        }
+        AndroidBitmap_unlockPixels(env, bitmap);
+    }
+    if (image) FPDFBitmap_Destroy(image);
+    FPDF_ClosePage(page);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+/** Stores [jpeg] as the data of picture [objIndex]; its place and size on the page do not change. */
+JNI_FUNC(jboolean, PdfiumCore, nativeReplaceImageJpeg)(JNI_ARGS, jlong docPtr, jint pageIndex, jint objIndex, jbyteArray jpeg) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument || !jpeg) return JNI_FALSE;
+    jsize length = env->GetArrayLength(jpeg);
+    if (length <= 0) return JNI_FALSE;
+    std::vector<unsigned char> bytes(length);
+    env->GetByteArrayRegion(jpeg, 0, length, reinterpret_cast<jbyte*>(bytes.data()));
+    FPDF_PAGE page = FPDF_LoadPage(doc->pdfDocument, pageIndex);
+    if (!page) return JNI_FALSE;
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, objIndex);
+    MemoryAccess memory = { bytes.data(), static_cast<unsigned long>(length) };
+    FPDF_FILEACCESS access;
+    access.m_FileLen = memory.size;
+    access.m_GetBlock = &readMemoryBlock;
+    access.m_Param = &memory;
+    bool ok = obj && FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_IMAGE &&
+        FPDFImageObj_LoadJpegFileInline(&page, 1, obj, &access) && FPDFPage_GenerateContent(page);
+    FPDF_ClosePage(page);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// ---- notes and shapes ---------------------------------------------------------------------
+
+/** A sticky note (Text annotation) with its icon at x, y (top left, page points). */
+JNI_FUNC(jboolean, PdfiumCore, nativeAddNoteAnnot)(JNI_ARGS, jlong pagePtr, jfloat x, jfloat y,
+        jint r, jint g, jint b, jint a, jstring contents, jstring name) {
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    if (!page || !name || !std::isfinite(x) || !std::isfinite(y)) return JNI_FALSE;
+    auto annot = FPDFPage_CreateAnnot(page, FPDF_ANNOT_TEXT);
+    if (!annot) return JNI_FALSE;
+    FS_RECTF rect = {x, y, x + 20, y - 20};
+    auto nm = annotName(env, name);
+    bool ok = FPDFAnnot_SetRect(annot, &rect) && FPDFAnnot_SetColor(annot, FPDFANNOT_COLORTYPE_Color, r, g, b, a)
+        && FPDFAnnot_SetFlags(annot, FPDF_ANNOT_FLAG_PRINT | FPDF_ANNOT_FLAG_NOZOOM | FPDF_ANNOT_FLAG_NOROTATE)
+        && FPDFAnnot_SetStringValue(annot, "NM", nm.data());
+    if (ok && contents) {
+        auto text = annotName(env, contents);
+        ok = FPDFAnnot_SetStringValue(annot, "Contents", text.data());
+    }
+    int index = ok ? -1 : FPDFPage_GetAnnotIndex(page, annot);
+    FPDFPage_CloseAnnot(annot);
+    if (!ok && index >= 0) FPDFPage_RemoveAnnot(page, index);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+/** The /Contents text of annotation [index] (a note, a comment), or null. */
+JNI_FUNC(jstring, PdfiumCore, nativeGetAnnotContents)(JNI_ARGS, jlong pagePtr, jint index) {
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    if (!page || index < 0 || index >= FPDFPage_GetAnnotCount(page)) return NULL;
+    auto annot = FPDFPage_GetAnnot(page, index);
+    if (!annot) return NULL;
+    unsigned long bytes = FPDFAnnot_GetStringValue(annot, "Contents", NULL, 0);
+    jstring result = NULL;
+    if (bytes > 2) {
+        std::vector<unsigned short> value((bytes + 1) / 2, 0);
+        FPDFAnnot_GetStringValue(annot, "Contents", value.data(), bytes);
+        result = env->NewString(reinterpret_cast<const jchar*>(value.data()), bytes / 2 - 1);
+    }
+    FPDFPage_CloseAnnot(annot);
+    return result;
+}
+
+/** Changes the /Contents text of annotation [index]. */
+JNI_FUNC(jboolean, PdfiumCore, nativeSetAnnotContents)(JNI_ARGS, jlong pagePtr, jint index, jstring contents) {
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    if (!page || !contents || index < 0 || index >= FPDFPage_GetAnnotCount(page)) return JNI_FALSE;
+    auto annot = FPDFPage_GetAnnot(page, index);
+    if (!annot) return JNI_FALSE;
+    auto text = annotName(env, contents);
+    bool ok = FPDFAnnot_SetStringValue(annot, "Contents", text.data());
+    FPDFPage_CloseAnnot(annot);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * A shape drawn on the page: kind 0 rectangle, 1 ellipse, 2 line, 3 arrow. [coords] is the
+ * rectangle (left, top, right, bottom) or the line (x1, y1, x2, y2) in page points. The fill
+ * (fillA > 0) applies to rectangles and ellipses.
+ */
+JNI_FUNC(jboolean, PdfiumCore, nativeAddShapeAnnot)(JNI_ARGS, jlong docPtr, jlong pagePtr, jint kind, jfloatArray coords,
+        jint r, jint g, jint b, jint a, jfloat width, jint fr, jint fg, jint fb, jint fa, jstring name) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    if (!doc || !page || !name || !coords || env->GetArrayLength(coords) != 4 || !(width > 0)) return JNI_FALSE;
+    jfloat c[4];
+    env->GetFloatArrayRegion(coords, 0, 4, c);
+    for (float v : c) if (!std::isfinite(v)) return JNI_FALSE;
+    std::vector<FPDF_PAGEOBJECT> objects;
+    auto stroke = [&](FPDF_PAGEOBJECT path, bool fill) {
+        FPDFPageObj_SetStrokeColor(path, r, g, b, a);
+        FPDFPageObj_SetStrokeWidth(path, width);
+        FPDFPageObj_SetLineCap(path, FPDF_LINECAP_ROUND);
+        FPDFPageObj_SetLineJoin(path, FPDF_LINEJOIN_ROUND);
+        if (fill) FPDFPageObj_SetFillColor(path, fr, fg, fb, fa);
+        FPDFPath_SetDrawMode(path, fill ? FPDF_FILLMODE_WINDING : FPDF_FILLMODE_NONE, true);
+        objects.push_back(path);
+    };
+    FS_RECTF bounds;
+    float pad = width / 2 + 1;
+    if (kind == 0 || kind == 1) {
+        float l = std::min(c[0], c[2]), rr = std::max(c[0], c[2]), t = std::max(c[1], c[3]), bo = std::min(c[1], c[3]);
+        if (rr - l < 1 || t - bo < 1) return JNI_FALSE;
+        FPDF_PAGEOBJECT path;
+        if (kind == 0) {
+            path = FPDFPageObj_CreateNewRect(l, bo, rr - l, t - bo);
+        } else {
+            // four Bezier quarters
+            float cx = (l + rr) / 2, cy = (t + bo) / 2, rx = (rr - l) / 2, ry = (t - bo) / 2, k = 0.5523f;
+            path = FPDFPageObj_CreateNewPath(cx + rx, cy);
+            FPDFPath_BezierTo(path, cx + rx, cy + ry * k, cx + rx * k, cy + ry, cx, cy + ry);
+            FPDFPath_BezierTo(path, cx - rx * k, cy + ry, cx - rx, cy + ry * k, cx - rx, cy);
+            FPDFPath_BezierTo(path, cx - rx, cy - ry * k, cx - rx * k, cy - ry, cx, cy - ry);
+            FPDFPath_BezierTo(path, cx + rx * k, cy - ry, cx + rx, cy - ry * k, cx + rx, cy);
+            FPDFPath_Close(path);
+        }
+        if (!path) return JNI_FALSE;
+        stroke(path, fa > 0);
+        bounds = {l - pad, t + pad, rr + pad, bo - pad};
+    } else {
+        float dx = c[2] - c[0], dy = c[3] - c[1];
+        float len = sqrtf(dx * dx + dy * dy);
+        if (len < 1) return JNI_FALSE;
+        FPDF_PAGEOBJECT line = FPDFPageObj_CreateNewPath(c[0], c[1]);
+        if (!line) return JNI_FALSE;
+        FPDFPath_LineTo(line, c[2], c[3]);
+        stroke(line, false);
+        bounds = {std::min(c[0], c[2]) - pad, std::max(c[1], c[3]) + pad, std::max(c[0], c[2]) + pad, std::min(c[1], c[3]) - pad};
+        if (kind == 3) {
+            // a filled head at the end, its size following the line width
+            float head = std::max(8.f, width * 4), ux = dx / len, uy = dy / len;
+            float bx = c[2] - ux * head, by = c[3] - uy * head, px = -uy * head * 0.5f, py = ux * head * 0.5f;
+            FPDF_PAGEOBJECT tip = FPDFPageObj_CreateNewPath(c[2], c[3]);
+            FPDFPath_LineTo(tip, bx + px, by + py);
+            FPDFPath_LineTo(tip, bx - px, by - py);
+            FPDFPath_Close(tip);
+            FPDFPageObj_SetStrokeColor(tip, r, g, b, a);
+            FPDFPageObj_SetStrokeWidth(tip, width);
+            FPDFPageObj_SetLineJoin(tip, FPDF_LINEJOIN_ROUND);
+            FPDFPageObj_SetFillColor(tip, r, g, b, a);
+            FPDFPath_SetDrawMode(tip, FPDF_FILLMODE_WINDING, true);
+            objects.push_back(tip);
+            for (float v : {bx + px, bx - px}) { bounds.left = std::min(bounds.left, v - pad); bounds.right = std::max(bounds.right, v + pad); }
+            for (float v : {by + py, by - py}) { bounds.bottom = std::min(bounds.bottom, v - pad); bounds.top = std::max(bounds.top, v + pad); }
+        }
+    }
+    auto annot = FPDFPage_CreateAnnot(page, FPDF_ANNOT_STAMP);
+    if (!annot) { for (auto obj : objects) FPDFPageObj_Destroy(obj); return JNI_FALSE; }
+    return finishObjectAnnot(env, page, annot, bounds, name, NULL, objects) ? JNI_TRUE : JNI_FALSE;
+}
+
+// ---- interactive forms --------------------------------------------------------------------
+
+static void formNoop(FPDF_FORMFILLINFO*) {}
+static void formInvalidate(FPDF_FORMFILLINFO*, FPDF_PAGE, double, double, double, double) {}
+static void formOutputRect(FPDF_FORMFILLINFO*, FPDF_PAGE, double, double, double, double) {}
+static void formSetCursor(FPDF_FORMFILLINFO*, int) {}
+static int formSetTimer(FPDF_FORMFILLINFO*, int, TimerCallback) { return 0; }
+static void formKillTimer(FPDF_FORMFILLINFO*, int) {}
+static FPDF_SYSTEMTIME formLocalTime(FPDF_FORMFILLINFO*) { FPDF_SYSTEMTIME t = {}; t.wYear = 2000; t.wMonth = 1; t.wDay = 1; return t; }
+static FPDF_PAGE formGetPage(FPDF_FORMFILLINFO*, FPDF_DOCUMENT, int) { return NULL; }
+static FPDF_PAGE formCurrentPage(FPDF_FORMFILLINFO*, FPDF_DOCUMENT) { return NULL; }
+static int formRotation(FPDF_FORMFILLINFO*, FPDF_PAGE) { return 0; }
+static void formNamedAction(FPDF_FORMFILLINFO*, FPDF_BYTESTRING) {}
+static void formFieldFocus(FPDF_FORMFILLINFO*, FPDF_WIDESTRING, FPDF_DWORD, FPDF_BOOL) {}
+static void formUri(FPDF_FORMFILLINFO*, FPDF_BYTESTRING) {}
+static void formGoTo(FPDF_FORMFILLINFO*, int, int, float*, int) {}
+
+/** Sets up the interactive form of the document; false when it has none. Pages loaded later draw their fields. */
+JNI_FUNC(jboolean, PdfiumCore, nativeInitForms)(JNI_ARGS, jlong docPtr) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    if (!doc || !doc->pdfDocument) return JNI_FALSE;
+    if (doc->form) return JNI_TRUE;
+    if (FPDF_GetFormType(doc->pdfDocument) != FORMTYPE_ACRO_FORM) return JNI_FALSE;
+    auto info = new FPDF_FORMFILLINFO();
+    memset(info, 0, sizeof(FPDF_FORMFILLINFO));
+    info->version = 1;
+    info->FFI_Invalidate = formInvalidate;
+    info->FFI_OutputSelectedRect = formOutputRect;
+    info->FFI_SetCursor = formSetCursor;
+    info->FFI_SetTimer = formSetTimer;
+    info->FFI_KillTimer = formKillTimer;
+    info->FFI_GetLocalTime = formLocalTime;
+    info->FFI_OnChange = formNoop;
+    info->FFI_GetPage = formGetPage;
+    info->FFI_GetCurrentPage = formCurrentPage;
+    info->FFI_GetRotation = formRotation;
+    info->FFI_ExecuteNamedAction = formNamedAction;
+    info->FFI_SetTextFieldFocus = formFieldFocus;
+    info->FFI_DoURIAction = formUri;
+    info->FFI_DoGoToAction = formGoTo;
+    doc->form = FPDFDOC_InitFormFillEnvironment(doc->pdfDocument, info);
+    if (!doc->form) { delete info; return JNI_FALSE; }
+    doc->formInfo = info;
+    return JNI_TRUE;
+}
+
+
+
+/**
+ * The form fields of a loaded page, flattened into strings: per field "index type flags checked
+ * left top right bottom optionCount", its name, its value, then its options, each one string
+ * (UTF-16 as is: any character). Types are the FPDF_FORMFIELD_* values. Null without a form.
+ */
+JNI_FUNC(jobjectArray, PdfiumCore, nativeGetFormFields)(JNI_ARGS, jlong pagePtr) {
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    auto found = sPageForms.find(page);
+    if (!page || found == sPageForms.end()) return NULL;
+    FPDF_FORMHANDLE form = found->second;
+    std::vector<std::vector<unsigned short>> parts;
+    auto ascii = [](const char* text) {
+        std::vector<unsigned short> v;
+        for (const char* c = text; *c; ++c) v.push_back((unsigned short) *c);
+        return v;
+    };
+    auto utf16 = [&](FPDF_ANNOTATION annot, int kind, int option) {
+        auto get = [&](unsigned short* b, unsigned long n) -> unsigned long {
+            if (kind == 0) return FPDFAnnot_GetFormFieldName(form, annot, b, n);
+            if (kind == 1) return FPDFAnnot_GetFormFieldValue(form, annot, b, n);
+            return FPDFAnnot_GetOptionLabel(form, annot, option, b, n);
+        };
+        unsigned long bytes = get(NULL, 0);
+        std::vector<unsigned short> v(std::max(1ul, (bytes + 1) / 2), 0);
+        if (bytes) get(v.data(), bytes);
+        v.resize(bytes >= 2 ? bytes / 2 - 1 : 0);
+        return v;
+    };
+    int count = FPDFPage_GetAnnotCount(page);
+    for (int i = 0; i < count; ++i) {
+        auto annot = FPDFPage_GetAnnot(page, i);
+        if (!annot) continue;
+        if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) {
+            int type = FPDFAnnot_GetFormFieldType(form, annot);
+            FS_RECTF rect;
+            if (type > 0 && FPDFAnnot_GetRect(annot, &rect)) {
+                int options = std::max(0, FPDFAnnot_GetOptionCount(form, annot));
+                char head[200];
+                snprintf(head, sizeof(head), "%d %d %d %d %.9g %.9g %.9g %.9g %d", i, type,
+                         FPDFAnnot_GetFormFieldFlags(form, annot), FPDFAnnot_IsChecked(form, annot) ? 1 : 0,
+                         rect.left, rect.top, rect.right, rect.bottom, options);
+                parts.push_back(ascii(head));
+                parts.push_back(utf16(annot, 0, 0));
+                parts.push_back(utf16(annot, 1, 0));
+                for (int o = 0; o < options; ++o) parts.push_back(utf16(annot, 2, o));
+            }
+        }
+        FPDFPage_CloseAnnot(annot);
+    }
+    auto cls = env->FindClass("java/lang/String");
+    auto result = env->NewObjectArray(parts.size(), cls, NULL);
+    for (size_t i = 0; i < parts.size(); ++i) {
+        auto value = env->NewString(reinterpret_cast<const jchar*>(parts[i].data()), parts[i].size());
+        env->SetObjectArrayElement(result, i, value);
+        env->DeleteLocalRef(value);
+    }
+    return result;
+}
+
+/** Types [text] into text field [annotIndex], replacing what it held. */
+JNI_FUNC(jboolean, PdfiumCore, nativeSetFormText)(JNI_ARGS, jlong pagePtr, jint annotIndex, jstring text) {
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    auto found = sPageForms.find(page);
+    if (!page || !text || found == sPageForms.end()) return JNI_FALSE;
+    FPDF_FORMHANDLE form = found->second;
+    auto annot = FPDFPage_GetAnnot(page, annotIndex);
+    if (!annot) return JNI_FALSE;
+    bool ok = FORM_SetFocusedAnnot(form, annot);
+    if (ok) {
+        auto value = annotName(env, text);
+        FORM_SelectAllText(form, page);
+        FORM_ReplaceSelection(form, page, value.data());
+    }
+    FORM_ForceToKillFocus(form);
+    FPDFPage_CloseAnnot(annot);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+/** A tap on field [annotIndex] at its center: toggles a check box, picks a radio button. */
+JNI_FUNC(jboolean, PdfiumCore, nativeClickFormField)(JNI_ARGS, jlong pagePtr, jint annotIndex) {
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    auto found = sPageForms.find(page);
+    if (!page || found == sPageForms.end()) return JNI_FALSE;
+    FPDF_FORMHANDLE form = found->second;
+    auto annot = FPDFPage_GetAnnot(page, annotIndex);
+    if (!annot) return JNI_FALSE;
+    FS_RECTF rect;
+    bool ok = FPDFAnnot_GetRect(annot, &rect);
+    FPDFPage_CloseAnnot(annot);
+    if (!ok) return JNI_FALSE;
+    double x = (rect.left + rect.right) / 2, y = (rect.top + rect.bottom) / 2;
+    FORM_OnMouseMove(form, page, 0, x, y);
+    ok = FORM_OnLButtonDown(form, page, 0, x, y);
+    ok = FORM_OnLButtonUp(form, page, 0, x, y) || ok;
+    FORM_ForceToKillFocus(form);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+/** Picks option [option] of combo box or list [annotIndex]. */
+JNI_FUNC(jboolean, PdfiumCore, nativeSetFormChoice)(JNI_ARGS, jlong pagePtr, jint annotIndex, jint option) {
+    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    auto found = sPageForms.find(page);
+    if (!page || found == sPageForms.end()) return JNI_FALSE;
+    FPDF_FORMHANDLE form = found->second;
+    auto annot = FPDFPage_GetAnnot(page, annotIndex);
+    if (!annot) return JNI_FALSE;
+    bool ok = FORM_SetFocusedAnnot(form, annot) && FORM_SetIndexSelected(form, page, option, true);
+    FORM_ForceToKillFocus(form);
+    FPDFPage_CloseAnnot(annot);
+    return ok ? JNI_TRUE : JNI_FALSE;
 }
 
 }//extern C

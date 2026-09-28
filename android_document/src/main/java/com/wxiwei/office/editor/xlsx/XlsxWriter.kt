@@ -27,12 +27,13 @@ sealed class CellWrite {
 /** Rows ([rows]) or columns inserted ([count] > 0) or deleted at [at] of a sheet. */
 data class StructureWrite(val sheetIndex: Int, val rows: Boolean, val at: Int, val count: Int)
 
-/** A column width in characters (Excel's unit) or a row height in points, at final coordinates. */
-/** A picture put on a sheet: top-left corner at cell [row], [col], [cxEmu] x [cyEmu] in size. */
 private val XDR: com.wxiwei.office.fc.dom4j.Namespace = com.wxiwei.office.fc.dom4j.Namespace.get("xdr", "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing")!!
 
-data class PictureWrite(val sheetIndex: Int, val row: Int, val col: Int, val cxEmu: Long, val cyEmu: Long, val image: File)
+/** A picture put on a sheet: top-left corner [colOffEmu], [rowOffEmu] into cell [row], [col], [cxEmu] x [cyEmu] in size. */
+data class PictureWrite(val sheetIndex: Int, val row: Int, val col: Int, val cxEmu: Long, val cyEmu: Long, val image: File,
+                        val colOffEmu: Long = 0, val rowOffEmu: Long = 0)
 
+/** A column width in characters (Excel's unit) or a row height in points, at final coordinates. */
 data class SizeWrite(val sheetIndex: Int, val rows: Boolean, val index: Int, val size: Double)
 
 /** A format change for one cell, relative to the cell's format in the original file. */
@@ -139,9 +140,9 @@ class XlsxWriter(private val source: File, private val formulaOf: (sheetIndex: I
         val anchor = root.addElement(QName("oneCellAnchor", XDR))!!
         anchor.addElement(QName("from", XDR))!!.apply {
             addElement(QName("col", XDR))!!.setText(p.col.toString())
-            addElement(QName("colOff", XDR))!!.setText("0")
+            addElement(QName("colOff", XDR))!!.setText(p.colOffEmu.toString())
             addElement(QName("row", XDR))!!.setText(p.row.toString())
-            addElement(QName("rowOff", XDR))!!.setText("0")
+            addElement(QName("rowOff", XDR))!!.setText(p.rowOffEmu.toString())
         }
         anchor.addElement(QName("ext", XDR))!!.addAttribute("cx", p.cxEmu.toString())!!.addAttribute("cy", p.cyEmu.toString())
         val pic = anchor.addElement(QName("pic", XDR))!!

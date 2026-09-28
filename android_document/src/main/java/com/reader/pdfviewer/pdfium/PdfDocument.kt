@@ -32,6 +32,9 @@ internal constructor() {
 
     /*package*/
     var mNativeDocPtr: Long = 0
+    /** Its interactive form is set up (see PdfiumCore.initForms). */
+    internal var hasForms = false
+
     /*package*/
     var parcelFileDescriptor: ParcelFileDescriptor? = null
 

@@ -30,6 +30,7 @@ import com.alf06.document.reader.ui.dialog.OpenFileErrorDialog
 import com.alf06.document.reader.ui.dialog.RenameFileDialog
 import com.alf06.document.reader.ui.home.document.layoutThumbnailStrip
 import com.alf06.document.reader.ui.home.document.office.edit.DialogKit
+import com.alf06.document.reader.ui.home.document.savePictureToGallery
 import com.alf06.document.reader.ui.home.document.office.edit.EditDrafts
 import com.alf06.document.reader.ui.home.document.office.edit.ExcelEditPanel
 import com.alf06.document.reader.ui.home.document.office.edit.OfficeEditPanel
@@ -411,7 +412,11 @@ class ReadDocumentActivity :
                     .takeIf { pagedViews && pageState != PageViewType.PageByPage },
                 onSlideShow = ::startSlideShow.takeIf { document.type == DocumentType.Ppt },
                 onSlideList = ::showSlideList.takeIf { document.type == DocumentType.Ppt },
-                onExportPdf = { exportSlides(pdf = true) }.takeIf { document.type == DocumentType.Ppt },
+                onExportPdf = when (document.type) {
+                    DocumentType.Ppt -> { { exportSlides(pdf = true) } }
+                    DocumentType.Doc, DocumentType.Excel -> { { exportDocumentPdf() } }
+                    else -> null
+                },
                 onExportImages = { exportSlides(pdf = false) }.takeIf { document.type == DocumentType.Ppt },
             ).show()
         }
@@ -503,26 +508,88 @@ class ReadDocumentActivity :
         }
     }
 
-    /** A PNG into Pictures/[folder] (MediaStore on Android 10+, the folder itself before). */
-    private fun savePicture(folder: String, fileName: String, png: ByteArray): Boolean = try {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            val values = android.content.ContentValues().apply {
-                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, fileName)
-                put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
-                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/" + folder)
+    /**
+     * A Word document (every page, as vectors) or a workbook (the used part of each sheet on A4
+     * landscape pages) into a PDF the user picks. Sheets not read yet are opened first.
+     */
+    private fun exportDocumentPdf() {
+        val reader = reader ?: return
+        val document = document ?: return
+        val view = reader.control?.getView()
+        val word = view as? com.wxiwei.office.wp.control.Word
+        val excel = view as? com.wxiwei.office.ss.control.ExcelView
+        if (word == null && excel == null) return toast(R.string.some_errors_occurred_please_try_again)
+        val name = java.io.File(document.path).nameWithoutExtension
+        var launcher: androidx.activity.result.ActivityResultLauncher<String>? = null
+        launcher = activityResultRegistry.register("doc-pdf-" + System.nanoTime(), androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+            launcher?.unregister()
+            if (uri == null) return@register
+            var status: android.widget.TextView? = null
+            lateinit var job: kotlinx.coroutines.Job
+            val progress = DialogKit(this).show(getString(R.string.export_pdf), cancelable = false) {
+                status = text(getString(R.string.pdf_tool_working))
+                keepOpenOnButtons()
+                negative(getString(android.R.string.cancel)) { job.cancel(); dialog?.dismiss() }
             }
-            val uri = contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
-            contentResolver.openOutputStream(uri)!!.use { it.write(png) }
-            true
-        } else {
-            @Suppress("DEPRECATION")
-            val dir = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES), folder).apply { mkdirs() }
-            java.io.File(dir, fileName).writeBytes(png)
-            true
+            job = lifecycleScope.launch {
+                val message = try {
+                    val written = if (word != null) {
+                        val slides = reader.thumbnails
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            contentResolver.openOutputStream(uri, "wt")!!.use { out ->
+                                val draw = { writeWordPdf(word, out) { n -> runOnUiThread { status?.text = "$n/${word.getPageCount()}" } } }
+                                slides?.onDrawingThread(draw) ?: kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { draw() }
+                            }
+                        }
+                    } else {
+                        loadAllSheets(excel!!)
+                        val pages = sheetPages(excel)
+                        if (pages.isEmpty()) 0 else {
+                            val bytes = java.io.ByteArrayOutputStream().also { out ->
+                                writeSheetPdf(excel, pages, out) { n -> status?.text = "$n/${pages.size}" }
+                            }.toByteArray()
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) } }
+                            pages.size
+                        }
+                    }
+                    if (written > 0) getString(R.string.pdf_export_done, written) else {
+                        // nothing was written: do not leave an empty file
+                        runCatching { android.provider.DocumentsContract.deleteDocument(contentResolver, uri) }
+                        getString(R.string.pdf_export_empty)
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    getString(R.string.pdf_tool_failed, e.message ?: e.javaClass.simpleName)
+                }
+                progress.dismiss()
+                android.widget.Toast.makeText(this@ReadDocumentActivity, message, android.widget.Toast.LENGTH_LONG).show()
+            }
         }
-    } catch (e: Exception) {
-        false
+        launcher.launch("$name.pdf")
     }
+
+    /** Sheets are read when first shown: show each unread one until it is read, then go back to the sheet that was shown. */
+    private suspend fun loadAllSheets(excel: com.wxiwei.office.ss.control.ExcelView) {
+        val book = excel.getSpreadsheet()?.getWorkbook() ?: return
+        val shown = excel.getSpreadsheet()?.getSheetView()?.getCurrentSheet()?.let { book.getSheetIndex(it) } ?: 0
+        var switched = false
+        for (i in 0 until book.getSheetCount()) {
+            val sheet = book.getSheet(i) ?: continue
+            if (sheet.getState() == com.wxiwei.office.ss.model.baseModel.Sheet.State_Accomplished) continue
+            excel.showSheet(i)
+            switched = true
+            var waited = 0
+            while (sheet.getState() != com.wxiwei.office.ss.model.baseModel.Sheet.State_Accomplished && waited < 15_000) {
+                kotlinx.coroutines.delay(100); waited += 100
+            }
+        }
+        if (switched) excel.showSheet(shown)
+    }
+
+    /** A PNG into Pictures/[folder]. */
+    private fun savePicture(folder: String, fileName: String, png: ByteArray): Boolean =
+        savePictureToGallery(folder, fileName, png, "image/png")
 
     private fun startSlideShow() {
         val reader = reader

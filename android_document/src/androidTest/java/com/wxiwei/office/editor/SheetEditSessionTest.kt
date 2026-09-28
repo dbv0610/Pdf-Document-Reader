@@ -391,6 +391,56 @@ class SheetEditSessionTest {
         }
     }
 
+    /** X6b: a picture added here moved and resized (undo/redo), another removed; saved at its new cell and offset. */
+    @Test
+    fun movePicture() {
+        val source = OpenDocument.copySample("sample.xlsx", "picture_move_source.xlsx")
+        val saved = OpenDocument.output("picture_move_saved.xlsx")
+        val png = java.io.File(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "sheet_pic_move.png")
+        android.graphics.Bitmap.createBitmap(60, 40, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.BLUE) }
+            .let { b -> png.outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) } }
+        var want = IntArray(0)
+        var shapes0 = 0
+        OpenDocument.open(source) { reader ->
+            loadAll(reader)
+            val session = onMain { SheetEditSession(reader.control!!, source) }
+            val sheet = onMain { book(reader).getSheet(0)!! }
+            shapes0 = onMain { sheet.getShapeCount() }
+            assertTrue(onMain { session.addPicture(0, 2, 1, png, 120, 80) })
+            val shape = onMain { sheet.getShape(shapes0)!! }
+            assertTrue("added here", session.isAddedPicture(shape))
+            assertFalse("file shapes stay put", shapes0 > 0 && session.isAddedPicture(onMain { sheet.getShape(0) }))
+            val start = onMain { shape.bounds!!.let { com.wxiwei.office.java.awt.Rectangle(it.x, it.y, it.width, it.height) } }
+            // into column D + 7 px, row 6 + 5 px, twice as big
+            val x = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueX(sheet, 3, 7).toInt() }
+            val y = onMain { com.wxiwei.office.ss.util.ModelUtil.instance().getValueY(sheet, 5, 5).toInt() }
+            assertTrue(onMain { session.setPictureBounds(shape, com.wxiwei.office.java.awt.Rectangle(x, y, 240, 160)) })
+            assertEquals(listOf(x, y, 240, 160), onMain { shape.bounds!!.let { listOf(it.x, it.y, it.width, it.height) } })
+            assertTrue(onMain { session.undo() })
+            assertEquals(listOf(start.x, start.y), onMain { shape.bounds!!.let { listOf(it.x, it.y) } })
+            assertTrue(onMain { session.redo() })
+            want = intArrayOf(5, 3)
+            // a second picture, removed: not saved
+            assertTrue(onMain { session.addPicture(0, 0, 0, png, 60, 40) })
+            assertTrue(onMain { session.removePicture(sheet.getShape(shapes0 + 1)!!) })
+            assertEquals(shapes0 + 1, onMain { sheet.getShapeCount() })
+            assertTrue(onMain { session.save(saved) } is EditResult.Ok)
+        }
+        java.util.zip.ZipFile(saved).use { z ->
+            val xml = z.entries().toList().map { it.name }.filter { it.matches(Regex("xl/drawings/drawing\\d+\\.xml")) }
+                .joinToString("") { z.getInputStream(z.getEntry(it)).readBytes().toString(Charsets.UTF_8) }
+            val anchors = Regex("<xdr:oneCellAnchor>.*?</xdr:oneCellAnchor>").findAll(xml).map { it.value }.toList()
+            assertEquals("one new picture: $anchors", 1, anchors.size)
+            val a = anchors[0]
+            assertTrue(a, a.contains("<xdr:col>${want[1]}</xdr:col>") && a.contains("<xdr:row>${want[0]}</xdr:row>"))
+            assertTrue(a, !a.contains("<xdr:colOff>0</xdr:colOff>") && !a.contains("<xdr:rowOff>0</xdr:rowOff>"))
+        }
+        OpenDocument.open(saved) { reader ->
+            loadAll(reader)
+            assertEquals("read back", shapes0 + 1, onMain { book(reader).getSheet(0)!!.getShapeCount() })
+        }
+    }
+
     /** X3: a red border all around one cell: shown, the cells sharing its old style unchanged, saved, read back. */
     @Test
     fun cellBorder() {

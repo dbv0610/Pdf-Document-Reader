@@ -69,6 +69,8 @@ internal class DocumentDecoder(
         if (pdfViewReference.get() == null) throw NullPointerException("pdfView == null")
         val pdfDocument = docSource.createDocument(contextReference.get(), pdfiumCore, password)
             ?: throw IllegalStateException("Cannot create document")
+        // form fields show their values and can be filled in (see PDFView.getFormFields)
+        pdfiumCore?.initForms(pdfDocument)
         return PdfFile(pdfiumCore, pdfDocument, userPages, displayOptions)
     }
 }

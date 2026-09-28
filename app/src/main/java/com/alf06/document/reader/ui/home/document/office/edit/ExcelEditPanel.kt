@@ -59,7 +59,7 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("Định dạng số") { pickNumberFormat() },
             button("Gộp ô") { mergeOrSplit() },
             button("+ Ảnh") { pickImage() },
-            button("Xóa ô") { if (sheet >= 0 && session.clearCell(sheet, row, col)) refresh(true) },
+            button("Xóa ô") { deleteSelection() },
         ))
         addView(toolRow(
             button("Rộng cột") { askSize("Độ rộng cột " + A1FormulaShifter.address(0, col).dropLast(1) + " (ký tự)", session.columnWidth(sheet, col)) { structural { session.setColumnWidth(sheet, col, it) } } },
@@ -74,8 +74,8 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
             button("+ Cột trái") { structural { session.insertColumns(sheet, col, 1) } },
             button("+ Cột phải") { structural { session.insertColumns(sheet, col + 1, 1) } },
             button("− Cột") { structural { session.deleteColumns(sheet, col, 1) } },
-            button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") else { syncSheets(); refresh(true) } },
-            button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") else { syncSheets(); refresh(true) } },
+            button("↶") { if (!session.undo()) toast("Không còn gì để hoàn tác") else { syncSheets(); dropStalePicture(); refresh(true) } },
+            button("↷") { if (!session.redo()) toast("Không còn gì để làm lại") else { syncSheets(); dropStalePicture(); refresh(true) } },
             button("+ Sheet") { askNewSheet() },
             button("Lưu", bold = true, color = 0xFFD96D00.toInt()) { commitTyped(); save() },
             button("Lưu bản sao") { commitTyped(); saveCopy() },
@@ -84,12 +84,14 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
 
     init {
         keepAboveKeyboard(true)
+        // a picture added here: touch it to select and drag it, drag a corner to resize it;
         // a range: long press a cell and drag, or drag the round handle of the selection
         reader.onDocumentGesture = gesture@{ type, event ->
             val ss = excel.getSpreadsheet() ?: return@gesture false
             val sv = ss.getSheetView() ?: return@gesture false
             when (type) {
                 com.wxiwei.office.system.IMainFrame.ON_DOWN -> {
+                    if (grabPicture(event)) return@gesture true
                     if (sv.getCurrentSheet()?.getSelectionRange() == null) return@gesture false
                     val h = sv.selectionHandle()
                     val p = sheetPoint(event.rawX, event.rawY)
@@ -127,6 +129,7 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         super.close()
         reader.onDocumentGesture = null
         reader.touchCapture = null
+        excel.getSpreadsheet()?.getSheetView()?.selectedShape = null
         excel.getSpreadsheet()?.getSheetView()?.getCurrentSheet()?.let { it.setActiveCellRowCol(it.getActiveCellRow(), it.getActiveCellColumn()) }
         watcher.cancel()
     }
@@ -421,7 +424,89 @@ internal class ExcelEditPanel(activity: AppCompatActivity, reader: OfficeDocumen
         val w = maxOf(1, Math.round(bounds.outWidth * scale)); val h = maxOf(1, Math.round(bounds.outHeight * scale))
         commitTyped()
         if (!session.addPicture(sheet, row, col, image, w, h)) { toast(session.lastError?.message ?: "Không thêm được ảnh"); return false }
+        // the new picture is selected: it can be dragged at once
+        excel.getSpreadsheet()?.getSheetView()?.let { sv ->
+            sv.selectedShape = sv.getCurrentSheet()?.getShapes()?.lastOrNull()
+            excel.getSpreadsheet()?.postInvalidate()
+        }
         return true
+    }
+
+    /**
+     * A touch on a corner of the selected picture resizes it (keeping its proportions), on a
+     * picture added in this session selects and moves it; elsewhere the picture is let go.
+     * The picture follows the finger and is placed, as one undoable step, when it is lifted.
+     */
+    private fun grabPicture(event: android.view.MotionEvent): Boolean {
+        val ss = excel.getSpreadsheet() ?: return false
+        val sv = ss.getSheetView() ?: return false
+        val p = sheetPoint(event.rawX, event.rawY)
+        val selected = sv.selectedShape?.takeIf { session.isAddedPicture(it) && sv.getCurrentSheet()?.getShapes()?.contains(it) == true }
+        val box = selected?.let { sv.shapeRect(it) }
+        val reach = dp(24).toFloat()
+        // corners: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right
+        val corner = box?.let { b ->
+            listOf(b.left to b.top, b.right to b.top, b.left to b.bottom, b.right to b.bottom)
+                .indexOfFirst { (x, y) -> Math.hypot((p.x - x).toDouble(), (p.y - y).toDouble()) <= reach }
+        } ?: -1
+        val shape = if (corner >= 0) selected!! else sv.shapeAt(p.x, p.y) { session.isAddedPicture(it) }
+        if (shape == null) {
+            if (sv.selectedShape != null) { sv.selectedShape = null; ss.postInvalidate() }
+            return false
+        }
+        commitTyped()
+        sv.selectedShape = shape
+        ss.abortDrawing()
+        ss.postInvalidate()
+        val start = shape.bounds!!.let { com.wxiwei.office.java.awt.Rectangle(it.x, it.y, it.width, it.height) }
+        val downX = event.rawX
+        val downY = event.rawY
+        reader.touchCapture = { e ->
+            val zoom = sv.getZoom()
+            val dx = (e.rawX - downX) / zoom
+            val dy = (e.rawY - downY) / zoom
+            val to = if (corner < 0) com.wxiwei.office.java.awt.Rectangle(
+                maxOf(0, Math.round(start.x + dx)), maxOf(0, Math.round(start.y + dy)), start.width, start.height)
+            else {
+                val sx = if (corner == 1 || corner == 3) 1 else -1
+                val sy = if (corner >= 2) 1 else -1
+                val min = 8f / maxOf(1, minOf(start.width, start.height))
+                val scale = maxOf(min, (start.width + sx * dx) / start.width, (start.height + sy * dy) / start.height)
+                val w = maxOf(1, Math.round(start.width * scale)); val h = maxOf(1, Math.round(start.height * scale))
+                com.wxiwei.office.java.awt.Rectangle(if (sx > 0) start.x else start.x + start.width - w,
+                    if (sy > 0) start.y else start.y + start.height - h, w, h)
+            }
+            if (e.actionMasked == android.view.MotionEvent.ACTION_UP || e.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
+                shape.bounds = start
+                if (e.actionMasked == android.view.MotionEvent.ACTION_UP && !session.setPictureBounds(shape, to))
+                    toast(session.lastError?.message ?: "Không di chuyển được ảnh")
+                ss.postInvalidate()
+            } else {
+                shape.bounds = to
+                ss.abortDrawing()
+                ss.postInvalidate()
+            }
+        }
+        return true
+    }
+
+    /** "Xóa ô": the selected picture, or else the cell. */
+    private fun deleteSelection() {
+        val sv = excel.getSpreadsheet()?.getSheetView()
+        val picture = sv?.selectedShape?.takeIf { session.isAddedPicture(it) }
+        if (picture != null) {
+            if (session.removePicture(picture)) sv.selectedShape = null
+            else toast(session.lastError?.message ?: "Không xóa được ảnh")
+            return
+        }
+        if (sheet >= 0 && session.clearCell(sheet, row, col)) refresh(true)
+    }
+
+    /** A picture taken off by an undo/redo is no longer selected. */
+    private fun dropStalePicture() {
+        val sv = excel.getSpreadsheet()?.getSheetView() ?: return
+        val shape = sv.selectedShape ?: return
+        if (sv.getCurrentSheet()?.getShapes()?.contains(shape) != true) sv.selectedShape = null
     }
 
     /** "Gộp ô": merges the selected range (asks when values would be dropped); on a merged cell, splits it. */

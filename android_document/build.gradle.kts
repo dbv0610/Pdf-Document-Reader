@@ -65,6 +65,8 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     api("com.google.mlkit:text-recognition:16.0.1")
+    // only to write an encrypted copy (pdfium cannot encrypt)
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation(libs.gson)
     implementation(libs.lottie)
     implementation(libs.material)
