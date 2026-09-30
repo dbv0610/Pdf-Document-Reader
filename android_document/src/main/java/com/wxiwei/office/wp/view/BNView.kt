@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          BNView.java
  *
  * 编译器:            android2.2
@@ -13,6 +20,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import com.wxiwei.office.common.bulletnumber.ListLevel
 import com.wxiwei.office.constant.MainConstant
+import com.wxiwei.office.simpletext.font.FontTypefaceManage
 import com.wxiwei.office.constant.wp.WPViewConstant
 import com.wxiwei.office.simpletext.model.AttrManage
 import com.wxiwei.office.simpletext.model.IDocument
@@ -65,49 +73,49 @@ class BNView : AbstractView() {
             if (listData == null) {
                 return breakType
             }
-            if (listData.getLinkStyleID() >= 0) {
-                val style = StyleManage.instance().getStyle(listData.getLinkStyleID().toInt())
+            if (listData.linkStyleID >= 0) {
+                val style = StyleManage.instance().getStyle(listData.linkStyleID.toInt())
                 if (style != null) {
                     val listID = AttrManage.instance().getParaListID(style.getAttrbuteSet())
                     listData = para.getControl()!!.getSysKit().getListManage().getListData(listID)
-                    if (listData == null || listData.getLevels().isEmpty()) {
+                    if (listData == null || listData.levels.isNullOrEmpty()) {
                         return breakType
                     }
                 }
             }
             leafElem = doc.getLeaf(paraElem!!.getEndOffset() - 1)
-            val listLevel = listData.getLevel(paraAttr.listLevel.toInt())
+            val listLevel = listData.getLevel(paraAttr.listLevel.toInt()) ?: return breakType
             text = com.wxiwei.office.common.bulletnumber.ListKit.instance().getBulletText(listData, listLevel, docAttr, paraAttr.listLevel.toInt())
             val preParaLevel = if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt())
-                listData.getNormalPreParaLevel() else listData.getPreParaLevel()
+                listData.normalPreParaLevel else listData.preParaLevel
             //
             if (paraAttr.listLevel < preParaLevel) {
                 // 大于当前级别的listLevel的paraCount 置 0
                 for (i in paraAttr.listLevel + 1 until 9) {
                     if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()) {
-                        listData.getLevel(i).setNormalParaCount(0)
+                        listData.getLevel(i)?.normalParaCount = 0
                     } else {
-                        listData.getLevel(i).setParaCount(0)
+                        listData.getLevel(i)?.paraCount = 0
                     }
                 }
             } else if (paraAttr.listLevel > preParaLevel) {
                 // 在当前级别与前一个级别之间的 paraCount 也需要加 1
                 for (i in preParaLevel + 1 until paraAttr.listLevel) {
-                    val temp = listData.getLevel(i)
+                    val temp = listData.getLevel(i) ?: continue
                     if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()) {
-                        temp.setNormalParaCount(temp.getNormalParaCount() + 1)
+                        temp.normalParaCount = temp.normalParaCount + 1
                     } else {
-                        temp.setParaCount(temp.getParaCount() + 1)
+                        temp.paraCount = temp.paraCount + 1
                     }
                 }
             }
             // set previous paragraph count
             if (docAttr.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()) {
-                listLevel.setNormalParaCount(listLevel.getNormalParaCount() + 1)
-                listData.setNormalPreParaLevel(paraAttr.listLevel)
+                listLevel.normalParaCount = listLevel.normalParaCount + 1
+                listData.normalPreParaLevel = paraAttr.listLevel
             } else {
-                listLevel.setParaCount(listLevel.getParaCount() + 1)
-                listData.setPreParaLevel(paraAttr.listLevel)
+                listLevel.paraCount = listLevel.paraCount + 1
+                listData.preParaLevel = paraAttr.listLevel
             }
             currLevel = listLevel
         }
@@ -123,23 +131,10 @@ class BNView : AbstractView() {
         val paint = paint!!
         val charAttr = charAttr!!
         AttrManage.instance().fillCharAttr(charAttr, paraElem!!.getAttribute(), leafElem!!.getAttribute())
-        // 粗斜体
-        if (charAttr.isBold && charAttr.isItalic) {
-            paint.textSkewX = -0.2f
-            paint.isFakeBoldText = true
-        }
-        // 粗体
-        else if (charAttr.isBold) {
-            paint.isFakeBoldText = true
-        }
-        // 斜体
-        else if (charAttr.isItalic) {
-            paint.textSkewX = -0.25f
-        }
-        // 字体没有什么好改变的，用统一的吧
-        paint.typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        // the number takes the paragraph's font, like Word ("1." in Arial, not a serif)
+        paint.typeface = FontTypefaceManage.instance().getFontTypeface(charAttr.fontIndex, charAttr.isBold, charAttr.isItalic)
         // 字号
-        paint.textSize = charAttr.fontSize * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
+        paint.textSize = charAttr.fontSizeF * (charAttr.fontScale / 100f) * MainConstant.POINT_TO_PIXEL
         // 颜色
         paint.color = charAttr.fontColor
 
@@ -192,7 +187,7 @@ class BNView : AbstractView() {
         paint = null
         charAttr = null
         if (currLevel != null) {
-            currLevel!!.setParaCount(currLevel!!.getParaCount() - 1)
+            currLevel!!.paraCount = currLevel!!.paraCount - 1
         }
     }
 }

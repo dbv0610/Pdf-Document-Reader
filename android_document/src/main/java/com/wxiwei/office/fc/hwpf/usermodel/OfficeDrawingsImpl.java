@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 /* ====================================================================
    Licensed to the Apache Software Foundation (ASF) under one or more
    contributor license agreements.  See the NOTICE file distributed with
@@ -102,7 +109,7 @@ public class OfficeDrawingsImpl implements OfficeDrawings
                     if (blipRecord instanceof EscherMetafileBlip)
                     {
                         blipRecord.fillFields(_mainStream, bseRecord.getOffset(), recordFactory);
-                        blipRecord.setTempFilePath(control.getSysKit().getPictureManage().writeTempFile(blipRecord.getPicturedata()));
+                        blipRecord.tempFilePath = control.getSysKit().getPictureManage().writeTempFile(blipRecord.getPicturedata());
                     }
                     else
                     {
@@ -114,7 +121,7 @@ public class OfficeDrawingsImpl implements OfficeDrawings
                         System.arraycopy(_mainStream, pos + skip, b, 0, b.length);
                         blipRecord.setPictureData(b);
                         // 放到临时文件中
-                        blipRecord.setTempFilePath(control.getSysKit().getPictureManage().writeTempFile(_mainStream, pos + skip, bytesAfterHeader - skip));
+                        blipRecord.tempFilePath = control.getSysKit().getPictureManage().writeTempFile(_mainStream, pos + skip, bytesAfterHeader - skip);
                     }
                     //field_pictureData = new byte[bytesAfterHeader];
                     //System.arraycopy(data, pos, field_pictureData, 0, bytesAfterHeader);
@@ -406,7 +413,7 @@ public class OfficeDrawingsImpl implements OfficeDrawings
             }
             if (blipRecord != null)
             {
-                return blipRecord.getTempFilePath();
+                return blipRecord.tempFilePath;
             }
             return null;
         }

@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          LaterArrowPathBuilder.java
  *  
  * 编译器:            android2.2
@@ -62,7 +69,7 @@ object LaterArrowPathBuilder {
     fun getArrowPath(shape: AutoShape, rect: Rect): Any? {
         path.reset()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.RightArrow -> return getRightArrowPath(shape, rect)
 
             ShapeTypes.LeftArrow -> return getLeftArrowPath(shape, rect)
@@ -122,7 +129,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getRightArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -149,7 +156,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getLeftArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -175,7 +182,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getUpArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -201,7 +208,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getDownArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -227,7 +234,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getLeftRightArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -261,7 +268,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getUpDownArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         var adj1 = 0
         var adj2 = 0
         val len1 = rect.width() / 2
@@ -294,7 +301,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getQuadArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -361,7 +368,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getLeftRightUpArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -421,7 +428,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getBentArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -489,7 +496,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getUturnArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -591,7 +598,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getLeftUpArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -644,7 +651,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getBentUpArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -679,7 +686,7 @@ object LaterArrowPathBuilder {
     private fun getCurvedRightArrowPath(shape: AutoShape, rect: Rect): MutableList<Path?> {
         val pathList: MutableList<Path?> = ArrayList<Path?>(2)
 
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         var path = Path()
 
         var adj1 = 0
@@ -772,7 +779,7 @@ object LaterArrowPathBuilder {
     private fun getCurvedLeftArrowPath(shape: AutoShape, rect: Rect): MutableList<Path?> {
         val pathList: MutableList<Path?> = ArrayList<Path?>(2)
 
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         var path = Path()
 
         var adj1 = 0
@@ -865,7 +872,7 @@ object LaterArrowPathBuilder {
     private fun getCurvedUpArrowPath(shape: AutoShape, rect: Rect): MutableList<Path?> {
         val pathList: MutableList<Path?> = ArrayList<Path?>(2)
 
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         var path = Path()
 
         var adj1 = 0
@@ -949,7 +956,7 @@ object LaterArrowPathBuilder {
     private fun getCurvedDownArrowPath(shape: AutoShape, rect: Rect): MutableList<Path?> {
         val pathList: MutableList<Path?> = ArrayList<Path?>(2)
 
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         var path = Path()
 
         var adj1 = 0
@@ -1031,7 +1038,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getStripedRightArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1079,7 +1086,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getNotchedRightArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1112,7 +1119,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getHomePlatePath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         val len = min(rect.width(), rect.height())
@@ -1133,7 +1140,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getChevronPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         val len = min(rect.width(), rect.height())
@@ -1155,7 +1162,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getRightArrowCalloutPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1213,7 +1220,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getLeftArrowCalloutPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1271,7 +1278,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getUpArrowCalloutPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1326,7 +1333,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getDownArrowCalloutPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1380,7 +1387,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getLeftRightArrowCalloutPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1445,7 +1452,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getQuadArrowCalloutPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0
@@ -1544,7 +1551,7 @@ object LaterArrowPathBuilder {
     }
 
     private fun getCircularArrowPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0

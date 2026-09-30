@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.editor.docx
 
 import java.io.File
@@ -21,6 +28,19 @@ class DocxSourceMap {
     private var paraStarts = LongArray(32)
     private var paraEnds = LongArray(32)
     var paragraphCount = 0; private set
+    /** An XML part and the model offsets [start, end) read from it. */
+    data class Part(val start: Long, val end: Long, val name: String)
+    // the body, then each header and footer read (default, first page, even pages)
+    private val parts = arrayListOf(Part(0L, 0x1000000000000000L, "word/document.xml"),
+        // text boxes of the body: their runs are in document.xml too (WPModelConstant.TEXTBOX area)
+        Part(0x5000000000000000L, 0x6000000000000000L, "word/document.xml"))
+
+    /** Leaves and paragraphs in [start, end) come from [part]; their run and paragraph indices count
+     *  from 0 in that part. */
+    @Synchronized fun setPart(start: Long, end: Long, part: String) { parts.add(Part(start, maxOf(end, start + 1), part)) }
+    /** The part the model offset [offset] was read from, or null (text boxes, notes...). */
+    @Synchronized fun partAt(offset: Long): Part? = parts.firstOrNull { offset >= it.start && offset < it.end }
+    @Synchronized fun parts(): List<Part> = ArrayList(parts)
 
     @Synchronized fun addLeaf(start: Long, end: Long, runIndices: IntArray, text: String, kind: Kind) {
         require(start >= 0 && end >= start && end - start == text.length.toLong())

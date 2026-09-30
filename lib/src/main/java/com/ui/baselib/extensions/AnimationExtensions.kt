@@ -18,9 +18,11 @@ import androidx.interpolator.view.animation.FastOutSlowInInterpolator
  * @param duration Animation duration in milliseconds
  */
 fun View.fadeIn(duration: Long = 300) {
+    // Cancelling also drops a pending fadeOut() end action, so it can't hide the view afterwards.
+    animate().cancel()
     alpha = 0f
     visibility = View.VISIBLE
-    ObjectAnimator.ofFloat(this, "alpha", 1f).setDuration(duration).start()
+    animate().alpha(1f).setDuration(duration).start()
 }
 
 /**
@@ -29,8 +31,8 @@ fun View.fadeIn(duration: Long = 300) {
  * @param duration Animation duration in milliseconds
  */
 fun View.fadeOut(duration: Long = 300) {
-    ObjectAnimator.ofFloat(this, "alpha", 0f).setDuration(duration).start()
-    postDelayed({ visibility = View.GONE }, duration)
+    animate().cancel()
+    animate().alpha(0f).setDuration(duration).withEndAction { visibility = View.GONE }.start()
 }
 
 // endregion
@@ -176,7 +178,7 @@ fun View.animateWidth(
  *
  * @param offset Shake offset in pixels
  * @param duration Duration of each shake in milliseconds
- * @param repeat Number of shake repetitions
+ * @param repeat Multiplies [duration]; the shake pattern itself is always the same
  */
 fun View.shake(offset: Float = 10f, duration: Long = 50L, repeat: Int = 3) {
     val animator = ObjectAnimator.ofFloat(

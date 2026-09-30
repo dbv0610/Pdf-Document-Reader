@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          AttrKit.java
  *
  * 编译器:            android2.2
@@ -63,15 +70,75 @@ class AttrManage {
     /**
      * get fontSize
      */
-    fun getFontSize(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+    fun getFontSize(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int =
+        Math.round(getFontSizeF(paraAttr, leafAttr))
+
+    /** Font size in points, keeping half/hundredth points (10.5pt, 151.71pt). */
+    fun getFontSizeF(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Float {
         var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_SIZE_ID)
         if (a == Int.MIN_VALUE) {
-            a = paraAttr!!.getAttribute(AttrIDConstant.FONT_SIZE_ID)
+            a = paraAttr?.getAttribute(AttrIDConstant.FONT_SIZE_ID) ?: Int.MIN_VALUE
             if (a == Int.MIN_VALUE) {
-                return 12
+                return 12f
             }
         }
-        return a
+        return decodeFontSize(a)
+    }
+
+    /** Sets a fractional size; whole sizes are stored as before (points). */
+    fun setFontSize(attr: IAttributeSet?, points: Float) {
+        val hundredths = Math.round(points * 100)
+        attr!!.setAttribute(
+            AttrIDConstant.FONT_SIZE_ID,
+            if (hundredths % 100 == 0) hundredths / 100 else FONT_SIZE_HUNDREDTHS + hundredths
+        )
+    }
+
+    /** Extra space after each character, in hundredths of a point (negative tightens). */
+    fun setFontSpacing(attr: IAttributeSet?, hundredths: Int) {
+        attr!!.setAttribute(AttrIDConstant.FONT_SPACING_ID, hundredths)
+    }
+
+    fun setFontCaps(attr: IAttributeSet?, caps: Int) {
+        attr!!.setAttribute(AttrIDConstant.FONT_CAPS_ID, caps)
+    }
+
+    fun setFontPosition(attr: IAttributeSet?, halfPoints: Int) {
+        attr!!.setAttribute(AttrIDConstant.FONT_POSITION_ID, halfPoints)
+    }
+
+    /** Raise (+) or lowering (-) of the text in half points. */
+    fun getFontPosition(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_POSITION_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_POSITION_ID) ?: Int.MIN_VALUE
+        return if (a == Int.MIN_VALUE) 0 else a
+    }
+
+    fun setFontHidden(attr: IAttributeSet?, hidden: Boolean) {
+        attr!!.setAttribute(AttrIDConstant.FONT_HIDDEN_ID, if (hidden) 1 else 0)
+    }
+
+    fun getFontHidden(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Boolean {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_HIDDEN_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_HIDDEN_ID) ?: Int.MIN_VALUE
+        return a == 1
+    }
+
+    fun getFontCaps(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_CAPS_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_CAPS_ID) ?: Int.MIN_VALUE
+        return if (a == Int.MIN_VALUE) 0 else a
+    }
+
+    fun getFontSpacing(paraAttr: IAttributeSet?, leafAttr: IAttributeSet?): Int {
+        var a = leafAttr!!.getAttribute(AttrIDConstant.FONT_SPACING_ID)
+        if (a == Int.MIN_VALUE) a = paraAttr?.getAttribute(AttrIDConstant.FONT_SPACING_ID) ?: Int.MIN_VALUE
+        return if (a == Int.MIN_VALUE) 0 else a
+    }
+
+    /** Copies the raw size (whole or fractional) of [from] to [to]. */
+    fun copyFontSize(from: IAttributeSet?, to: IAttributeSet?) {
+        to!!.setAttribute(AttrIDConstant.FONT_SIZE_ID, from!!.getAttribute(AttrIDConstant.FONT_SIZE_ID))
     }
 
     /**
@@ -1346,16 +1413,6 @@ class AttrManage {
         pageAttr.pageBorder = getPageBorder(attr)
         pageAttr.pageLinePitch = (getPageLinePitch(attr) * MainConstant.TWIPS_TO_PIXEL)
 
-        Log.e("verticalAlign", "" + pageAttr.verticalAlign)
-        Log.e("horizontalAlign", "" + pageAttr.horizontalAlign)
-        Log.e("pageWidth", "" + pageAttr.pageWidth)
-        Log.e("pageHeight", "" + pageAttr.pageHeight)
-        Log.e("topMargin", "" + pageAttr.topMargin)
-        Log.e("bottomMargin", "" + pageAttr.bottomMargin)
-        Log.e("rightMargin", "" + pageAttr.rightMargin)
-        Log.e("leftMargin", "" + pageAttr.leftMargin)
-        Log.e("headerMargin", "" + pageAttr.headerMargin)
-        Log.e("footerMargin", "" + pageAttr.footerMargin)
     }
 
     /**
@@ -1403,9 +1460,9 @@ class AttrManage {
                 val listLevel: ListLevel? = listData.getLevel(paraAttr.listLevel.toInt())
                 if (listLevel != null) {
                     // 文本缩进
-                    paraAttr.listTextIndent = (listLevel.getTextIndent() * MainConstant.TWIPS_TO_PIXEL).toInt()
+                    paraAttr.listTextIndent = (listLevel.textIndent * MainConstant.TWIPS_TO_PIXEL).toInt()
                     // bn 对齐位置
-                    paraAttr.listAlignIndent = paraAttr.listTextIndent + (listLevel.getSpecialIndent() * MainConstant.TWIPS_TO_PIXEL).toInt()
+                    paraAttr.listAlignIndent = paraAttr.listTextIndent + (listLevel.specialIndent * MainConstant.TWIPS_TO_PIXEL).toInt()
                     // 段落没有左缩进
                     if (paraAttr.leftIndent - paraAttr.listTextIndent == 0
                         || paraAttr.leftIndent == 0
@@ -1473,7 +1530,12 @@ class AttrManage {
     fun fillCharAttr(charAttr: CharAttr?, paraAttr: IAttributeSet?, leafAttr: IAttributeSet?) {
         charAttr!!.reset()
         charAttr.fontIndex = getFontName(paraAttr, leafAttr)
-        charAttr.fontSize = getFontSize(paraAttr, leafAttr)
+        charAttr.fontSizeF = getFontSizeF(paraAttr, leafAttr)
+        charAttr.spacingPt = getFontSpacing(paraAttr, leafAttr) / 100f
+        charAttr.caps = getFontCaps(paraAttr, leafAttr)
+        charAttr.positionPt = getFontPosition(paraAttr, leafAttr) / 2f
+        charAttr.isHidden = getFontHidden(paraAttr, leafAttr)
+        charAttr.fontSize = Math.round(charAttr.fontSizeF)
         charAttr.fontScale = getFontScale(paraAttr, leafAttr)
         charAttr.fontColor = getFontColor(paraAttr, leafAttr)
         charAttr.isBold = getFontBold(paraAttr, leafAttr)
@@ -1494,15 +1556,61 @@ class AttrManage {
      * @param attr
      */
     fun fillTableAttr(tableAttr: TableAttr?, attr: IAttributeSet?) {
-        // 由于POI无法没有解析出表格上、下、左、右边距，故采用默认值
-        tableAttr!!.topMargin = 0 //(int)(AttrManage.instance().getTableTopMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
-        tableAttr.leftMargin = 7 //(int)(AttrManage.instance().getTableLeftMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
-        tableAttr.rightMargin = 7 //(int)(AttrManage.instance().getTableRightMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
-        tableAttr.bottomMargin = 0 //(int)(AttrManage.instance().getTableBottomMargin(attr) * MainConstant.TWIPS_TO_PIXEL);
+        // Cell margins in twips when the reader set them (DOCX), else the old defaults (DOC, PPT)
+        tableAttr!!.topMargin = marginPixels(attr, AttrIDConstant.TABLE_TOP_MARGIN_ID, 0)
+        tableAttr.leftMargin = marginPixels(attr, AttrIDConstant.TABLE_LEFT_MARGIN_ID, 7)
+        tableAttr.rightMargin = marginPixels(attr, AttrIDConstant.TABLE_RIGHT_MARGIN_ID, 7)
+        tableAttr.bottomMargin = marginPixels(attr, AttrIDConstant.TABLE_BOTTOM_MARGIN_ID, 0)
         tableAttr.cellWidth = (getTableCellWidth(attr) * MainConstant.TWIPS_TO_PIXEL).toInt()
         tableAttr.cellVerticalAlign = getTableCellVerAlign(attr).toByte()
         tableAttr.cellBackground = getTableCellTableBackground(attr)
     }
+
+    /** Side 0..3 = top, bottom, left, right; see [AttrIDConstant.PARA_BORDER_TOP_ID]. */
+    fun setParaBorder(attr: IAttributeSet?, side: Int, eighths: Int, color: Int, space: Int) {
+        val base = AttrIDConstant.PARA_BORDER_TOP_ID + side * 3
+        attr!!.setAttribute(base.toShort(), eighths)
+        attr.setAttribute((base + 1).toShort(), color)
+        attr.setAttribute((base + 2).toShort(), space)
+    }
+
+    fun setParaShading(attr: IAttributeSet?, color: Int) {
+        attr!!.setAttribute(AttrIDConstant.PARA_SHADING_ID, color)
+    }
+
+    fun setParaContextualSpacing(attr: IAttributeSet?, on: Boolean) {
+        attr!!.setAttribute(AttrIDConstant.PARA_CONTEXTUAL_SPACING_ID, if (on) 1 else 0)
+    }
+
+    /** Word ignores the space before/after of such a paragraph next to one of the same style. */
+    fun getParaContextualSpacing(attr: IAttributeSet?): Boolean =
+        attr!!.getAttribute(AttrIDConstant.PARA_CONTEXTUAL_SPACING_ID) == 1
+
+    /** Shading and borders of a paragraph, or null when it has none (the common case). */
+    fun getParaDecoration(attr: IAttributeSet?): ParaDecoration? {
+        val shading = attr!!.getAttribute(AttrIDConstant.PARA_SHADING_ID)
+        val sides = Array(4) { side ->
+            val base = AttrIDConstant.PARA_BORDER_TOP_ID + side * 3
+            val eighths = attr.getAttribute(base.toShort())
+            if (eighths == Int.MIN_VALUE || eighths <= 0) null
+            else ParaDecoration.Side(eighths, attr.getAttribute((base + 1).toShort()), maxOf(0, attr.getAttribute((base + 2).toShort())))
+        }
+        if (shading == Int.MIN_VALUE && sides.all { it == null }) return null
+        return ParaDecoration(if (shading == Int.MIN_VALUE) null else shading, sides[0], sides[1], sides[2], sides[3])
+    }
+
+    /** FONT_SIZE_ID holds points, or [FONT_SIZE_HUNDREDTHS] + hundredths of a point. */
+    fun decodeFontSize(value: Int): Float =
+        if (value >= FONT_SIZE_HUNDREDTHS) (value - FONT_SIZE_HUNDREDTHS) / 100f else value.toFloat()
+
+    private fun marginPixels(attr: IAttributeSet?, id: Short, default: Int): Int {
+        val twips = attr!!.getAttribute(id)
+        return if (twips == Int.MIN_VALUE) default else Math.round(twips * MainConstant.TWIPS_TO_PIXEL)
+    }
+
+    /** True when the reader resolved every border of the cell (DOCX); false keeps the legacy grid. */
+    fun hasTableCellBorders(attr: IAttributeSet?): Boolean =
+        attr!!.getAttribute(AttrIDConstant.TABLE_TOP_BORDER_ID) != Int.MIN_VALUE
 
     /**
      *
@@ -1511,6 +1619,8 @@ class AttrManage {
     }
 
     companion object {
+        private const val FONT_SIZE_HUNDREDTHS = 1 shl 24
+
         @JvmField
         var am = AttrManage()
 

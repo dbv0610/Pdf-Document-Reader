@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.xls.Reader.shared
 
 import android.graphics.Color
@@ -19,11 +26,11 @@ class ThemeColorReader private constructor() {
     fun getThemeColor(themeParts: PackagePart, book: Workbook) {
         val saxreader = SAXReader()
         val input = themeParts.inputStream
-        val poiTheme: Document = saxreader.read(input)
+        val poiTheme: Document = saxreader.read(input)!!
         input.close()
         val root = poiTheme.rootElement
-        val themeElements = root.element("themeElements")
-        val themeColorElement = themeElements.element("clrScheme")
+        val themeElements = root!!.element("themeElements")
+        val themeColorElement = themeElements!!.element("clrScheme")!!
 
         addThemeColor(themeColorElement, SchemeClrConstant.SCHEME_LT1, SchemeClrConstant.SCHEME_BG1, 0, book)
         addThemeColor(themeColorElement, SchemeClrConstant.SCHEME_DK1, SchemeClrConstant.SCHEME_TX1, 1, book)
@@ -54,14 +61,15 @@ class ThemeColorReader private constructor() {
         book.addThemeColorIndex(index, color)
     }
 
-    private fun getColorIndex(colorEle: Element, book: Workbook): Int {
+    private fun getColorIndex(colorEle: Element?, book: Workbook): Int {
+        if (colorEle == null) return Color.BLACK
         var color = Color.BLACK
         val rgbElement = colorEle.element("srgbClr")
         val sysElement = colorEle.element("sysClr")
         if (rgbElement != null) {
-            color = rgbElement.attributeValue("val").toInt(16)
+            color = rgbElement.attributeValue("val")!!.toInt(16)
         } else if (sysElement != null) {
-            color = sysElement.attributeValue("lastClr").toInt(16)
+            color = sysElement.attributeValue("lastClr")!!.toInt(16)
         }
         color = color or (0xFF shl 24)
         return book.addColor(color)

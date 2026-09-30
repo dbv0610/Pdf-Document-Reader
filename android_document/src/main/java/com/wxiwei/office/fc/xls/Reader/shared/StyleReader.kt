@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.xls.Reader.shared
 
 import com.wxiwei.office.common.bg.AShader
@@ -16,6 +23,8 @@ import com.wxiwei.office.ss.model.style.BorderStyle
 import com.wxiwei.office.ss.model.style.BuiltinFormats
 import com.wxiwei.office.ss.model.style.CellBorder
 import com.wxiwei.office.ss.model.style.CellStyle
+import com.wxiwei.office.ss.model.table.SSTableCellStyle
+import com.wxiwei.office.ss.model.table.SSTableStyle
 import com.wxiwei.office.ss.model.style.NumberFormat
 import com.wxiwei.office.ss.model.table.TableFormatManager
 import com.wxiwei.office.ss.util.ColorUtil
@@ -57,6 +66,7 @@ class StyleReader private constructor() {
             saxReader.addHandler("/styleSheet/cellXfs/xf", handler)
             saxReader.addHandler("/styleSheet/colors/indexedColors/rgbColor", handler)
             saxReader.addHandler("/styleSheet/dxfs/dxf", handler)
+            saxReader.addHandler("/styleSheet/tableStyles/tableStyle", handler)
             val input = styleParts.getInputStream()
             saxReader.read(input)
             input.close()
@@ -79,15 +89,15 @@ class StyleReader private constructor() {
             val rgb = element.attribute("rgb")
             val indexed = element.attribute("indexed")
             if (theme != null) {
-                index = book!!.getThemeColorIndex(element.attributeValue("theme").toInt())
+                index = book!!.getThemeColorIndex(element.attributeValue("theme")!!.toInt())
                 val tint = element.attribute("tint")
-                if (tint != null) index = book!!.addColor(ColorUtil.instance().getColorWithTint(book!!.getColor(index), element.attributeValue("tint").toDouble()))
+                if (tint != null) index = book!!.addColor(ColorUtil.instance().getColorWithTint(book!!.getColor(index), element.attributeValue("tint")!!.toDouble()))
             } else if (rgb != null) {
                 var value = element.attributeValue("rgb")
-                if (value.length > 6) value = value.substring(value.length - 6)
-                index = book!!.addColor((0xff shl 24) or value.toInt(16))
+                if (value!!.length > 6) value = value!!.substring(value!!.length - 6)
+                index = book!!.addColor((0xff shl 24) or value!!.toInt(16))
             } else if (indexed != null) {
-                index = element.attributeValue("indexed").toInt()
+                index = element.attributeValue("indexed")!!.toInt()
                 if (index == Palette.FIRST_COLOR_INDEX + Palette.STANDARD_PALETTE_SIZE) index = 0
                 else if (index > Palette.FIRST_COLOR_INDEX + Palette.STANDARD_PALETTE_SIZE) index = Palette.FIRST_COLOR_INDEX + 1
             }
@@ -95,7 +105,7 @@ class StyleReader private constructor() {
         return index.toShort()
     }
 
-    private fun processNumberFormat(element: Element): NumberFormat = NumberFormat(element.attributeValue("numFmtId").toShort(), element.attributeValue("formatCode"))
+    private fun processNumberFormat(element: Element): NumberFormat = NumberFormat(element.attributeValue("numFmtId")!!.toShort(), element.attributeValue("formatCode"))
 
     private fun processFont(element: Element): Font {
         val font = Font()
@@ -109,13 +119,13 @@ class StyleReader private constructor() {
         font.setFontSize(element.element("sz")?.attributeValue("val")?.toDouble() ?: 12.0)
         font.setColorIndex(colorIndex(element.element("color")).toInt())
         element.element("name")?.let { font.setName(it.attributeValue("val")) }
-        element.element("b")?.let { font.setBold(it.attributeValue("val") == null || it.attributeValue("val").toBoolean()) }
-        element.element("i")?.let { font.setItalic(it.attributeValue("val") == null || it.attributeValue("val").toBoolean()) }
+        element.element("b")?.let { font.setBold(isOn(it.attributeValue("val"))) }
+        element.element("i")?.let { font.setItalic(isOn(it.attributeValue("val"))) }
         element.element("u")?.let {
             val value = it.attributeValue("val")
             if (value == null) font.setUnderline(Font.U_SINGLE.toInt()) else font.setUnderline(value)
         }
-        element.element("strike")?.let { font.setStrikeline(it.attributeValue("val") == null || it.attributeValue("val").toBoolean()) }
+        element.element("strike")?.let { font.setStrikeline(isOn(it.attributeValue("val"))) }
         return font
     }
 
@@ -124,30 +134,30 @@ class StyleReader private constructor() {
         if (pattern != null) {
             if (pattern.attributeValue("patternType").equals("none", true)) return null
             val fill = BackgroundAndFill()
-            pattern.element("fgColor")?.let { fill.setForegroundColor(book!!.getColor(colorIndex(it).toInt())) }
-            pattern.element("fgColor")?.let { fill.setFillType(BackgroundAndFill.FILL_SOLID) }
-            pattern.element("bgColor")?.let { fill.setBackgoundColor(book!!.getColor(colorIndex(it).toInt())) }
+            pattern.element("fgColor")?.let { fill.foregroundColor = book!!.getColor(colorIndex(it).toInt()) }
+            pattern.element("fgColor")?.let { fill.fillType = BackgroundAndFill.FILL_SOLID }
+            pattern.element("bgColor")?.let { fill.backgoundColor = book!!.getColor(colorIndex(it).toInt()) }
             return fill
         }
         val gradient = element.element("gradientFill") ?: return null
         val stops = gradient.elements("stop")
-        val colors = IntArray(stops.size)
-        val positions = FloatArray(stops.size)
-        for (i in stops.indices) {
-            val stop = stops[i] as Element
-            positions[i] = stop.attributeValue("position").toFloat()
+        val colors = IntArray(stops!!.size)
+        val positions = FloatArray(stops!!.size)
+        for (i in stops!!.indices) {
+            val stop = stops!![i] as Element
+            positions[i] = stop.attributeValue("position")!!.toFloat()
             colors[i] = book!!.getColor(colorIndex(stop.element("color")).toInt())
         }
         val fill = BackgroundAndFill()
         val shader: AShader
         if (!gradient.attributeValue("type").equals("path", true)) {
-            fill.setFillType(BackgroundAndFill.FILL_SHADE_LINEAR)
+            fill.fillType = BackgroundAndFill.FILL_SHADE_LINEAR
             shader = LinearGradientShader((gradient.attributeValue("degree")?.toFloat() ?: 0f), colors, positions)
         } else {
-            fill.setFillType(BackgroundAndFill.FILL_SHADE_RADIAL)
+            fill.fillType = BackgroundAndFill.FILL_SHADE_RADIAL
             shader = RadialGradientShader(radialCenter(gradient), colors, positions)
         }
-        fill.setShader(shader)
+        fill.shader = shader
         return fill
     }
 
@@ -194,6 +204,51 @@ class StyleReader private constructor() {
         return style
     }
 
+    /** OOXML booleans: absent value, "1" and "true" are on ("1".toBoolean() is false). */
+    private fun isOn(value: String?): Boolean = value == null || value == "1" || value.equals("true", true)
+
+    /**
+     * A table style defined in styles.xml (tableStyles/tableStyle) from dxf formats, e.g.
+     * "TableStylePreset3_Accent1" written by WPS/Excel; the built-in names are drawn by TableStyleKit.
+     */
+    private fun processCustomTableStyle(element: Element) {
+        val name = element.attributeValue("name") ?: return
+        val formats = tableFormatManager ?: return
+        val book = book!!
+        fun cellStyle(dxfId: Int): SSTableCellStyle? {
+            val dxf = formats.getFormat(dxfId) ?: return null
+            val fill = dxf.getFillPattern()?.let {
+                // in a dxf the solid fill color is bgColor; fgColor is used when that is missing
+                if (it.backgoundColor != 0) it.backgoundColor else it.foregroundColor
+            }
+            val style = SSTableCellStyle(fill)
+            if (dxf.getFontIndex() >= 0) {
+                book.getFont(dxf.getFontIndex().toInt())?.let { style.setFontColor(book.getColor(it.getColorIndex())) }
+            }
+            if (dxf.getBorderTop().toInt() != 0) style.setBorderColor(book.getColor(dxf.getBorderTopColorIdx().toInt()))
+            else if (dxf.getBorderLeft().toInt() != 0) style.setBorderColor(book.getColor(dxf.getBorderLeftColorIdx().toInt()))
+            return style
+        }
+        val parts = HashMap<String, SSTableCellStyle>()
+        for (e in element.elements()!!.filterIsInstance<Element>()) {
+            val type = e.attributeValue("type") ?: continue
+            val dxfId = e.attributeValue("dxfId")?.toIntOrNull() ?: continue
+            cellStyle(dxfId)?.let { parts[type] = it }
+        }
+        if (parts.isEmpty()) return
+        val whole = parts["wholeTable"]
+        val table = SSTableStyle()
+        table.setFirstRow(parts["headerRow"] ?: whole)
+        table.setLastRow(parts["totalRow"] ?: whole)
+        table.setFirstCol(parts["firstColumn"])
+        table.setLastCol(parts["lastColumn"])
+        table.setBand1H(parts["firstRowStripe"] ?: whole)
+        table.setBand2H(parts["secondRowStripe"] ?: whole)
+        table.setBand1V(parts["firstColumnStripe"] ?: whole)
+        table.setBand2V(parts["secondColumnStripe"] ?: whole)
+        book.addCustomTableStyle(name, table)
+    }
+
     private fun processTableFormat(element: Element) {
         if (tableFormatManager == null) {
             tableFormatManager = TableFormatManager(5)
@@ -221,20 +276,21 @@ class StyleReader private constructor() {
     }
 
     private inner class StyleSaxHandler : ElementHandler {
-        override fun onStart(path: ElementPath) {}
-        override fun onEnd(path: ElementPath) {
+        override fun onStart(path: ElementPath?) {}
+        override fun onEnd(path: ElementPath?) {
             if (iReader!!.isAborted()) throw AbortReaderError("abort Reader")
-            val element = path.getCurrent()
-            when (element.getName()) {
+            val element = path?.current
+            when (element!!.name) {
                 "numFmt" -> { val format = processNumberFormat(element); numFmts!![format.getNumberFormatID().toInt()] = format }
                 "font" -> book!!.addFont(fontIndex++, processFont(element))
                 "fill" -> fills!![fillIndex++] = processFill(element)
                 "border" -> cellBorders!![borderIndex++] = processBorder(element)
                 "xf" -> book!!.addCellStyle(styleIndex++, processCellStyle(element))
-                "rgbColor" -> book!!.addColor(indexedColor++, (0xff shl 24) or element.attributeValue("rgb").takeLast(6).toInt(16))
+                "rgbColor" -> book!!.addColor(indexedColor++, (0xff shl 24) or element!!.attributeValue("rgb")!!.takeLast(6).toInt(16))
                 "dxf" -> processTableFormat(element)
+                "tableStyle" -> processCustomTableStyle(element)
             }
-            element.detach()
+            element!!.detach()
         }
     }
 

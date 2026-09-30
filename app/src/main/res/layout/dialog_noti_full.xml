@@ -5,8 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:padding="@dimen/_12sdp"
-    app:bgColor="@color/white"
-    app:cornerRadius="@dimen/_12sdp">
+    app:uiBackgroundColor="@color/white"
+    app:uiCornerRadius="@dimen/_12sdp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -48,11 +48,11 @@
             android:textAlignment="center"
             android:textColor="@color/white"
             android:textSize="@dimen/_12sdp"
-            app:bgGradientEnd="@color/grdEnd"
-            app:bgGradientStart="@color/grdStart"
-            app:bgIsGradient="true"
-            app:cornerRadius="@dimen/_20sdp"
-            app:tvColor="@color/white" />
+            app:uiBackgroundGradientEnd="@color/grdEnd"
+            app:uiBackgroundGradientStart="@color/grdStart"
+            app:uiBackgroundGradientEnabled="true"
+            app:uiCornerRadius="@dimen/_20sdp"
+            app:uiTextColor="@color/white" />
     </LinearLayout>
 
 </com.ui.baselib.widget.layout.UiConstraintLayout>

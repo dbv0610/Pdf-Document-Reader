@@ -18,13 +18,16 @@ import androidx.navigation.fragment.findNavController
 import com.ui.baselib.R
 import com.ui.baselib.api.putAnySafe
 
+private const val TAG = "NavigationExtensions"
+
 private fun argsToBundleOrNull(args: Array<out Pair<String, Any?>>): Bundle? {
     if (args.isEmpty()) return null
     return Bundle().apply {
         args.forEach { (key, value) ->
             try {
                 putAnySafe(key, value)
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                Log.e(TAG, "Skip argument \"$key\"", e)
             }
         }
     }
@@ -108,7 +111,8 @@ fun NavController.safeNavigate(
         }
 
         navigate(destination, bundle, navOptions)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        Log.e(TAG, "safeNavigate failed for destination=$destination", e)
     }
 }
 
@@ -202,7 +206,8 @@ fun NavController.navigateDeepLink(
             .fromUri(Uri.parse(deepLink))
             .build()
         navigate(request, navOptions)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        Log.e(TAG, "navigateDeepLink failed for $deepLink", e)
     }
 }
 
@@ -321,14 +326,16 @@ fun Fragment.navigatePopUpTo(
             popEnterAnim = popEnterAnim,
             popExitAnim = popExitAnim
         )
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        Log.e(TAG, "navigatePopUpTo failed for destination=$destination", e)
     }
 }
 
 fun <T> Fragment.setNavigationResult(key: String, value: T) {
     try {
         findNavController().setResult(key, value)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        Log.e(TAG, "setNavigationResult failed for key=$key", e)
     }
 }
 

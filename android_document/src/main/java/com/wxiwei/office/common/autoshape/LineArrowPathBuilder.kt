@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          LineArrowPathBuilder.java
  *  
  * 编译器:            android2.2
@@ -168,7 +175,7 @@ object LineArrowPathBuilder {
             endY,
             width * zoom,
             length * zoom,
-            arrow.getType()
+            arrow.type
         )
     }
 
@@ -230,7 +237,7 @@ object LineArrowPathBuilder {
         }
 
 
-        return buildArrowPath(end.x, end.y, endX, endY, width, length, arrow.getType())
+        return buildArrowPath(end.x, end.y, endX, endY, width, length, arrow.type)
     }
 
     @JvmStatic
@@ -303,7 +310,7 @@ object LineArrowPathBuilder {
             endY,
             width.toFloat(),
             length.toFloat(),
-            arrow.getType()
+            arrow.type
         )
     }
 

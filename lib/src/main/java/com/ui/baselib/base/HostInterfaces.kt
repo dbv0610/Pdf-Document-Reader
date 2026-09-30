@@ -20,6 +20,8 @@ import androidx.annotation.AnimRes
 import androidx.annotation.StringRes
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnAttach
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -263,6 +265,10 @@ class MainHandlerHolder {
  * Wraps the "launch for result with a one-shot callback" pattern shared by
  * BaseActivity and BaseFragment. Must be constructed while [caller] can still
  * register a launcher (i.e. as a field initializer, before STARTED).
+ *
+ * Only one launch is tracked at a time: a second [launch] before the first result replaces
+ * its callback. The callback is also lost if the host is recreated (rotation, process death)
+ * while the other activity is open; handle results that must survive that in `onResult`.
  */
 class ActivityResultHelper(
     caller: ActivityResultCaller,
@@ -313,6 +319,25 @@ val Activity.statusBarInsetPx: Int
 
 val Activity.navigationBarInsetPx: Int
     get() = systemBarInsets()?.bottom ?: navigationBarHeightPx
+
+/**
+ * Pads the top of this view for the status bar. [fallbackPx] is applied right away so the first
+ * frame doesn't jump; once the window reports insets, the real status bar height replaces it
+ * (it differs from the dimen on notched devices and in landscape). Insets are passed on
+ * unconsumed, so children still receive them.
+ */
+internal fun View.padForStatusBar(fallbackPx: Int) {
+    val basePaddingTop = paddingTop
+    updatePadding(top = basePaddingTop + fallbackPx)
+    ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+        // Ignoring visibility: the bars are hidden in immersive mode but can be swiped in.
+        val top = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars()).top
+        v.updatePadding(top = basePaddingTop + top)
+        insets
+    }
+    // A view added after the window dispatched insets (a fragment's root) must ask again.
+    doOnAttach { ViewCompat.requestApplyInsets(it) }
+}
 
 /* ------------------------------------------------- Keyboard (low level) */
 /* Called by KeyboardHost's default methods — keep the actual IMM calls here. */

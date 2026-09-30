@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          	SSEditor.java
  *
  * 编译器:            android2.2
@@ -32,27 +39,27 @@ class SSEditor(ss: Spreadsheet?) : IWord {
     private var ss: Spreadsheet? = ss
 
     override fun getHighlight(): IHighlight? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun modelToView(offset: Long, rect: Rectangle, isBack: Boolean): Rectangle? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getDocument(): IDocument? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getText(start: Long, end: Long): String {
-        // TODO Auto-generated method stub
+     
         return ""
     }
 
     override fun viewToModel(x: Int, y: Int, isBack: Boolean): Long {
-        // TODO Auto-generated method stub
+     
         return 0
     }
 
@@ -61,17 +68,17 @@ class SSEditor(ss: Spreadsheet?) : IWord {
     }
 
     override fun getParagraphAnimation(pargraphID: Int): IAnimation? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getTextBox(): IShape? {
-        // TODO Auto-generated method stub
+     
         return null
     }
 
     override fun getControl(): IControl {
-        // TODO Auto-generated method stub
+     
         return ss!!.getControl()
     }
 

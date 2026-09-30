@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.reader.pdfviewer
 
 import android.content.Context
@@ -69,6 +76,8 @@ internal class DocumentDecoder(
         if (pdfViewReference.get() == null) throw NullPointerException("pdfView == null")
         val pdfDocument = docSource.createDocument(contextReference.get(), pdfiumCore, password)
             ?: throw IllegalStateException("Cannot create document")
+        // form fields show their values and can be filled in (see PDFView.getFormFields)
+        pdfiumCore?.initForms(pdfDocument)
         return PdfFile(pdfiumCore, pdfDocument, userPages, displayOptions)
     }
 }

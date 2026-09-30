@@ -9,6 +9,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.ui.baselib.R
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -47,7 +48,7 @@ object ShareThrottler {
  */
 fun Context.shareImages(
     imagePaths: List<String>,
-    title: String = "Share images via"
+    title: String = getString(R.string.baselib_share_images_title)
 ) {
     val imageUris = ArrayList<Uri>()
 
@@ -60,7 +61,7 @@ fun Context.shareImages(
     }
 
     if (imageUris.isEmpty()) {
-        Toast.makeText(this, "No valid images to share", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.baselib_no_images_to_share, Toast.LENGTH_SHORT).show()
         return
     }
 
@@ -92,12 +93,12 @@ fun Uri.toShareableUri(context: Context): Uri {
 fun Context.shareFile(
     path: String,
     mimeType: String = "*/*",
-    title: String = "Share File"
+    title: String = getString(R.string.baselib_share_file_title)
 ) {
     val file = File(path)
 
     if (!file.exists()) {
-        Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.baselib_file_not_found, Toast.LENGTH_SHORT).show()
         return
     }
 
@@ -121,7 +122,7 @@ fun Context.shareFile(
 fun Context.shareFiles(
     paths: List<String>,
     mimeType: String = "*/*",
-    title: String = "Share Files"
+    title: String = getString(R.string.baselib_share_files_title)
 ) {
     val uris = paths.mapNotNull { path ->
         val file = File(path)
@@ -131,7 +132,7 @@ fun Context.shareFiles(
     }
 
     if (uris.isEmpty()) {
-        Toast.makeText(this, "No valid files to share", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.baselib_no_files_to_share, Toast.LENGTH_SHORT).show()
         return
     }
 
@@ -150,13 +151,15 @@ fun Context.shareFiles(
  * @param bitmap The bitmap to share
  * @param fileName File name for the cached image
  * @param title Chooser dialog title
- * @param deleteDelay Delay in ms before deleting cached file (default: 5000ms)
+ * @param deleteDelay Delay in ms before deleting the cached file, or null (default) to keep it.
+ *   The receiving app reads the file whenever the user finishes picking a target, which can
+ *   take longer than any fixed delay; the next share with the same [fileName] overwrites it.
  */
 fun Context.shareBitmap(
     bitmap: Bitmap,
     fileName: String = "shared_image.png",
-    title: String = "Share Photo",
-    deleteDelay: Long = 5000
+    title: String = getString(R.string.baselib_share_photo_title),
+    deleteDelay: Long? = null
 ) {
     try {
         val cachePath = File(cacheDir, "images")
@@ -177,16 +180,17 @@ fun Context.shareBitmap(
         }
         startActivity(Intent.createChooser(shareIntent, title))
 
-        // Clean up after delay
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (file.exists()) {
-                file.delete()
-            }
-        }, deleteDelay)
+        if (deleteDelay != null) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (file.exists()) {
+                    file.delete()
+                }
+            }, deleteDelay)
+        }
 
     } catch (e: IOException) {
         e.printStackTrace()
-        Toast.makeText(this, "Failed to share image", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.baselib_share_image_failed, Toast.LENGTH_SHORT).show()
     }
 }
 // endregion

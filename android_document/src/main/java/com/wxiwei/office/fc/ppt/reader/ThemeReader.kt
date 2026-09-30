@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           ThemeReader.java
  *  
  * 编译器:             android2.2
@@ -45,7 +52,7 @@ class ThemeReader {
         val saxreader = SAXReader()
         val `in` = themePart.getInputStream()
         val poiTheme = saxreader.read(`in`)
-        val root = poiTheme.getRootElement()
+        val root = poiTheme!!.rootElement
         if (root != null) {
             val themeElements = root.element("themeElements")
             if (themeElements != null) {
@@ -54,16 +61,16 @@ class ThemeReader {
 
                 // color map
                 val colorMap: MutableMap<String, Int> = HashMap<String, Int>()
-                val it = clrScheme.elementIterator()
-                while (it.hasNext()) {
-                    val clr = it.next() as Element
-                    val name = clr.getName()
+                val it = clrScheme!!.elementIterator()
+                while (it!!.hasNext()) {
+                    val clr = it!!.next() as Element
+                    val name = clr.name ?: continue
                     val srgbClr = clr.element("srgbClr")
                     val sysClr = clr.element("sysClr")
                     if (srgbClr != null) {
-                        colorMap.put(name, Color.parseColor("#" + srgbClr.attributeValue("val")))
+                        colorMap.put(name, Color.parseColor("#" + (srgbClr.attributeValue("val") ?: "")))
                     } else if (sysClr != null) {
-                        colorMap.put(name, Color.parseColor("#" + sysClr.attributeValue("lastClr")))
+                        colorMap.put(name, Color.parseColor("#" + (sysClr.attributeValue("lastClr") ?: "")))
                     } else {
                         colorMap.put(name, Color.WHITE)
                     }

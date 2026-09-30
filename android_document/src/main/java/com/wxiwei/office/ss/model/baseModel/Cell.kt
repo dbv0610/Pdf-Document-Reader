@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          Cell.java
  *
  * 编译器:            android2.2
@@ -60,7 +67,10 @@ open class Cell
     /** OOXML formula without =; cell type/value remain the cached display result. */
     var formula: String? = null
 
-    private var prop: CellProperty? = CellProperty()
+    /** Made on the first property set: most cells have none, and a sheet can hold millions of cells. */
+    private var prop: CellProperty? = null
+
+    private fun props(): CellProperty = prop ?: CellProperty().also { prop = it }
 
     /**
      *
@@ -97,12 +107,12 @@ open class Cell
 
     fun setCellNumericType(numericType: Short) {
         if (cellType == CELL_TYPE_NUMERIC) {
-            prop!!.setCellProp(CellProperty.CELLPROPID_NUMERICTYPE, numericType)
+            props().setCellProp(CellProperty.CELLPROPID_NUMERICTYPE, numericType)
         }
     }
 
     fun getCellNumericType(): Short {
-        return prop!!.getCellNumericType()
+        return (prop ?: NO_PROPS).getCellNumericType()
     }
 
     /**
@@ -200,14 +210,14 @@ open class Cell
      * @return Returns the rangeAddressIndex.
      */
     fun getRangeAddressIndex(): Int {
-        return prop!!.getCellMergeRangeAddressIndex()
+        return (prop ?: NO_PROPS).getCellMergeRangeAddressIndex()
     }
 
     /**
      * @param rangeAddressIndex The rangeAddressIndex to set.
      */
     fun setRangeAddressIndex(rangeAddressIndex: Int) {
-        prop!!.setCellProp(CellProperty.CELLPROPID_MERGEDRANGADDRESS, rangeAddressIndex)
+        props().setCellProp(CellProperty.CELLPROPID_MERGEDRANGADDRESS, rangeAddressIndex)
     }
 
     /**
@@ -238,14 +248,14 @@ open class Cell
      * @return Returns the link.
      */
     fun getHyperLink(): Hyperlink? {
-        return prop!!.getCellHyperlink()
+        return (prop ?: NO_PROPS).getCellHyperlink()
     }
 
     /**
      * @param link The link to set.
      */
     fun setHyperLink(link: Hyperlink?) {
-        prop!!.setCellProp(CellProperty.CELLPROPID_HYPERLINK, link)
+        props().setCellProp(CellProperty.CELLPROPID_HYPERLINK, link)
     }
 
     /**
@@ -262,25 +272,27 @@ open class Cell
         this.styleIndex = styleIndex
     }
 
+    fun getCellStyleIndex(): Int = styleIndex
+
     fun hasValidValue(): Boolean {
         return value != null
     }
 
     fun setSTRoot(root: STRoot?) {
         if (sheet!!.getState() == Sheet.State_Accomplished) {
-            prop!!.setCellProp(CellProperty.CELLPROPID_STROOT, sheet!!.addSTRoot(root))
+            props().setCellProp(CellProperty.CELLPROPID_STROOT, sheet!!.addSTRoot(root))
         }
     }
 
     fun getSTRoot(): STRoot? {
-        return sheet!!.getSTRoot(prop!!.getCellSTRoot())
+        return sheet!!.getSTRoot((prop ?: NO_PROPS).getCellSTRoot())
     }
 
     /**
      *
      */
     fun removeSTRoot() {
-        prop!!.removeCellSTRoot()
+        prop?.removeCellSTRoot()
     }
 
     /**
@@ -288,7 +300,7 @@ open class Cell
      * @param index
      */
     fun setExpandedRangeAddressIndex(index: Int) {
-        prop!!.setCellProp(CellProperty.CELLPROPID_EXPANDRANGADDRESS, index)
+        props().setCellProp(CellProperty.CELLPROPID_EXPANDRANGADDRESS, index)
     }
 
     /**
@@ -296,14 +308,14 @@ open class Cell
      * @return
      */
     fun getExpandedRangeAddressIndex(): Int {
-        return prop!!.getExpandCellRangeAddressIndex()
+        return (prop ?: NO_PROPS).getExpandCellRangeAddressIndex()
     }
 
     /**
      * table infomation
      */
     fun setTableInfo(table: SSTable?) {
-        prop!!.setCellProp(CellProperty.CELLPROPID_TABLEINFO, table)
+        props().setCellProp(CellProperty.CELLPROPID_TABLEINFO, table)
     }
 
     /**
@@ -311,7 +323,7 @@ open class Cell
      * @return
      */
     fun getTableInfo(): SSTable? {
-        return prop!!.getTableInfo()
+        return (prop ?: NO_PROPS).getTableInfo()
     }
 
     /**
@@ -378,5 +390,8 @@ open class Cell
 
         //
         private val CALENDAR: Calendar = GregorianCalendar()
+
+        /** Read by cells without properties; never written to. */
+        private val NO_PROPS = CellProperty()
     }
 }

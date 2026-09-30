@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          LineView.java
  *
  * 编译器:            android2.2
@@ -86,9 +93,57 @@ class LineView : AbstractView {
                 x += (span - width) / 2
             WPAttrConstant.PARA_HOR_ALIGN_RIGHT -> // 居右
                 x += (span - width)
+            WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED -> justify(span)
             else -> {
             }
         }
+    }
+
+    /**
+     * Spreads the free width of the line over its spaces, like Word's "both" alignment. The last
+     * line of the paragraph and lines ended by a manual break keep their natural spacing, and
+     * spaces at the end of the line do not stretch.
+     */
+    private fun justify(span: Int) {
+        val free = span - width
+        val para = getElement() ?: return
+        val lineEnd = getEndOffset(null)
+        if (free <= 0 || lineEnd >= para.getEndOffset()) return
+        val text = para.getText(null) ?: return
+        val base = para.getStartOffset()
+        // a manual line break ends this line: not justified
+        val lastChar = (lineEnd - 1 - base).toInt()
+        if (lastChar in text.indices && text[lastChar] == '\u000B') return
+        var trimEnd = lineEnd
+        while (trimEnd > getStartOffset(null) && (trimEnd - 1 - base).toInt().let { it in text.indices && text[it] == ' ' }) {
+            trimEnd--
+        }
+        var spaces = 0
+        var leaf = getChildView()
+        while (leaf != null) {
+            if (leaf is LeafView && leaf.getType() == WPViewConstant.LEAF_VIEW) {
+                if (leaf.justifyExtra > 0f) return // already justified (layout pass repeated)
+                spaces += leaf.spaceCount(trimEnd)
+            }
+            leaf = leaf.getNextView()
+        }
+        if (spaces == 0) return
+        val extra = free.toFloat() / spaces
+        var shift = 0f
+        leaf = getChildView()
+        while (leaf != null) {
+            leaf.setX(leaf.getX() + Math.round(shift))
+            if (leaf is LeafView && leaf.getType() == WPViewConstant.LEAF_VIEW) {
+                val n = leaf.spaceCount(trimEnd)
+                if (n > 0) {
+                    leaf.justifyExtra = extra
+                    shift += n * extra
+                    leaf.setWidth(leaf.getWidth() + Math.round(n * extra))
+                }
+            }
+            leaf = leaf.getNextView()
+        }
+        width = span
     }
 
     /**
@@ -172,14 +227,18 @@ class LineView : AbstractView {
         }
 
         if (processline) {
-            value = (value - heightExceptShape) / 2
-            setTopIndent(value.toInt())
-            setBottomIndent(value.toInt())
-            setY(getY() + value.toInt())
+            // split the extra height without losing pixels: truncating both halves made every
+            // grid line up to 1px short, so pages held extra lines and anchors drifted
+            val extra = Math.round(value) - heightExceptShape
+            val top = Math.floorDiv(extra, 2)
+            val bottom = extra - top
+            setTopIndent(top)
+            setBottomIndent(bottom)
+            setY(getY() + top)
             if (bnView != null) {
-                bnView.setTopIndent(value.toInt())
-                bnView.setBottomIndent(value.toInt())
-                bnView.setY(value.toInt())
+                bnView.setTopIndent(top)
+                bnView.setBottomIndent(bottom)
+                bnView.setY(top)
             }
         }
     }
@@ -222,6 +281,7 @@ class LineView : AbstractView {
     }
 
     override fun draw(canvas: Canvas, originX: Int, originY: Int, zoom: Float) {
+        DebugBounds.draw(canvas, this, originX, originY, zoom, DebugBounds.LINE)
         canvas.save()
         val word = getContainer() as IWord?
         val dX = (x * zoom).toInt() + originX

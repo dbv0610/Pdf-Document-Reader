@@ -12,6 +12,8 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,7 +64,7 @@ fun Context.saveImageToInternalStorage(
     fileName: String,
     callback: (String?) -> Unit
 ) {
-    CoroutineScope(Dispatchers.IO).launch {
+    callbackScope().launch(Dispatchers.IO) {
         val file = File(filesDir, "$fileName.png")
         val result = try {
             FileOutputStream(file).use { outputStream ->
@@ -113,17 +115,22 @@ suspend fun Context.saveImageToGallery(
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
 
+        var uri: Uri? = null
         try {
-            contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)?.also { uri ->
-                contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-                }
-                contentValues.clear()
-                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                contentResolver.update(uri, contentValues, null, null)
-            }
+            uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                ?: return@withContext null
+            val written = contentResolver.openOutputStream(uri)?.use { outputStream ->
+                bitmap.compress(compressFormatFor(mimeType), 100, outputStream)
+            } ?: false
+            if (!written) throw IOException("Failed to write image")
+            contentValues.clear()
+            contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            contentResolver.update(uri, contentValues, null, null)
+            uri
         } catch (e: Exception) {
             Log.e("ImageSaving", "Error saving image to gallery", e)
+            // Don't leave an invisible pending row behind.
+            uri?.let { runCatching { contentResolver.delete(it, null, null) } }
             null
         }
     } else {
@@ -139,7 +146,7 @@ suspend fun Context.saveImageToGallery(
 
             val imageFile = File(directory, fileName)
             FileOutputStream(imageFile).use { outputStream ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                bitmap.compress(compressFormatFor(mimeType), 100, outputStream)
             }
 
             val uri = Uri.fromFile(imageFile)
@@ -173,7 +180,7 @@ fun Context.saveImageToGallery(
     mimeType: String = "image/png",
     callback: (Uri?) -> Unit
 ) {
-    CoroutineScope(Dispatchers.IO).launch {
+    callbackScope().launch(Dispatchers.IO) {
         val result = saveImageToGallery(bitmap, fileName, folderName, mimeType)
         withContext(Dispatchers.Main) {
             callback(result)
@@ -188,7 +195,7 @@ fun Context.saveImageToGallery(
 // ============================================================================
 
 /**
- * Move a cached file to gallery (suspend version).
+ * Copy a cached file into the gallery (suspend version). The cached file is kept.
  * Runs on IO dispatcher.
  *
  * @param cacheFilePath Path to the cached file
@@ -272,7 +279,7 @@ suspend fun Context.moveImageToGallery(
 }
 
 /**
- * Move a cached file to gallery with callback.
+ * Copy a cached file into the gallery with callback. The cached file is kept.
  * File I/O runs on IO thread, callback invoked on Main thread.
  *
  * @param cacheFilePath Path to the cached file
@@ -286,7 +293,7 @@ fun Context.moveImageToGallery(
     mimeType: String = "image/png",
     callback: (Uri?) -> Unit
 ) {
-    CoroutineScope(Dispatchers.IO).launch {
+    callbackScope().launch(Dispatchers.IO) {
         val result = moveImageToGallery(cacheFilePath, destinationPath, mimeType)
         withContext(Dispatchers.Main) {
             callback(result)
@@ -345,7 +352,7 @@ fun Context.saveImageToDownloads(
     folderName: String,
     callback: (String) -> Unit
 ) {
-    CoroutineScope(Dispatchers.IO).launch {
+    callbackScope().launch(Dispatchers.IO) {
         val result = saveImageToDownloads(bitmap, fileName, folderName)
         withContext(Dispatchers.Main) {
             callback(result)
@@ -373,12 +380,13 @@ suspend fun Context.saveFileToDownloads(
     if (!cacheFile.exists()) {
         return@withContext ""
     }
+    val mime = guessMimeType(fileName)
 
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
                 put(
                     MediaStore.MediaColumns.RELATIVE_PATH,
                     "${Environment.DIRECTORY_DOWNLOADS}${File.separator}$folderName"
@@ -412,7 +420,7 @@ suspend fun Context.saveFileToDownloads(
             MediaScannerConnection.scanFile(
                 this@saveFileToDownloads,
                 arrayOf(newFile.absolutePath),
-                arrayOf("image/png")
+                arrayOf(mime)
             ) { _, _ -> }
 
             newFile.absolutePath
@@ -438,7 +446,7 @@ fun Context.saveFileToDownloads(
     folderName: String,
     callback: (String) -> Unit
 ) {
-    CoroutineScope(Dispatchers.IO).launch {
+    callbackScope().launch(Dispatchers.IO) {
         val result = saveFileToDownloads(cachePath, fileName, folderName)
         withContext(Dispatchers.Main) {
             callback(result)
@@ -458,7 +466,7 @@ fun Context.saveFileToDownloads(
  *
  * @param bitmap The bitmap to save
  * @param fileName Optional file name (default: timestamp-based)
- * @param quality Compression quality (0-100)
+ * @param quality Compression quality (0-100); ignored by PNG, which is lossless
  * @return File object of saved file
  */
 suspend fun Context.saveBitmapToCache(
@@ -479,7 +487,7 @@ suspend fun Context.saveBitmapToCache(
  *
  * @param bitmap The bitmap to save
  * @param fileName Optional file name (default: timestamp-based)
- * @param quality Compression quality (0-100)
+ * @param quality Compression quality (0-100); ignored by PNG, which is lossless
  * @param callback Callback with File object of saved file
  */
 fun Context.saveBitmapToCache(
@@ -488,7 +496,7 @@ fun Context.saveBitmapToCache(
     quality: Int = 70,
     callback: (File) -> Unit
 ) {
-    CoroutineScope(Dispatchers.IO).launch {
+    callbackScope().launch(Dispatchers.IO) {
         val result = saveBitmapToCache(bitmap, fileName, quality)
         withContext(Dispatchers.Main) {
             callback(result)
@@ -529,7 +537,7 @@ suspend fun Context.saveDrawableToCache(drawableId: Int): String? =
  * @param callback Callback with absolute path to saved file, or null if failed
  */
 fun Context.saveDrawableToCache(drawableId: Int, callback: (String?) -> Unit) {
-    CoroutineScope(Dispatchers.IO).launch {
+    callbackScope().launch(Dispatchers.IO) {
         val result = saveDrawableToCache(drawableId)
         withContext(Dispatchers.Main) {
             callback(result)
@@ -542,6 +550,21 @@ fun Context.saveDrawableToCache(drawableId: Int, callback: (String?) -> Unit) {
 // ============================================================================
 // region Internal Helpers
 // ============================================================================
+
+/**
+ * Ties callback-style saves to the caller's lifecycle when it has one, so the callback can't
+ * run after the Activity is destroyed.
+ */
+private fun Context.callbackScope(): CoroutineScope =
+    (this as? LifecycleOwner)?.lifecycleScope ?: CoroutineScope(Dispatchers.IO)
+
+@Suppress("DEPRECATION")
+private fun compressFormatFor(mimeType: String): Bitmap.CompressFormat = when (mimeType.lowercase()) {
+    "image/jpeg", "image/jpg" -> Bitmap.CompressFormat.JPEG
+    "image/webp" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+    else -> Bitmap.CompressFormat.PNG
+}
 
 private fun Context.getMediaStorePath(uri: Uri): String {
     return try {
@@ -632,19 +655,7 @@ private fun Context.saveFileUsingMediaStore(
         put(MediaStore.MediaColumns.DATE_ADDED, System.currentTimeMillis() / 1000)
         put(MediaStore.MediaColumns.DATE_MODIFIED, System.currentTimeMillis() / 1000)
     }
-    val contentUri = when (environment) {
-        Environment.DIRECTORY_DOWNLOADS -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
-        Environment.DIRECTORY_PICTURES -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        Environment.DIRECTORY_DOCUMENTS -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        Environment.DIRECTORY_MOVIES -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        Environment.DIRECTORY_MUSIC -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        else -> when {
-            mime.startsWith("image/") -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            mime.startsWith("video/") -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-            mime.startsWith("audio/") -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            else -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
-        }
-    }
+    val contentUri = mediaStoreCollection(environment, mime)
     var uri: Uri? = null
     try {
         uri = cr.insert(contentUri, values)
@@ -663,6 +674,22 @@ private fun Context.saveFileUsingMediaStore(
         uri?.let { runCatching { cr.delete(it, null, null) } }
     }
     return null
+}
+
+/** The MediaStore collection whose allowed top-level directory matches [environment]. */
+@RequiresApi(Build.VERSION_CODES.Q)
+private fun mediaStoreCollection(environment: String, mime: String): Uri = when (environment) {
+    Environment.DIRECTORY_DOWNLOADS -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
+    Environment.DIRECTORY_PICTURES -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    Environment.DIRECTORY_DOCUMENTS -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    Environment.DIRECTORY_MOVIES -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+    Environment.DIRECTORY_MUSIC -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+    else -> when {
+        mime.startsWith("image/") -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        mime.startsWith("video/") -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        mime.startsWith("audio/") -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        else -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
+    }
 }
 
 @Suppress("DEPRECATION")
@@ -751,7 +778,7 @@ fun Context.saveStreamToStorage(
         }
         var uri: Uri? = null
         try {
-            uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            uri = cr.insert(mediaStoreCollection(environment, mime), values)
             if (uri != null) {
                 cr.openOutputStream(uri)?.use { out -> input.copyTo(out) }
                     ?: throw IOException("OpenOutputStream failed")
@@ -768,7 +795,7 @@ fun Context.saveStreamToStorage(
     } else {
         try {
             @Suppress("DEPRECATION")
-            val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val base = Environment.getExternalStoragePublicDirectory(environment)
             val dir = File(base, folderName).apply { if (!exists()) mkdirs() }
             val dst = File(dir, fileName)
             FileOutputStream(dst).use { out -> input.copyTo(out) }

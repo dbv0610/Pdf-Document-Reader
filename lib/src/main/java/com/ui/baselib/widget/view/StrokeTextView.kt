@@ -12,6 +12,7 @@ import androidx.appcompat.widget.AppCompatTextView
 import com.ui.baselib.R
 import kotlin.math.ceil
 import androidx.core.graphics.withTranslation
+import com.ui.baselib.widget.layout.getColorList
 
 /**
  * A TextView that draws text with an outline stroke effect.
@@ -58,23 +59,23 @@ class StrokeTextView @JvmOverloads constructor(
         context.obtainStyledAttributes(attrs, R.styleable.StrokeTextView).apply {
             try {
                 // Text stroke attrs
-                textStrokeWidth = getDimension(R.styleable.StrokeTextView_textStrokeWidth, 0f)
-                textStrokeColor = getColor(R.styleable.StrokeTextView_textStrokeColor, Color.WHITE)
-                val strokeGradientStr = getString(R.styleable.StrokeTextView_textStrokeGradient)
-                textStrokeGradient = strokeGradientStr?.parseHexColors()
-                textStrokeGradientOrientation = getInt(R.styleable.StrokeTextView_textStrokeGdOrientation, 6).toGradientOrientation()
+                textStrokeWidth = getDimension(R.styleable.StrokeTextView_uiTextStrokeWidth, 0f)
+                textStrokeColor = getColor(R.styleable.StrokeTextView_uiTextStrokeColor, Color.WHITE)
+                textStrokeGradient = getColorList(R.styleable.StrokeTextView_uiTextStrokeGradientColors)
+                    ?.takeIf { it.isNotEmpty() }
+                textStrokeGradientOrientation = getInt(R.styleable.StrokeTextView_uiTextStrokeGradientOrientation, 6).toGradientOrientation()
 
                 // Text fill attrs
-                textFillColor = getColor(R.styleable.StrokeTextView_textFillColor, currentTextColor)
-                val fillGradientStr = getString(R.styleable.StrokeTextView_textFillGradient)
-                textFillGradient = fillGradientStr?.parseHexColors()
-                textFillGradientOrientation = getInt(R.styleable.StrokeTextView_textFillGdOrientation, 6).toGradientOrientation()
+                textFillColor = getColor(R.styleable.StrokeTextView_uiTextFillColor, currentTextColor)
+                textFillGradient = getColorList(R.styleable.StrokeTextView_uiTextFillGradientColors)
+                    ?.takeIf { it.isNotEmpty() }
+                textFillGradientOrientation = getInt(R.styleable.StrokeTextView_uiTextFillGradientOrientation, 6).toGradientOrientation()
 
                 // Text shadow attrs
-                textShadowRadius = getDimension(R.styleable.StrokeTextView_textShadowRadius, 0f)
-                textShadowDx = getDimension(R.styleable.StrokeTextView_textShadowDx, 0f)
-                textShadowDy = getDimension(R.styleable.StrokeTextView_textShadowDy, 0f)
-                textShadowColor = getColor(R.styleable.StrokeTextView_textShadowColor, Color.TRANSPARENT)
+                textShadowRadius = getDimension(R.styleable.StrokeTextView_uiTextShadowRadius, 0f)
+                textShadowDx = getDimension(R.styleable.StrokeTextView_uiTextShadowDx, 0f)
+                textShadowDy = getDimension(R.styleable.StrokeTextView_uiTextShadowDy, 0f)
+                textShadowColor = getColor(R.styleable.StrokeTextView_uiTextShadowColor, Color.TRANSPARENT)
             } finally {
                 recycle()
             }
@@ -260,16 +261,6 @@ class StrokeTextView @JvmOverloads constructor(
     private fun Int.toGradientOrientation(): GradientOrientation =
         GradientOrientation.entries.getOrElse(this) { GradientOrientation.LEFT_TO_RIGHT }
 
-    private fun String.parseHexColors(): IntArray? {
-        return trim().split(COLOR_SPLIT_REGEX)
-            .mapNotNull { if (it.isValidHexColor()) Color.parseColor(if (it.startsWith("#")) it else "#$it") else null }
-            .takeIf { it.isNotEmpty() }
-            ?.toIntArray()
-    }
-
-    private fun String.isValidHexColor(): Boolean =
-        matches(HEX_COLOR_REGEX)
-
     private fun GradientOrientation.toCoordinates(w: Float, h: Float): FloatArray = when (this) {
         GradientOrientation.TOP_TO_BOTTOM -> floatArrayOf(0f, 0f, 0f, h)
         GradientOrientation.BOTTOM_TO_TOP -> floatArrayOf(0f, h, 0f, 0f)
@@ -346,9 +337,4 @@ class StrokeTextView @JvmOverloads constructor(
     }
 
     fun applyStyle(block: StrokeTextView.() -> Unit) = apply(block)
-
-    companion object {
-        private val COLOR_SPLIT_REGEX = Regex("\\s+")
-        private val HEX_COLOR_REGEX = Regex("^#?[0-9a-fA-F]{6,8}$")
-    }
 }

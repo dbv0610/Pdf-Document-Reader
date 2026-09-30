@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">A210 Pdf Reader</string>
+    <string name="app_name" translatable="false">Document Reader</string>
     <string name="fb_app_id" translatable="false">1111111111</string>
     <string name="fb_client_token" translatable="false">2222222222222222222222</string>
 
@@ -160,6 +160,9 @@
     <string name="saved_successfully">Saved</string>
     <string name="search_error_occurred">Search error occurred</string>
     <string name="slide_show">Slide Show</string>
+    <string name="slide_list">Slide list</string>
+    <string name="export_pdf">Export to PDF</string>
+    <string name="export_images">Export slides as images</string>
     <string name="some_errors_occurred_please_try_again">Some errors occurred please try again</string>
     <string name="thumbnail">Thumbnail</string>
     <string name="txt" translatable="false">TXT</string>

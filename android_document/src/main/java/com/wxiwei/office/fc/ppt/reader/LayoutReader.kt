@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           LayoutReader.java
  *  
  * 编译器:             android2.2
@@ -62,7 +69,7 @@ class LayoutReader {
         val saxreader = SAXReader()
         val `in` = layoutPart.getInputStream()
         val poiLayout = saxreader.read(`in`)
-        val layout = poiLayout.getRootElement()
+        val layout = poiLayout!!.rootElement
         var pgLayout: PGLayout? = null
         if (layout != null) {
             pgLayout = PGLayout()
@@ -93,7 +100,7 @@ class LayoutReader {
                     val pgSlide = PGSlide()
                     pgSlide.setSlideType(PGSlide.Slide_Layout.toInt())
                     val it = spTree.elementIterator()
-                    while (it.hasNext()) {
+                    while (it!!.hasNext()) {
                         ShapeManage.instance().processShape(
                             control!!,
                             zipPackage,
@@ -104,7 +111,7 @@ class LayoutReader {
                             defaultStyle,
                             pgSlide,
                             PGSlide.Slide_Layout,
-                            (it.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
+                            (it!!.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
                             null,
                             1.0f,
                             1.0f
@@ -132,8 +139,8 @@ class LayoutReader {
         spTree: Element
     ) {
         val it = spTree.elementIterator()
-        while (it.hasNext()) {
-            val sp = it.next() as Element
+        while (it!!.hasNext()) {
+            val sp = it!!.next() as Element
             val type = ReaderKit.instance().getPlaceholderType(sp)
             val idx = ReaderKit.instance().getPlaceholderIdx(sp)
             val txBody = sp.element("txBody")

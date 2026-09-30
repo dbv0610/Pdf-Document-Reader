@@ -1,6 +1,14 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.editor.pptx
 
 import com.wxiwei.office.editor.EditResult
+import com.wxiwei.office.editor.UndoStack
 import com.wxiwei.office.system.IControl
 import java.io.File
 
@@ -19,7 +27,7 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
     /** A reversible change, applied to both layers. */
     private class Step(val redo: () -> Boolean, val undo: () -> Boolean)
 
-    private val undoStack = ArrayList<Step>()
+    private val undoStack = UndoStack<Step>()
     private val redoStack = ArrayList<Step>()
     private var changes = 0
 
@@ -47,9 +55,12 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
      * Every session call queues exactly one [PptxEditor] op, so undo drops the last queued op
      * ([PptxEditor.undoLast]) and redo queues it again; the display layer reverts on its own.
      */
-    private fun record(redoFile: () -> Boolean, redoLive: () -> Boolean, undoLive: () -> Boolean) = push(Step(
+    private fun record(redoFile: () -> Boolean, redoLive: () -> Boolean, undoLive: () -> Boolean) = record(1, redoFile, redoLive, undoLive)
+
+    /** Same for a step that queues [fileOps] file operations. */
+    private fun record(fileOps: Int, redoFile: () -> Boolean, redoLive: () -> Boolean, undoLive: () -> Boolean) = push(Step(
         redo = { redoFile().also { if (it) live(redoLive()) } },
-        undo = { editor.undoLast().also { if (it) live(undoLive()) } }))
+        undo = { (0 until fileOps).all { editor.undoLast() }.also { if (it) live(undoLive()) } }))
 
     /** Returns the new shape id, or -1 ([lastError] says why). */
     fun addTextBox(slideIndex: Int, rectEmu: Rect, text: String, sizePt: Float = 18f, rgbHex: String = "000000", bold: Boolean = false): Int {
@@ -59,6 +70,18 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         live(show())
         // Re-adding gets the same id: ids are max + 1 and the undone shape had the max id
         record({ editor.addTextBox(slideIndex, rectEmu, text, sizePt, rgbHex, bold) == id }, show) { display.removeShape(slideIndex, id) != null }
+        return id
+    }
+
+    /** A preset shape (see [PptxEditor.addShape]); returns its id, or -1. */
+    fun addShape(slideIndex: Int, rect: Rect, prst: String, fillHex: String?, lineHex: String, lineWidthPt: Float = 1.5f): Int {
+        // a flat line has no height (or width): 1 EMU keeps its box valid for the moves after
+        val rectEmu = Rect(rect.x, rect.y, maxOf(1L, rect.width), maxOf(1L, rect.height))
+        val id = editor.addShape(slideIndex, rectEmu, prst, fillHex, lineHex, lineWidthPt)
+        if (id < 0) return -1
+        val show = { display.addShape(slideIndex, id, rectEmu, prst, fillHex, lineHex, lineWidthPt) }
+        live(show())
+        record({ editor.addShape(slideIndex, rectEmu, prst, fillHex, lineHex, lineWidthPt) == id }, show) { display.removeShape(slideIndex, id) != null }
         return id
     }
 
@@ -73,10 +96,89 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
 
     fun setShapeText(slideIndex: Int, shapeId: Int, text: String): Boolean {
         val old = display.shapeText(slideIndex, shapeId) ?: listShapes(slideIndex).firstOrNull { it.id == shapeId }?.text
+        val where = listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rectEmu
         if (!editor.setShapeText(slideIndex, shapeId, text)) return false
-        val show = { display.setShapeText(slideIndex, shapeId, text) }
+        // undo puts back the very runs shown before, not the old text in new runs
+        val before = display.saveText(slideIndex, shapeId)
+        val show = { display.setShapeText(slideIndex, shapeId, text, where) }
         live(show())
-        record({ editor.setShapeText(slideIndex, shapeId, text) }, show) { old != null && display.setShapeText(slideIndex, shapeId, old) }
+        // a box that fits its text (spAutoFit) takes the height of the new text, top kept, like PowerPoint
+        var fitted: Rect? = null
+        // the file's box: the view's is rounded to pixels
+        val oldRect = where ?: display.shapeRect(slideIndex, shapeId)
+        if (oldRect != null && editor.autoFits(slideIndex, shapeId)) {
+            val height = display.textHeight(slideIndex, shapeId)
+            val box = oldRect
+            if (height != null && height > 0 && Math.abs(height - box.height) > LiveSlideModel.EMU_PER_PX) {
+                fitted = Rect(box.x, box.y, box.width, height)
+                if (editor.moveShape(slideIndex, shapeId, fitted)) live(display.moveShape(slideIndex, shapeId, fitted)) else fitted = null
+            }
+        }
+        val resize = fitted
+        record(if (resize != null) 2 else 1,
+            { editor.setShapeText(slideIndex, shapeId, text) && (resize == null || editor.moveShape(slideIndex, shapeId, resize)) },
+            { show() && (resize == null || display.moveShape(slideIndex, shapeId, resize)) }) {
+                (resize == null || oldRect == null || display.moveShape(slideIndex, shapeId, oldRect)) &&
+                    if (before != null) display.restoreText(slideIndex, shapeId, before)
+                    else old != null && display.setShapeText(slideIndex, shapeId, old, where)
+        }
+        return true
+    }
+
+    /** Bold, italic, underline, size, color or alignment for all the text of a shape. */
+    fun setTextFormat(slideIndex: Int, shapeId: Int, format: TextFormat): Boolean =
+        formatText(slideIndex, shapeId, format, { editor.setTextFormat(slideIndex, shapeId, format) }) { display.setTextFormat(slideIndex, shapeId, format) }
+
+    /** Formats chars [start, end) of the shape's text (positions as in [PptxShapeInfo.text]). */
+    fun setTextFormat(slideIndex: Int, shapeId: Int, start: Int, end: Int, format: TextFormat): Boolean =
+        formatText(slideIndex, shapeId, format, { editor.setTextFormat(slideIndex, shapeId, start, end, format) }) { display.setTextFormat(slideIndex, shapeId, start, end, format) }
+
+    /**
+     * A format change: [fileOp] for the file, [show] for the view. A new size changes the text's
+     * height: a box that fits its text (spAutoFit) takes it, top kept, like PowerPoint does
+     * (otherwise the text runs out of its box and no longer sits in it).
+     */
+    private fun formatText(slideIndex: Int, shapeId: Int, format: TextFormat, fileOp: () -> Boolean, show: () -> Any?): Boolean {
+        val where = listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rectEmu ?: display.shapeRect(slideIndex, shapeId)
+        if (!fileOp()) return false
+        var token = show()
+        live(token != null)
+        val fitted = if (format.sizePt != null && where != null) fitToText(slideIndex, shapeId, where) else null
+        record(if (fitted != null) 2 else 1,
+            { fileOp() && (fitted == null || editor.moveShape(slideIndex, shapeId, fitted)) },
+            { (show().also { token = it } != null) && (fitted == null || display.moveShape(slideIndex, shapeId, fitted)) },
+            { (fitted == null || display.moveShape(slideIndex, shapeId, where!!)) && (token?.let { display.restoreFormat(slideIndex, it) } ?: false) })
+        return true
+    }
+
+    /** For a box that fits its text (spAutoFit): the height of its text now, top kept; queued and shown. Null when unchanged. */
+    private fun fitToText(slideIndex: Int, shapeId: Int, box: Rect): Rect? {
+        if (!editor.autoFits(slideIndex, shapeId)) return null
+        val height = display.textHeight(slideIndex, shapeId) ?: return null
+        if (height <= 0 || Math.abs(height - box.height) <= LiveSlideModel.EMU_PER_PX) return null
+        val fitted = Rect(box.x, box.y, box.width, height)
+        if (!editor.moveShape(slideIndex, shapeId, fitted)) return null
+        live(display.moveShape(slideIndex, shapeId, fitted))
+        return fitted
+    }
+
+    // Slide changes are saved; the open view shows them after a reopen ([needsReopen]).
+    fun slideCount(): Int = editor.slideCount()
+    /** Size, color and typeface of the shape's text as shown, for an editor over it. */
+    fun textStyle(slideIndex: Int, shapeId: Int): TextStyle? = display.textStyle(slideIndex, shapeId)
+    /** Current bold/italic/underline of the shape's text (from its first run). */
+    fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = editor.textFormatOf(slideIndex, shapeId)
+
+    fun deleteSlide(slideIndex: Int): Boolean = slideChange { editor.deleteSlide(slideIndex) }
+    fun duplicateSlide(slideIndex: Int): Boolean = slideChange { editor.duplicateSlide(slideIndex) >= 0 }
+    fun moveSlide(from: Int, to: Int): Boolean = slideChange { editor.moveSlide(from, to) }
+    /** An empty slide after [afterIndex]; shown after saving and reopening like other slide changes. */
+    fun addBlankSlide(afterIndex: Int): Boolean = slideChange { editor.addBlankSlide(afterIndex) >= 0 }
+
+    private fun slideChange(op: () -> Boolean): Boolean {
+        if (!op()) return false
+        needsReopen = true
+        record(op, { false }, { false })
         return true
     }
 
@@ -86,6 +188,45 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         val show = { display.moveShape(slideIndex, shapeId, rectEmu) }
         live(show())
         record({ editor.moveShape(slideIndex, shapeId, rectEmu) }, show) { old != null && display.moveShape(slideIndex, shapeId, old) }
+        return true
+    }
+
+    /** Sets the clockwise rotation of a shape in degrees. */
+    fun rotateShape(slideIndex: Int, shapeId: Int, degrees: Float): Boolean {
+        val old = display.shapeRotation(slideIndex, shapeId) ?: listShapes(slideIndex).firstOrNull { it.id == shapeId }?.rotationDeg ?: 0f
+        if (!editor.rotateShape(slideIndex, shapeId, degrees)) return false
+        val show = { display.rotateShape(slideIndex, shapeId, degrees) }
+        live(show())
+        record({ editor.rotateShape(slideIndex, shapeId, degrees) }, show) { display.rotateShape(slideIndex, shapeId, old) }
+        return true
+    }
+
+    fun slideEffects(slideIndex: Int): List<SlideEffect> = editor.slideEffects(slideIndex)
+    fun slideTransition(slideIndex: Int): SlideTransition? = editor.slideTransition(slideIndex)
+    /** The animations of the slide (they play in the slideshow; the edit view shows the end state). One undoable step. */
+    fun setSlideEffects(slideIndex: Int, effects: List<SlideEffect>): Boolean {
+        if (!editor.setSlideEffects(slideIndex, effects)) return false
+        record({ editor.setSlideEffects(slideIndex, effects) }, { true }, { true })
+        return true
+    }
+    /** The transition of [slideIndexes]; one undoable step. */
+    fun setSlideTransition(slideIndexes: List<Int>, t: SlideTransition?): Boolean {
+        if (!editor.setSlideTransition(slideIndexes, t)) return false
+        record({ editor.setSlideTransition(slideIndexes, t) }, { true }, { true })
+        return true
+    }
+    /** See [PptxEditor.showScript]: what the slideshow plays, edits included. */
+    fun showScript(): List<SlideScript> = editor.showScript()
+    /** See [PptxEditor.readPackage]. */
+    fun <T> readPackage(fallback: T, block: (com.wxiwei.office.editor.ooxml.OoxmlPackage) -> T): T = editor.readPackage(fallback, block)
+
+    /** Z-order: "front", "back", "forward" or "backward" among the shape's siblings; one undoable step. */
+    fun reorderShape(slideIndex: Int, shapeId: Int, where: String): Boolean {
+        if (!editor.reorderShape(slideIndex, shapeId, where)) return false
+        // the view follows the file's order (after the move, and after undoing it)
+        val sync = { display.reorder(slideIndex, editor.shapeOrder(slideIndex)) }
+        live(sync())
+        record({ editor.reorderShape(slideIndex, shapeId, where) }, sync, sync)
         return true
     }
 

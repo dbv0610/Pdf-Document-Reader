@@ -1,0 +1,68 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/* ====================================================================
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+==================================================================== */
+package com.wxiwei.office.fc.hssf.formula.ptg
+
+/**
+ * Less than operator PTG "<". The SID is taken from the
+ * Openoffice.orgs Documentation of the Excel File Format,
+ * Table 3.5.7
+ * @author Cameron Riley (criley at ekmail.com)
+ */
+class LessThanPtg private constructor() : ValueOperatorPtg() {
+    override val sid: Byte get() {
+        return Companion.sid
+    }
+
+    /**
+     * Get the number of operands for the Less than operator
+     * @return int the number of operands
+     */
+    override val numberOfOperands: Int get() {
+        return 2
+    }
+
+    /**
+     * Implementation of method from OperationsPtg
+     * @param operands a String array of operands
+     * @return String the Formula as a String
+     */
+    override fun toFormulaString(operands: Array<String?>): String {
+        val buffer = StringBuffer()
+        buffer.append(operands[0])
+        buffer.append(LESSTHAN)
+        buffer.append(operands[1])
+        return buffer.toString()
+    }
+
+    companion object {
+        /** the sid for the less than operator as hex  */
+        const val sid: Byte = 0x09
+
+        /** identifier for LESS THAN char  */
+        private const val LESSTHAN = "<"
+
+        @JvmField
+        val instance: ValueOperatorPtg = LessThanPtg()
+    }
+}

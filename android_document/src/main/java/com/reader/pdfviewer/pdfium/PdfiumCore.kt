@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.reader.pdfviewer.pdfium
 
 import android.graphics.Color
@@ -124,6 +131,31 @@ class PdfiumCore(ctx: Context) {
     private external fun nativeAddJpegPage(docPtr: Long, jpeg: ByteArray, width: Float, height: Float): Boolean
     private external fun nativeGetPageTextLayout(docPtr: Long, pageIndex: Int): Array<Any?>?
 
+    private external fun nativeSetPageRotation(docPtr: Long, pageIndex: Int, rotation: Int): Boolean
+    private external fun nativeGetPageRotation(docPtr: Long, pageIndex: Int): Int
+    private external fun nativeInsertBlankPage(docPtr: Long, index: Int, width: Float, height: Float): Boolean
+    private external fun nativeDeletePage(docPtr: Long, index: Int): Boolean
+    private external fun nativeFlattenPage(docPtr: Long, pageIndex: Int): Boolean
+    private external fun nativeSaveWithoutSecurity(docPtr: Long, path: String): Boolean
+    private external fun nativeAddPageText(docPtr: Long, pageIndex: Int, fontPath: String?, text: String, size: Float,
+        r: Int, g: Int, b: Int, a: Int, x: Float, y: Float, angle: Float, anchor: Int): FloatArray?
+    private external fun nativeAddInvisibleWords(docPtr: Long, pageIndex: Int, fontPath: String?, words: Array<String>, boxes: FloatArray, turns: Int): Boolean
+    private external fun nativeGetPageImages(docPtr: Long, pageIndex: Int): FloatArray?
+    private external fun nativeGetRenderedImage(docPtr: Long, pageIndex: Int, objIndex: Int, maxPixels: Int): IntArray?
+    private external fun nativeGetPageForWord(docPtr: Long, pageIndex: Int): Array<Any?>?
+    private external fun nativeGetImagePixels(docPtr: Long, pageIndex: Int, objIndex: Int, bitmap: Bitmap): Boolean
+    private external fun nativeReplaceImageJpeg(docPtr: Long, pageIndex: Int, objIndex: Int, jpeg: ByteArray): Boolean
+    private external fun nativeAddNoteAnnot(pagePtr: Long, x: Float, y: Float, r: Int, g: Int, b: Int, a: Int, contents: String?, name: String): Boolean
+    private external fun nativeGetAnnotContents(pagePtr: Long, index: Int): String?
+    private external fun nativeSetAnnotContents(pagePtr: Long, index: Int, contents: String): Boolean
+    private external fun nativeAddShapeAnnot(docPtr: Long, pagePtr: Long, kind: Int, coords: FloatArray,
+        r: Int, g: Int, b: Int, a: Int, width: Float, fr: Int, fg: Int, fb: Int, fa: Int, name: String): Boolean
+    private external fun nativeInitForms(docPtr: Long): Boolean
+    private external fun nativeGetFormFields(pagePtr: Long): Array<String>?
+    private external fun nativeSetFormText(pagePtr: Long, annotIndex: Int, text: String): Boolean
+    private external fun nativeClickFormField(pagePtr: Long, annotIndex: Int): Boolean
+    private external fun nativeSetFormChoice(pagePtr: Long, annotIndex: Int, option: Int): Boolean
+
 
     private val mCurrentDpi: Int
 
@@ -172,6 +204,15 @@ class PdfiumCore(ctx: Context) {
             pagePtr = nativeLoadPage(doc.mNativeDocPtr, pageIndex)
             doc.mNativePagesPtr[pageIndex] = pagePtr
             return pagePtr
+        }
+    }
+
+    /** Closes a page opened with [openPage]. */
+    fun closePage(doc: PdfDocument, pageIndex: Int) {
+        synchronized(lock) {
+            doc.mNativeTextPagesPtr.remove(pageIndex)?.let { nativeCloseTextPage(it) }
+            doc.mTextCharBoxes.remove(pageIndex)
+            doc.mNativePagesPtr.remove(pageIndex)?.let { nativeClosePage(it) }
         }
     }
 
@@ -250,6 +291,13 @@ class PdfiumCore(ctx: Context) {
      * Get size of page in pixels.<br></br>
      * This method does not require given page to be opened.
      */
+    /** Size of a page as shown (its rotation applied), in points. */
+    fun getPagePointSize(doc: PdfDocument, index: Int): Size? {
+        synchronized(lock) {
+            return nativeGetPageSizeByIndex(doc.mNativeDocPtr, index, 72)
+        }
+    }
+
     fun getPageSize(doc: PdfDocument, index: Int): Size? {
         synchronized(lock) {
             return nativeGetPageSizeByIndex(doc.mNativeDocPtr, index, mCurrentDpi)
@@ -406,6 +454,7 @@ class PdfiumCore(ctx: Context) {
     internal fun restoreEditSnapshot(doc: PdfDocument, snapshot: ByteArray): Boolean = synchronized(lock) {
         val replacement = nativeOpenEditSnapshot(snapshot)
         if (replacement == 0L) return@synchronized false
+        if (doc.hasForms) nativeInitForms(replacement)
         val pages = HashMap<Int, Long>()
         try {
             for (page in doc.mNativePagesPtr.keys.filterNotNull()) {
@@ -484,6 +533,172 @@ class PdfiumCore(ctx: Context) {
             val size = raw[2] as FloatArray
             return PdfPageText(pageIndex, size[0], size[1], raw[0] as IntArray, raw[1] as FloatArray)
         }
+    }
+
+    // ---- page edits (documents opened for a tool, pages not loaded) ----
+
+    /** Sets the rotation of a page, in quarter turns clockwise (0..3). */
+    fun setPageRotation(doc: PdfDocument, pageIndex: Int, quarterTurns: Int): Boolean = synchronized(lock) {
+        doc.mNativeDocPtr != 0L && nativeSetPageRotation(doc.mNativeDocPtr, pageIndex, quarterTurns)
+    }
+
+    /** The rotation of a page, in quarter turns clockwise (0..3). */
+    fun getPageRotation(doc: PdfDocument, pageIndex: Int): Int = synchronized(lock) {
+        if (doc.mNativeDocPtr == 0L) 0 else nativeGetPageRotation(doc.mNativeDocPtr, pageIndex)
+    }
+
+    /** Inserts an empty page of [width] x [height] points at [index]; a negative index appends. */
+    fun insertBlankPage(doc: PdfDocument, index: Int, width: Float, height: Float): Boolean = synchronized(lock) {
+        doc.mNativeDocPtr != 0L && nativeInsertBlankPage(doc.mNativeDocPtr, index, width, height)
+    }
+
+    fun deletePage(doc: PdfDocument, index: Int): Boolean = synchronized(lock) {
+        doc.mNativeDocPtr != 0L && nativeDeletePage(doc.mNativeDocPtr, index)
+    }
+
+    /** Makes the annotations and form fields of a page part of its content. */
+    fun flattenPage(doc: PdfDocument, pageIndex: Int): Boolean = synchronized(lock) {
+        doc.mNativeDocPtr != 0L && nativeFlattenPage(doc.mNativeDocPtr, pageIndex)
+    }
+
+    /** Saves [doc], opened with its password, without encryption. */
+    fun saveWithoutSecurity(doc: PdfDocument, path: String): Boolean = synchronized(lock) {
+        doc.mNativeDocPtr != 0L && nativeSaveWithoutSecurity(doc.mNativeDocPtr, path)
+    }
+
+    /**
+     * One line of [text] in the content of a page, its [anchor] (0 left, 1 center, 2 right) at
+     * ([x], [y]) in points from the bottom left, turned [angle] degrees counter-clockwise.
+     * Returns its bounds (top > bottom) or null.
+     */
+    fun addPageText(doc: PdfDocument, pageIndex: Int, text: String, size: Float, @ColorInt color: Int,
+                    x: Float, y: Float, angle: Float = 0f, anchor: Int = 0, fontPath: String? = null): RectF? = synchronized(lock) {
+        if (doc.mNativeDocPtr == 0L) return@synchronized null
+        nativeAddPageText(doc.mNativeDocPtr, pageIndex, fontPath, text, size,
+            Color.red(color), Color.green(color), Color.blue(color), Color.alpha(color), x, y, angle, anchor)
+            ?.let { RectF(it[0], it[1], it[2], it[3]) }
+    }
+
+    /**
+     * Invisible [words], each stretched over its box ([boxes]: left, bottom, right, top in points),
+     * running the way they read on the page shown turned [turns] quarters clockwise.
+     */
+    fun addInvisibleWords(doc: PdfDocument, pageIndex: Int, words: Array<String>, boxes: FloatArray, fontPath: String?, turns: Int = 0): Boolean =
+        synchronized(lock) { doc.mNativeDocPtr != 0L && nativeAddInvisibleWords(doc.mNativeDocPtr, pageIndex, fontPath, words, boxes, turns) }
+
+    /**
+     * A picture placed on a page: [index] of its object, its pixels, its shown size in points and
+     * stored bytes; [bounds] is where it is shown, in points from the top left of the page as it is
+     * rendered (like [PdfPageText]); [transparent] when it may have a mask or alpha.
+     */
+    class PageImage(val index: Int, val pixelWidth: Int, val pixelHeight: Int, val shownWidth: Float, val shownHeight: Float,
+                    val storedBytes: Long, val bounds: RectF = RectF(), val transparent: Boolean = false)
+
+    /** The opaque pictures of a page. */
+    fun getPageImages(doc: PdfDocument, pageIndex: Int): List<PageImage> = synchronized(lock) {
+        if (doc.mNativeDocPtr == 0L) return@synchronized emptyList()
+        pageImages(nativeGetPageImages(doc.mNativeDocPtr, pageIndex) ?: return@synchronized emptyList())
+    }
+
+    private fun pageImages(v: FloatArray): List<PageImage> = (0 until v.size / 11).map { i ->
+        val o = i * 11
+        PageImage(v[o].toInt(), v[o + 1].toInt(), v[o + 2].toInt(), v[o + 3], v[o + 4], v[o + 5].toLong(),
+            RectF(v[o + 6], v[o + 7], v[o + 8], v[o + 9]), v[o + 10] != 0f)
+    }
+
+    /** [image] as shown on the page, its transparency kept; null when it cannot be drawn or is over [maxPixels]. */
+    fun getRenderedImage(doc: PdfDocument, pageIndex: Int, image: PageImage, maxPixels: Int): Bitmap? {
+        val v = synchronized(lock) {
+            if (doc.mNativeDocPtr == 0L) null else nativeGetRenderedImage(doc.mNativeDocPtr, pageIndex, image.index, maxPixels)
+        } ?: return null
+        return try { Bitmap.createBitmap(v, 2, v[0], v[0], v[1], Bitmap.Config.ARGB_8888) } catch (e: Exception) { null }
+    }
+
+    /**
+     * Font size (points, 0 unknown), style and fill color (ARGB, 0 unknown) of every character of a
+     * page, indexed like [getPageTextLayout]; [fonts] holds the font names a style points to.
+     */
+    class TextStyles(val sizes: FloatArray, private val styles: IntArray, val colors: IntArray, private val fonts: Array<String?>) {
+        fun weight(index: Int) = styles[index] and 0xFFFF
+        fun italic(index: Int) = styles[index] and (1 shl 16) != 0
+        fun forceBold(index: Int) = styles[index] and (1 shl 17) != 0
+        fun font(index: Int): String? = (styles[index] ushr 18).let { if (it in 1..fonts.size) fonts[it - 1] else null }
+    }
+
+    /** A page for PDF → Word: its text, the style of each character and all its pictures (any of them may be transparent). */
+    class WordPage(val text: PdfPageText, val styles: TextStyles, val images: List<PageImage>)
+
+    /** Everything PDF → Word needs of a page, read with one load of it; null when it cannot be loaded. */
+    fun getPageForWord(doc: PdfDocument, pageIndex: Int): WordPage? = synchronized(lock) {
+        if (doc.mNativeDocPtr == 0L) return@synchronized null
+        val raw = nativeGetPageForWord(doc.mNativeDocPtr, pageIndex) ?: return@synchronized null
+        val size = raw[2] as FloatArray
+        @Suppress("UNCHECKED_CAST")
+        WordPage(PdfPageText(pageIndex, size[0], size[1], raw[0] as IntArray, raw[1] as FloatArray),
+            TextStyles(raw[3] as FloatArray, raw[4] as IntArray, raw[5] as IntArray, raw[6] as Array<String?>),
+            pageImages(raw[7] as FloatArray))
+    }
+
+    /** The pixels of [image] into [bitmap] (ARGB_8888, the picture's pixel size). */
+    fun getImagePixels(doc: PdfDocument, pageIndex: Int, image: PageImage, bitmap: Bitmap): Boolean = synchronized(lock) {
+        doc.mNativeDocPtr != 0L && nativeGetImagePixels(doc.mNativeDocPtr, pageIndex, image.index, bitmap)
+    }
+
+    /** Stores [jpeg] as the data of [image], which keeps its place on the page. */
+    fun replaceImage(doc: PdfDocument, pageIndex: Int, image: PageImage, jpeg: ByteArray): Boolean = synchronized(lock) {
+        doc.mNativeDocPtr != 0L && nativeReplaceImageJpeg(doc.mNativeDocPtr, pageIndex, image.index, jpeg)
+    }
+
+    // ---- notes, shapes and forms of opened pages ----
+
+    /** A sticky note whose icon's top left is at ([x], [y]). */
+    fun addNote(doc: PdfDocument, page: Int, x: Float, y: Float, @ColorInt color: Int, contents: String?, name: String): Boolean = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized false
+        nativeAddNoteAnnot(ptr, x, y, Color.red(color), Color.green(color), Color.blue(color), Color.alpha(color), contents, name)
+    }
+
+    fun getAnnotContents(doc: PdfDocument, page: Int, index: Int): String? = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized null
+        nativeGetAnnotContents(ptr, index)
+    }
+
+    fun setAnnotContents(doc: PdfDocument, page: Int, index: Int, contents: String): Boolean = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized false
+        nativeSetAnnotContents(ptr, index, contents)
+    }
+
+    /** A shape: [kind] 0 rectangle, 1 ellipse, 2 line, 3 arrow; [coords] left, top, right, bottom or x1, y1, x2, y2. */
+    fun addShape(doc: PdfDocument, page: Int, kind: Int, coords: FloatArray, @ColorInt stroke: Int, width: Float,
+                 @ColorInt fill: Int, name: String): Boolean = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized false
+        nativeAddShapeAnnot(doc.mNativeDocPtr, ptr, kind, coords,
+            Color.red(stroke), Color.green(stroke), Color.blue(stroke), Color.alpha(stroke), width,
+            Color.red(fill), Color.green(fill), Color.blue(fill), Color.alpha(fill), name)
+    }
+
+    /** Sets up the interactive form of [doc]; false when it has none. Call before pages are opened. */
+    fun initForms(doc: PdfDocument): Boolean = synchronized(lock) {
+        (doc.mNativeDocPtr != 0L && nativeInitForms(doc.mNativeDocPtr)).also { doc.hasForms = it }
+    }
+
+    fun getFormFields(doc: PdfDocument, page: Int): List<PdfFormField> = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized emptyList()
+        nativeGetFormFields(ptr)?.let { PdfFormField.parse(page, it) } ?: emptyList()
+    }
+
+    fun setFormText(doc: PdfDocument, page: Int, field: PdfFormField, text: String): Boolean = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized false
+        nativeSetFormText(ptr, field.index, text)
+    }
+
+    fun clickFormField(doc: PdfDocument, page: Int, field: PdfFormField): Boolean = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized false
+        nativeClickFormField(ptr, field.index)
+    }
+
+    fun setFormChoice(doc: PdfDocument, page: Int, field: PdfFormField, option: Int): Boolean = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized false
+        nativeSetFormChoice(ptr, field.index, option)
     }
 
     /** Release native resources and opened file  */

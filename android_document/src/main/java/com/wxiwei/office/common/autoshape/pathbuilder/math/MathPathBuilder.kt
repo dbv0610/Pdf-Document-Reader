@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          MathPathBuilder.java
  *  
  * 编译器:            android2.2
@@ -50,7 +57,7 @@ object MathPathBuilder {
     @JvmStatic
     fun getMathPath(shape: AutoShape, rect: Rect): Path? {
         path.reset()
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.MathPlus -> return getMathPlusPath(shape, rect)
 
             ShapeTypes.MathMinus -> return getMathMinusPath(shape, rect)
@@ -69,7 +76,7 @@ object MathPathBuilder {
 
     private fun getMathPlusPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.24f / 2
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!! / 2
@@ -99,7 +106,7 @@ object MathPathBuilder {
 
     private fun getMathMinusPath(shape: AutoShape, rect: Rect): Path {
         var x = rect.height() * 0.24f / 2
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = rect.height() * values[0]!! / 2
@@ -116,7 +123,7 @@ object MathPathBuilder {
 
     private fun getMathMultiplyPath(shape: AutoShape, rect: Rect): Path {
         var d = rect.height() * 0.24f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 d = rect.height() * values[0]!!
@@ -155,7 +162,7 @@ object MathPathBuilder {
         var x1 = rect.height() * 0.2352f / 2
         var x2 = rect.height() * 0.0588f
         var r = rect.height() * 0.1176f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 3) {
             if (values[0] != null) {
                 x1 = rect.height() * values[0]!! / 2
@@ -198,7 +205,7 @@ object MathPathBuilder {
     private fun getMathEqualPath(shape: AutoShape, rect: Rect): Path {
         var x1 = rect.height() * 0.2352f
         var x2 = rect.height() * 0.1176f / 2
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 x1 = rect.height() * values[0]!!
@@ -233,7 +240,7 @@ object MathPathBuilder {
         var d1 = rect.height() * 0.2352f
         var angle = 110f
         var d2 = rect.height() * 0.1176f / 2
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 3) {
             if (values[0] != null) {
                 d1 = rect.height() * values[0]!!

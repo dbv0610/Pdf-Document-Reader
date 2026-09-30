@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          CharAttr.java
  *
  * 编译器:            android2.2
@@ -21,6 +28,26 @@ class CharAttr {
     // 字号
     @JvmField
     var fontSize = 0
+
+    // exact size in points (fontSize is rounded)
+    @JvmField
+    var fontSizeF = 0f
+
+    // character spacing in points (0 = normal)
+    @JvmField
+    var spacingPt = 0f
+
+    // 0 none, 1 all caps, 2 small caps (shown as caps)
+    @JvmField
+    var caps = 0
+
+    // raised (+) or lowered (-) by this many points
+    @JvmField
+    var positionPt = 0f
+
+    // hidden text: takes no room and is not drawn
+    @JvmField
+    var isHidden = false
 
     // 字体
     @JvmField

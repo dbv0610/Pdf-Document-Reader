@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -14,7 +13,7 @@ import android.view.ViewGroup
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResult
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.updatePadding
+import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -24,6 +23,7 @@ import com.ui.baselib.api.putArgsSafely
 import com.ui.baselib.api.putExtrasSafely
 import com.ui.baselib.api.safeBundleOf
 import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.ConcurrentHashMap
 
 abstract class BaseFragment<VB : ViewBinding>(
     open val bindingFactory: (LayoutInflater) -> VB,
@@ -113,10 +113,12 @@ abstract class BaseFragment<VB : ViewBinding>(
     /**
      * System back while this fragment is shown. Return true when handled; false passes it on
      * to the activity (which pops the fragment back stack, then calls BaseActivity.backPressed()).
+     * A back callback is only registered for fragments that override this.
      */
     open fun onBackPressed(): Boolean = false
 
     private fun registerBackCallback() {
+        if (!overridesOnBackPressed(javaClass)) return
         val dispatcher = requireActivity().onBackPressedDispatcher
         // Tied to the view lifecycle, so there is exactly one callback per view.
         dispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
@@ -149,7 +151,8 @@ abstract class BaseFragment<VB : ViewBinding>(
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        if (!isFullSc) {
+        // Skip when the host BaseActivity already pads its root: the gap would be doubled.
+        if (!isFullSc && (activity as? BaseActivity<*>)?.padsStatusBar != true) {
             applyStatusBarPadding()
         }
         registerBackCallback()
@@ -175,21 +178,12 @@ abstract class BaseFragment<VB : ViewBinding>(
         appActivity = null
     }
 
+    // BundleCompat avoids the typed Bundle getters on Android 13, which can crash (b/232589966).
     inline fun <reified T : android.os.Parcelable> parcelableArg(key: String): T? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arguments?.getParcelable(key, T::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            arguments?.getParcelable(key)
-        }
+        arguments?.let { BundleCompat.getParcelable(it, key, T::class.java) }
 
     inline fun <reified T : java.io.Serializable> serializableArg(key: String): T? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arguments?.getSerializable(key, T::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            arguments?.getSerializable(key) as? T
-        }
+        arguments?.let { BundleCompat.getSerializable(it, key, T::class.java) }
 
     inline fun <reified T : Any> launchActivity(vararg params: Pair<String, Any?>) {
         val intent = Intent(requireContext(), T::class.java)
@@ -202,11 +196,12 @@ abstract class BaseFragment<VB : ViewBinding>(
         activity?.finish()
     }
 
-    private val resultHelper = ActivityResultHelper(this) { listenerResult(it) }
+    @PublishedApi
+    internal val resultHelper = ActivityResultHelper(this) { listenerResult(it) }
 
     open fun listenerResult(result: ActivityResult) {}
 
-    internal inline fun <reified T : Any> launcherForResult(
+    inline fun <reified T : Any> launcherForResult(
         vararg params: Pair<String, Any?>,
         noinline dataResult: (ActivityResult) -> Unit = { _ -> }
     ) {
@@ -218,7 +213,7 @@ abstract class BaseFragment<VB : ViewBinding>(
     fun showKeyboard() = showKeyboard(binding.root)
 
     fun applyStatusBarPadding() {
-        binding.root.updatePadding(top = binding.root.paddingTop + statusBarHeight)
+        binding.root.padForStatusBar(statusBarHeight)
     }
 
     private fun View.isBackgroundTransparent(): Boolean {
@@ -251,6 +246,14 @@ abstract class BaseFragment<VB : ViewBinding>(
     }
 
     companion object {
+        private val backOverrideCache = ConcurrentHashMap<Class<*>, Boolean>()
+
+        /** Looked up once per fragment class; consumer-rules.pro keeps the method name for R8. */
+        private fun overridesOnBackPressed(type: Class<*>): Boolean =
+            backOverrideCache.getOrPut(type) {
+                type.getMethod("onBackPressed").declaringClass != BaseFragment::class.java
+            }
+
         inline fun <reified T : Fragment> newInstance(vararg params: Pair<String, Any?>): T {
             val fragment = T::class.java.getDeclaredConstructor().newInstance()
             fragment.arguments = safeBundleOf(*params)

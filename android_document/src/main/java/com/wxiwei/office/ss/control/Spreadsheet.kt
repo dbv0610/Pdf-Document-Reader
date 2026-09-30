@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          Spreadsheet.java
  *
  * 编译器:            android2.2
@@ -343,8 +350,54 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
     /**
      *
      */
+    // pinch-zoom preview: the frame at pinch start, drawn scaled until the gesture ends
+    private var pinchFrame: Bitmap? = null
+    private var pinchScale = 1f
+    private var pinchX = 0f
+    private var pinchY = 0f
+
+    /** Captures the current frame for a pinch around ([x], [y]); false when it cannot. */
+    fun beginPinchPreview(x: Float, y: Float): Boolean {
+        endPinchPreview()
+        if (width <= 0 || height <= 0 || sheetview == null) return false
+        return try {
+            val frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(frame)
+            canvas.drawColor(Color.WHITE)
+            sheetview!!.drawSheet(canvas, true)
+            pinchFrame = frame
+            pinchScale = 1f
+            pinchX = x
+            pinchY = y
+            true
+        } catch (e: OutOfMemoryError) {
+            false
+        }
+    }
+
+    fun setPinchPreviewScale(scale: Float) {
+        if (pinchFrame == null) return
+        pinchScale = scale
+        postInvalidateOnAnimation()
+    }
+
+    fun endPinchPreview() {
+        pinchFrame?.recycle()
+        pinchFrame = null
+        pinchScale = 1f
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (!initFinish) {
+            return
+        }
+        pinchFrame?.let { frame ->
+            // cheap while the fingers move: no cell layout or text drawing per frame
+            canvas.drawColor(SSConstant.HEADER_FILL_COLOR)
+            canvas.save()
+            canvas.scale(pinchScale, pinchScale, pinchX, pinchY)
+            canvas.drawBitmap(frame, 0f, 0f, null)
+            canvas.restore()
             return
         }
         try {
@@ -366,7 +419,7 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
                 }
             } else {
                 val otp = control!!.getOfficeToPicture()
-                if (otp != null && otp.getModeType() == IOfficeToPicture.VIEW_CHANGING) {
+                if (otp != null && otp.modeType == IOfficeToPicture.VIEW_CHANGING) {
                     toPicture(otp)
                 }
             }
@@ -388,7 +441,7 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
      */
     fun createPicture() {
         val otp = control!!.getOfficeToPicture()
-        if (otp != null && otp.getModeType() == IOfficeToPicture.VIEW_CHANGE_END) {
+        if (otp != null && otp.modeType == IOfficeToPicture.VIEW_CHANGE_END) {
             try {
                 toPicture(otp)
             } catch (e: Exception) {
@@ -401,8 +454,8 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
      */
     private fun toPicture(otp: IOfficeToPicture) {
         val sheetview = this.sheetview!!
-        val b = PictureKit.instance().isDrawPictrue()
-        PictureKit.instance().setDrawPictrue(true)
+        val b = PictureKit.instance().isDrawPictrue
+        PictureKit.instance().isDrawPictrue = true
         //
         val bitmap = otp.getBitmap(width, height)
         if (bitmap == null) {
@@ -421,7 +474,7 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
         otp.callBack(bitmap)
         sheetview.setZoom(oldPaintZoom, true)
         //
-        PictureKit.instance().setDrawPictrue(b)
+        PictureKit.instance().isDrawPictrue = b
     }
 
     /**

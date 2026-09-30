@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          LayoutKit.java
  *
  * 编译器:            android2.2
@@ -96,28 +103,31 @@ class LayoutKit private constructor() {
         val elemEnd = elem!!.getEndOffset()
         // 处理段前段后间距
         val prePara = para.getPreView()
+        // contextualSpacing: no space between this paragraph and a neighbour of the same style
+        val contextual = AttrManage.instance().getParaContextualSpacing(elem.getAttribute())
+        val afterSpace = if (contextual && sameStyle(elem, doc.getParagraph(elemEnd))) 0 else paraAttr.afterSpace
         if (prePara == null) { // 页面第一个段落
             spanH -= paraAttr.beforeSpace
             para.setTopIndent(paraAttr.beforeSpace)
-            para.setBottomIndent(paraAttr.afterSpace)
+            para.setBottomIndent(afterSpace)
             para.setY(para.getY() + paraAttr.beforeSpace)
         } else {
-            if (paraAttr.beforeSpace > 0) {
-                var beforeSpace = paraAttr.beforeSpace - prePara.getBottomIndent()
-                beforeSpace = Math.max(0, beforeSpace)
+            val beforeSpace = if (contextual && sameStyle(prePara.getElement(), elem)) 0 else paraAttr.beforeSpace
+            if (beforeSpace > 0) {
+                // Word adds the previous paragraph's space after and this space before; it does not
+                // collapse them like HTML margins
                 spanH -= beforeSpace
                 para.setTopIndent(beforeSpace)
                 para.setY(para.getY() + beforeSpace)
             }
-            spanH -= paraAttr.afterSpace
-            para.setBottomIndent(paraAttr.afterSpace)
+            spanH -= afterSpace
+            para.setBottomIndent(afterSpace)
         }
         var keepOne = ViewKit.instance().getBitValue(flag, WPViewConstant.LAYOUT_FLAG_KEEPONE.toInt())
         if (spanH < 0 && !keepOne) {
             return WPViewConstant.BREAK_LIMIT.toInt()
         }
         var line = ViewFactory.createView(control, elem, elem, WPViewConstant.LINE_VIEW.toInt()) as LineView
-        Log.e("LayoutKit.layoutPara", "line.setStartOffset = " + lineStart)
         line.setStartOffset(lineStart)
         para.appendChlidView(line)
         flag = ViewKit.instance().setBitValue(flag, WPViewConstant.LAYOUT_FLAG_KEEPONE.toInt(), true)
@@ -163,7 +173,6 @@ class LayoutKit private constructor() {
             maxWidth = Math.max(maxWidth, line.getLayoutSpan(WPViewConstant.X_AXIS))
             if (lineStart < elemEnd && spanH > 0) {
                 line = ViewFactory.createView(control, elem, elem, WPViewConstant.LINE_VIEW.toInt()) as LineView
-                Log.e("LayoutKit.204", "line.setStartOffset = " + lineStart)
                 line.setStartOffset(lineStart)
                 para.appendChlidView(line)
             }
@@ -172,7 +181,7 @@ class LayoutKit private constructor() {
             bnView = null
         }
         para.setSize(maxWidth, paraHeight)
-        Log.e("LayoutKit.214", "para.setEndOffset = " + lineStart)
+        para.setDecoration(AttrManage.instance().getParaDecoration(elem.getAttribute()), paraAttr.leftIndent, spanW)
         para.setEndOffset(lineStart)
         return breakType
     }
@@ -218,7 +227,6 @@ class LayoutKit private constructor() {
             }
             leaf = ViewFactory.createView(control, run, elem, WPViewConstant.LEAF_VIEW.toInt()) as LeafView
             line.appendChlidView(leaf)
-            Log.e("LayoutKit.layoutLine", "leaf.setStartOffset = " + pos)
             leaf.setStartOffset(pos)
             leaf.setLocation(dx, dy)
 
@@ -231,7 +239,6 @@ class LayoutKit private constructor() {
                 break
             }
             pos = leaf.getEndOffset(null)
-            Log.e("LayoutKit.360", "line.setEndOffset = " + pos)
             line.setEndOffset(pos)
             val leafWidth = leaf.getLayoutSpan(WPViewConstant.X_AXIS)
             lineWidth += leafWidth
@@ -256,7 +263,6 @@ class LayoutKit private constructor() {
         if (breakType == WPViewConstant.BREAK_LIMIT.toInt()) {
             var str = elem!!.getText(doc)
             val paraStart = elem!!.getStartOffset()
-            Log.e("LayoutKit.381 str", "" + str + " ; paraStart = " + paraStart + " ; start = " + start)
             if (start >= paraStart) {
                 str = str!!.substring((start - paraStart).toInt())
                 val newPos = FontKit.instance().findBreakOffset(str, (pos - start).toInt()) + start
@@ -265,6 +271,12 @@ class LayoutKit private constructor() {
         }
         line.layoutAlignment(docAttr, pageAttr, paraAttr, bnView, w, flag)
         return breakType
+    }
+
+    private fun sameStyle(a: IElement?, b: IElement?): Boolean {
+        if (a == null || b == null || a === b) return false
+        val am = AttrManage.instance()
+        return am.getParaStyleID(a.getAttribute()) == am.getParaStyleID(b.getAttribute())
     }
 
     private fun createBNView(control: IControl, doc: IDocument, docAttr: DocAttr, pageAttr: PageAttr, paraAttr: ParaAttr,
@@ -301,7 +313,6 @@ class LayoutKit private constructor() {
         // 同一leaf，需要折分
         var leafWidth: Int
         if (view != null && view.getEndOffset(null) > newPos) {
-            Log.e("LayoutKit.456", "view.setEndOffset = " + newPos)
             view.setEndOffset(newPos)
             lineWidth -= view.getWidth()
             leafWidth = (view as LeafView).getTextWidth().toInt()
@@ -309,7 +320,6 @@ class LayoutKit private constructor() {
             view.setWidth(leafWidth)
             lineWidth += leafWidth
         }
-        Log.e("LayoutKit.464", "view.setEndOffset = " + newPos)
         line.setEndOffset(newPos)
         line.setWidth(lineWidth)
     }

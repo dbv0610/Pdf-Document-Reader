@@ -16,6 +16,7 @@ import androidx.viewbinding.ViewBinding
 import com.ui.baselib.R
 import androidx.core.graphics.drawable.toDrawable
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.lifecycleScope
@@ -30,9 +31,14 @@ abstract class BaseDialog<V : ViewBinding>(
     Dialog(context, if (!isFull) R.style.BaseDialog else R.style.BaseDialogFull), LifecycleOwner {
     private val TAG: String = BaseDialog::class.java.name
     val binding: V by lazy { bindingFactory(layoutInflater) }
-    private var registry = LifecycleRegistry(this)
-    private var isDestroyed = false
+    // Dismiss only stops the dialog (CREATED), so collectors started in initView() survive a
+    // re-show; it is destroyed with the host activity, which also dismisses it (no WindowLeaked).
+    private val registry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = registry
+
+    private val hostObserver = LifecycleEventObserver { _, event ->
+        if (event == Lifecycle.Event.ON_DESTROY) destroy()
+    }
 
     val dialogScope: CoroutineScope get() = lifecycleScope
 
@@ -43,6 +49,7 @@ abstract class BaseDialog<V : ViewBinding>(
     init {
         require(context is Activity) { "BaseDialog requires an Activity context" }
         initialize()
+        (context as? LifecycleOwner)?.lifecycle?.addObserver(hostObserver)
     }
 
     private fun initialize() {
@@ -76,15 +83,13 @@ abstract class BaseDialog<V : ViewBinding>(
             return
         }
 
+        if (registry.currentState == Lifecycle.State.DESTROYED) return
+
         try {
             if (isShowing) {
                 dismiss()
             }
-            // Reuse after dismiss: a DESTROYED registry keeps its lifecycleScope cancelled, so start fresh.
-            if (isDestroyed) registry = LifecycleRegistry(this)
-            isDestroyed = false
             super.show()
-            registry.currentState = Lifecycle.State.STARTED
             registry.currentState = Lifecycle.State.RESUMED
         }
         catch (e: Exception) {
@@ -93,12 +98,7 @@ abstract class BaseDialog<V : ViewBinding>(
     }
 
     override fun dismiss() {
-        if (isDestroyed) return
         try {
-            isDestroyed = true
-            if (registry.currentState != Lifecycle.State.DESTROYED) {
-                registry.currentState = Lifecycle.State.DESTROYED
-            }
             super.dismiss()
         }
         catch (e: Exception) {
@@ -108,8 +108,18 @@ abstract class BaseDialog<V : ViewBinding>(
 
     override fun onStop() {
         super.onStop()
-        if (!isDestroyed && registry.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+        if (registry.currentState.isAtLeast(Lifecycle.State.STARTED)) {
             registry.currentState = Lifecycle.State.CREATED
         }
+    }
+
+    private fun destroy() {
+        (context as? LifecycleOwner)?.lifecycle?.removeObserver(hostObserver)
+        if (isShowing) dismiss()
+        // LifecycleRegistry can't jump from INITIALIZED (never shown) straight to DESTROYED.
+        if (registry.currentState == Lifecycle.State.INITIALIZED) {
+            registry.currentState = Lifecycle.State.CREATED
+        }
+        registry.currentState = Lifecycle.State.DESTROYED
     }
 }

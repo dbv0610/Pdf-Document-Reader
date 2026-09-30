@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           PPTXmlKit.java
  *  
  * 编译器:             android2.2
@@ -46,7 +53,7 @@ class ReaderKit {
     fun getPlaceholderName(sp: Element?): String? {
         if (sp != null) {
             var temp: Element? = null
-            val name = sp.getName()
+            val name = sp.name
             if (name == "sp") {
                 temp = sp.element("nvSpPr")
             } else if (name == "pic") {
@@ -72,7 +79,7 @@ class ReaderKit {
     fun getPlaceholderType(sp: Element?): String? {
         if (sp != null) {
             var temp: Element? = null
-            val name = sp.getName()
+            val name = sp.name
             if (name == "sp") {
                 temp = sp.element("nvSpPr")
             } else if (name == "pic") {
@@ -101,7 +108,7 @@ class ReaderKit {
     fun getPlaceholderIdx(sp: Element?): Int {
         if (sp != null) {
             var temp: Element? = null
-            val name = sp.getName()
+            val name = sp.name
             if (name == "sp") {
                 temp = sp.element("nvSpPr")
             } else if (name == "pic") {
@@ -116,7 +123,7 @@ class ReaderKit {
                 if (nvPr != null) {
                     val ph = nvPr.element("ph")
                     if (ph != null && ph.attributeValue("idx") != null) {
-                        return ph.attributeValue("idx").toDouble().toInt()
+                        return ph.attributeValue("idx")!!.toDouble().toInt()
                     }
                 }
             }
@@ -305,33 +312,33 @@ class ReaderKit {
             if (isTableStyle) {
                 color = ColorUtil.instance().getColorWithTint(
                     color,
-                    1 - colorE.element("tint").attributeValue("val").toInt() / 100000.0
+                    1 - colorE.element("tint")!!.attributeValue("val")!!.toInt() / 100000.0
                 )
             } else {
                 color = ColorUtil.instance().getColorWithTint(
                     color,
-                    colorE.element("tint").attributeValue("val").toInt() / 100000.0
+                    colorE.element("tint")!!.attributeValue("val")!!.toInt() / 100000.0
                 )
             }
         } else if (colorE.element("lumOff") != null) {
             color = ColorUtil.instance().getColorWithTint(
                 color,
-                colorE.element("lumOff").attributeValue("val").toInt() / 100000.0
+                colorE.element("lumOff")!!.attributeValue("val")!!.toInt() / 100000.0
             )
         } else if (colorE.element("lumMod") != null) {
             color = ColorUtil.instance().getColorWithTint(
                 color,
-                colorE.element("lumMod").attributeValue("val").toInt() / 100000.0 - 1
+                colorE.element("lumMod")!!.attributeValue("val")!!.toInt() / 100000.0 - 1
             )
         } else if (colorE.element("shade") != null) {
             color = ColorUtil.instance().getColorWithTint(
                 color,
-                -colorE.element("shade").attributeValue("val").toInt() / 200000.0
+                -colorE.element("shade")!!.attributeValue("val")!!.toInt() / 200000.0
             )
         }
 
         if (colorE.element("alpha") != null) {
-            val `val` = colorE.element("alpha").attributeValue("val")
+            val `val` = colorE.element("alpha")!!.attributeValue("val")
             if (`val` != null) {
                 val alpha = (`val`.toInt() / 100000f * 255).toInt()
                 color = (0xFFFFFF and color) or (alpha shl 24)
@@ -353,9 +360,9 @@ class ReaderKit {
                     return processColorAttribute(temp, Color.parseColor("#" + `val`), isTableStyle)
                 }
             } else if ((solidFill.element("scrgbClr").also { temp = it }) != null) {
-                val r = temp!!.attributeValue("r").toInt() * 255 / 100
-                val g = temp.attributeValue("g").toInt() * 255 / 100
-                val b = temp.attributeValue("b").toInt() * 255 / 100
+                val r = temp!!.attributeValue("r")!!.toInt() * 255 / 100
+                val g = temp.attributeValue("g")!!.toInt() * 255 / 100
+                val b = temp.attributeValue("b")!!.toInt() * 255 / 100
                 return processColorAttribute(temp, ColorUtil.rgb(r, g, b), isTableStyle)
             } else if ((solidFill.element("schemeClr")
                     .also { temp = it }) != null && temp!!.attribute("val") != null
@@ -376,19 +383,19 @@ class ReaderKit {
                 }
             } else if ((solidFill.element("prstClr").also { temp = it }) != null) {
                 `val` = temp!!.attributeValue("val")
-                if (`val`.contains("gray")) {
+                if (`val`!!.contains("gray")) {
                     return Color.GRAY
-                } else if (`val`.contains("white")) {
+                } else if (`val`!!.contains("white")) {
                     return Color.WHITE
-                } else if (`val`.contains("red")) {
+                } else if (`val`!!.contains("red")) {
                     return Color.RED
-                } else if (`val`.contains("green")) {
+                } else if (`val`!!.contains("green")) {
                     return Color.GREEN
-                } else if (`val`.contains("blue")) {
+                } else if (`val`!!.contains("blue")) {
                     return Color.BLUE
-                } else if (`val`.contains("yellow")) {
+                } else if (`val`!!.contains("yellow")) {
                     return Color.YELLOW
-                } else if (`val`.contains("cyan")) {
+                } else if (`val`!!.contains("cyan")) {
                     return Color.CYAN
                 } else {
                     return Color.BLACK
@@ -421,7 +428,7 @@ class ReaderKit {
      */
     fun isUserDrawn(sp: Element): Boolean {
         var temp: Element? = null
-        val name = sp.getName()
+        val name = sp.name
         if (name == "sp") {
             temp = sp.element("nvSpPr")
         } else if (name == "pic") {
@@ -535,19 +542,19 @@ class ReaderKit {
             if (xfrm.attribute("flipH") != null) {
                 `val` = xfrm.attributeValue("flipH")
                 if (`val` != null && `val`.length > 0 && pptXmlBoolean(`val`)) {
-                    shape.setFlipHorizontal(true)
+                    shape.flipHorizontal = true
                 }
             }
             if (xfrm.attribute("flipV") != null) {
                 `val` = xfrm.attributeValue("flipV")
                 if (`val` != null && `val`.length > 0 && pptXmlBoolean(`val`)) {
-                    shape.setFlipVertical(true)
+                    shape.flipVertical = true
                 }
             }
             if (xfrm.attribute("rot") != null) {
                 `val` = xfrm.attributeValue("rot")
                 if (`val` != null && `val`.length > 0) {
-                    shape.setRotation(`val`.toFloat() / 60000)
+                    shape.rotation = `val`.toFloat() / 60000
                 }
             }
         }
@@ -558,7 +565,7 @@ class ReaderKit {
      */
     fun isHidden(sp: Element): Boolean {
         var temp: Element? = null
-        val name = sp.getName()
+        val name = sp.name
         if (name == "sp") {
             temp = sp.element("nvSpPr")
         } else if (name == "pic") {

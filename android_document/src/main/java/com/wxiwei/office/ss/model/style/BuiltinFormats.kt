@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 /* ====================================================================
    Licensed to the Apache Software Foundation (ASF) under one or more
    contributor license agreements.  See the NOTICE file distributed with
@@ -119,11 +126,19 @@ object BuiltinFormats {
         putFormat(m, 0x15, "h:mm:ss")
         putFormat(m, 0x16, "m/d/yy h:mm")
 
-        // 0x17 - 0x24 reserved for international and undocumented
-        for (i in 0x17..0x24) {
-            // TODO - one junit relies on these values which seems incorrect
+        // 0x17 - 0x1a reserved for international and undocumented
+        for (i in 0x17..0x1a) {
             putFormat(m, i, "reserved-0x" + Integer.toHexString(i))
         }
+        // 27-36: East Asian dates/times. Excel and WPS write these ids without a formatCode and
+        // show them per locale (58 is "m月d日" in Chinese); outside those locales a short date reads best.
+        val date = localeShortDate()
+        for (i in 27..31) putFormat(m, i, date)
+        putFormat(m, 32, "h:mm")
+        putFormat(m, 33, "h:mm:ss")
+        putFormat(m, 34, "h:mm")
+        putFormat(m, 35, "h:mm:ss")
+        putFormat(m, 36, date)
 
         putFormat(m, 0x25, "#,##0_);(#,##0)")
         putFormat(m, 0x26, "#,##0_);[Red](#,##0)")
@@ -139,15 +154,37 @@ object BuiltinFormats {
         putFormat(m, 0x30, "##0.0E+0")
         putFormat(m, 0x31, "@")
 
-        // 0x17 - 0x24 reserved for international and undocumented
-        for (i in 0x32..0x38) {
-            // TODO - one junit relies on these values which seems incorrect
-            putFormat(m, i, "General" + Integer.toHexString(i))
-        }
-
+        // 50-58: more East Asian dates/times, see 27-36
+        for (i in 50..54) putFormat(m, i, date)
+        putFormat(m, 55, "h:mm")
+        putFormat(m, 56, "h:mm:ss")
         putFormat(m, 0x39, "yyyy\"年\"m\"月\"")
+        putFormat(m, 58, date)
 
         _formats = m.toTypedArray()
+    }
+
+    /** The device's short date as an Excel format, e.g. "d/m/yyyy" for Vietnamese. */
+    private fun localeShortDate(): String {
+        val pattern = (java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT) as? java.text.SimpleDateFormat)
+            ?.toPattern() ?: return "m/d/yyyy"
+        val out = StringBuilder()
+        var i = 0
+        while (i < pattern.length) {
+            val c = pattern[i]
+            var n = 1
+            while (i + n < pattern.length && pattern[i + n] == c) n++
+            when (c) {
+                'y' -> out.append("yyyy")
+                'M' -> out.append(if (n >= 2) "mm" else "m")
+                'd' -> out.append(if (n >= 2) "dd" else "d")
+                '/', '-', '.', ' ' -> repeat(n) { out.append(c) }
+                else -> {}
+            }
+            i += n
+        }
+        val result = out.toString().trim()
+        return if (result.contains('y') && result.contains('m') && result.contains('d')) result else "m/d/yyyy"
     }
 
     private fun putFormat(m: MutableList<String>, index: Int, value: String) {

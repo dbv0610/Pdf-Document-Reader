@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          MacroOfficeToPicture.java
  *
  * 编译器:            android2.2
@@ -16,18 +23,9 @@ internal class MacroOfficeToPicture internal constructor(
     private var officeToPictureListener: OfficeToPictureListener?
 ) : IOfficeToPicture {
 
-    private var modeType = IOfficeToPicture.VIEW_CHANGE_END
+    override var modeType = IOfficeToPicture.VIEW_CHANGE_END
 
-    /**
-     * set mode type
-     */
-    override fun setModeType(modeType: Byte) {
-        this.modeType = modeType
-    }
 
-    override fun getModeType(): Byte {
-        return modeType
-    }
 
     /**
      * Get converter to of picture Bitmap instance, if the return is empty, is not generated picture
@@ -54,9 +52,7 @@ internal class MacroOfficeToPicture internal constructor(
         officeToPictureListener?.callBack(bitmap)
     }
 
-    override fun isZoom(): Boolean {
-        return true
-    }
+    override val isZoom: Boolean get() = true
 
     override fun dispose() {
         officeToPictureListener = null

@@ -1,0 +1,12 @@
+<resources>
+    <string name="create_document">Create new</string>
+    <string name="create_document_failed">Could not create the document. Check storage access and try again.</string>
+    <string name="new_word_name">New document</string>
+    <string name="new_excel_name">New spreadsheet</string>
+    <string name="new_powerpoint_name">New presentation</string>
+    <string-array name="new_document_types">
+        <item>Word (.docx)</item>
+        <item>Excel (.xlsx)</item>
+        <item>PowerPoint (.pptx)</item>
+    </string-array>
+</resources>

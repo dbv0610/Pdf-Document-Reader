@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          FunnelPathBuilder.java
  *  
  * 编译器:            android2.2
@@ -59,7 +66,7 @@ object SmartArtPathBuilder {
     @JvmStatic
     fun getStarPath(shape: AutoShape, rect: Rect): Path? {
         path.reset()
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.Funnel -> return getFunnelPath(shape, rect)
             ShapeTypes.Gear6 -> return getGear6Path(shape, rect)
 
@@ -199,9 +206,9 @@ object SmartArtPathBuilder {
     }
 
     private fun getLeftCircularArrowPath(shape: AutoShape, rect: Rect): Path {
-        shape.setFlipVertical(true)
+        shape.flipVertical = true
 
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         var adj1 = 0
         var adj2 = 0

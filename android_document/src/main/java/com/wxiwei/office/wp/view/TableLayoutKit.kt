@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          TableLayoutKit.java
  *
  * 编译器:            android2.2
@@ -7,6 +14,7 @@
 package com.wxiwei.office.wp.view
 
 import com.wxiwei.office.constant.MainConstant
+import com.wxiwei.office.constant.wp.AttrIDConstant
 import com.wxiwei.office.constant.wp.WPAttrConstant
 import com.wxiwei.office.constant.wp.WPViewConstant
 import com.wxiwei.office.simpletext.model.AttrManage
@@ -69,10 +77,28 @@ class TableLayoutKit {
         flag = ViewKit.instance().setBitValue(flag, WPViewConstant.LAYOUT_PARA_IN_TABLE.toInt(), true)
         var keepOne = ViewKit.instance().getBitValue(flag, WPViewConstant.LAYOUT_FLAG_KEEPONE.toInt())
         val maxEnd = tableElem.getEndOffset()
+        // A left-aligned table's position does not depend on its width: place it before its rows,
+        // so floating shapes anchored in its cells are positioned against the final cell x.
+        val hor = AttrManage.instance().getParaHorizontalAlign(tableElem.getAttribute()).toByte()
+        val leftAligned = hor != WPAttrConstant.PARA_HOR_ALIGN_CENTER && hor != WPAttrConstant.PARA_HOR_ALIGN_RIGHT
+        if (docAttr!!.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt() && leftAligned) {
+            tableView.setX(tableView.getX() - tableAttr.leftMargin
+                    + (AttrManage.instance().getParaIndentLeft(tableElem.getAttribute()) * MainConstant.TWIPS_TO_PIXEL).toInt())
+        }
         var rowHeight: Int
         var tableHeight = 0
         var tableWidth = 0
         var rowView: RowView? = null
+        // A table continued from the previous page starts with its header rows again (w:tblHeader)
+        if (isBreakPages && docAttr.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt()) {
+            rowView = layoutRepeatedHeader(control, doc, root, docAttr, pageAttr, paraAttr, tableView, tableElem, w, h, flag)
+            if (rowView != null) {
+                tableHeight = rowView.getY() + rowView.getLayoutSpan(WPViewConstant.Y_AXIS)
+                tableWidth = rowView.getLayoutSpan(WPViewConstant.X_AXIS)
+                dy = tableHeight
+                span = h - tableHeight
+            }
+        }
         while (startOffset < maxEnd && span > 0
             || (breakRowElement != null && isBreakPages)
         ) {
@@ -146,24 +172,117 @@ class TableLayoutKit {
         //
         tableView.setSize(tableWidth, tableHeight)
         //
-        if (docAttr!!.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt()) {
-            // table horizontal alignment
-            val hor = AttrManage.instance().getParaHorizontalAlign(tableElem.getAttribute()).toByte()
+        if (docAttr.rootType.toInt() == WPViewConstant.PAGE_ROOT.toInt() && !leftAligned) {
+            // centered / right-aligned: needs the laid-out width
             var want = w - tableWidth
-            if (hor == WPAttrConstant.PARA_HOR_ALIGN_CENTER ||
-                hor == WPAttrConstant.PARA_HOR_ALIGN_RIGHT
-            ) {
-                if (hor == WPAttrConstant.PARA_HOR_ALIGN_CENTER) {
-                    want /= 2
-                }
-                tableView.setX(tableView.getX() + want)
-            } else {
-                tableView.setX(tableView.getX() - tableAttr.leftMargin
-                        + (AttrManage.instance().getParaIndentLeft(tableElem.getAttribute()) * MainConstant.TWIPS_TO_PIXEL).toInt())
+            if (hor == WPAttrConstant.PARA_HOR_ALIGN_CENTER) {
+                want /= 2
             }
+            tableView.setX(tableView.getX() + want)
+            shiftFloatingShapes(tableView, want)
         }
         breakRowView = rowView
         return breakType
+    }
+
+    /**
+     * Centered/right tables move after their rows are laid out; floating shapes anchored in their
+     * cells were positioned against the cell before that, so they move by the same amount.
+     */
+    private fun shiftFloatingShapes(tableView: TableView, dx: Int) {
+        if (dx == 0) return
+        var row = tableView.getChildView()
+        while (row != null) {
+            var cell = row.getChildView()
+            while (cell != null) {
+                var para = cell.getChildView()
+                while (para != null) {
+                    var line = para.getChildView()
+                    while (line != null) {
+                        var leaf = line.getChildView()
+                        while (leaf != null) {
+                            val shape = when (leaf) {
+                                is ShapeView -> if (leaf.isInline()) null else leaf.getShape()
+                                is ObjView -> if (leaf.isInline()) null else leaf.getShape()
+                                else -> null
+                            }
+                            val h = shape?.horizontalRelativeTo?.toInt()
+                            if (h == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_COLUMN.toInt()
+                                || h == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PARAGRAPH.toInt()
+                                || h == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_CHARACTER.toInt()
+                            ) {
+                                leaf.setX(leaf.getX() + dx)
+                            }
+                            leaf = leaf.getNextView()
+                        }
+                        line = line.getNextView()
+                    }
+                    para = para.getNextView()
+                }
+                cell = cell.getNextView()
+            }
+            row = row.getNextView()
+        }
+    }
+
+    /** Rows marked tblHeader at the top of the table (only the leading run repeats, like Word). */
+    private fun headerRowCount(tableElem: TableElement): Int {
+        var n = 0
+        while (true) {
+            val row = tableElem.getElementForIndex(n) ?: break
+            if (row.getAttribute()!!.getAttribute(AttrIDConstant.TABLE_ROW_HEADER_ID) != 1) break
+            n++
+        }
+        return n
+    }
+
+    /**
+     * Lays out the header rows again at the top of a continued table. The state kept for the row
+     * being continued (split cells, the broken row view, merged cells) is restored afterwards.
+     * Returns the last header row view, or null when there is nothing to repeat or it does not fit.
+     */
+    private fun layoutRepeatedHeader(control: IControl, doc: IDocument, root: IRoot, docAttr: DocAttr, pageAttr: PageAttr?,
+                                     paraAttr: ParaAttr, tableView: TableView, tableElem: TableElement,
+                                     w: Int, h: Int, flag: Int): RowView? {
+        val headers = headerRowCount(tableElem)
+        // nothing to repeat, or the continued row is itself a header row
+        if (headers == 0 || rowIndex <= headers) return null
+        val savedBreakRowView = breakRowView
+        val savedBreakCells = LinkedHashMap(breakPagesCell)
+        val savedMerged = Vector(mergedCell)
+        val savedRowBreak = isRowBreakPages
+        breakPagesCell.clear()
+        var last: RowView? = null
+        var dy = 0
+        for (i in 0 until headers) {
+            val rowElem = tableElem.getElementForIndex(i) as RowElement
+            val view = ViewFactory.createView(control, rowElem, null, WPViewConstant.TABLE_ROW_VIEW.toInt()) as RowView
+            tableView.appendChlidView(view)
+            view.setStartOffset(rowElem.getStartOffset())
+            view.setLocation(0, dy)
+            layoutRow(control, doc, root, docAttr, pageAttr, paraAttr, view, rowElem.getStartOffset(), 0, dy, w, h - dy, flag, false)
+            val height = view.getLayoutSpan(WPViewConstant.Y_AXIS)
+            if (breakPagesCell.isNotEmpty() || height <= 0 || dy + height >= h) {
+                // the header does not fit with room for content: continue without it
+                var v = tableView.getChildView()
+                while (v != null) {
+                    val next = v.getNextView()
+                    tableView.deleteView(v, true)
+                    v = next
+                }
+                last = null
+                break
+            }
+            dy += height
+            last = view
+        }
+        breakPagesCell.clear()
+        breakPagesCell.putAll(savedBreakCells)
+        breakRowView = savedBreakRowView
+        mergedCell.clear()
+        mergedCell.addAll(savedMerged)
+        isRowBreakPages = savedRowBreak
+        return last
     }
 
     private fun clearCurrentRowBreakPageCell(currentElem: IElement) {
@@ -252,7 +371,10 @@ class TableLayoutKit {
             //
             cellWidth = cellView.getLayoutSpan(WPViewConstant.X_AXIS)
             cellHeight = cellView.getLayoutSpan(WPViewConstant.Y_AXIS)
-            isInvalid = isInvalid && cellHeight == 0
+            // content height, without the cell margins: a cell whose first line did not fit
+            // is still as tall as its margins, and the row must move to the next page
+            // (continuation cells of a row split across pages keep the old rule)
+            isInvalid = isInvalid && (if (isNullCell) cellHeight == 0 else cellView.getHeight() == 0)
             dx += cellWidth
             rowWidth += cellWidth
             w -= cellWidth

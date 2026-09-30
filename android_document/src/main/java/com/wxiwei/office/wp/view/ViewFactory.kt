@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          ViewFactory.java
  *
  * 编译器:            android2.2
@@ -43,11 +50,11 @@ object ViewFactory {
                 if (AttrManage.instance().hasAttribute(elem!!.getAttribute(), AttrIDConstant.FONT_SHAPE_ID)) {
                     val shape = control.getSysKit().getWPShapeManage().getShape(AttrManage.instance().getShapeID(elem.getAttribute()))
                     if (shape != null) {
-                        if (shape.getType().toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()
-                            || shape.getType().toInt() == AbstractShape.SHAPE_CHART.toInt()
+                        if (shape.type.toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()
+                            || shape.type.toInt() == AbstractShape.SHAPE_CHART.toInt()
                         ) {
                             view = ShapeView(paraElem!!, elem, shape as AutoShape)
-                        } else if (shape.getType().toInt() == AbstractShape.SHAPE_PICTURE.toInt()) {
+                        } else if (shape.type.toInt() == AbstractShape.SHAPE_PICTURE.toInt()) {
                             view = ObjView(paraElem!!, elem, shape as WPAutoShape)
                         }
                     } else {

@@ -20,50 +20,45 @@ class UiView @JvmOverloads constructor(
         context.obtainStyledAttributes(attrs, R.styleable.UiView).apply {
             try {
                 helper.readCornerAttrs(this,
-                    R.styleable.UiView_cornerRadius,
-                    R.styleable.UiView_cornerTopLeft,
-                    R.styleable.UiView_cornerTopRight,
-                    R.styleable.UiView_cornerBottomLeft,
-                    R.styleable.UiView_cornerBottomRight
+                    R.styleable.UiView_uiCornerRadius,
+                    R.styleable.UiView_uiCornerTopLeft,
+                    R.styleable.UiView_uiCornerTopRight,
+                    R.styleable.UiView_uiCornerBottomLeft,
+                    R.styleable.UiView_uiCornerBottomRight
                 )
                 helper.readBackgroundAttrs(this,
-                    R.styleable.UiView_bgIsGradient,
-                    R.styleable.UiView_bgGradientStart,
-                    R.styleable.UiView_bgGradientCenter,
-                    R.styleable.UiView_bgGradientEnd,
-                    R.styleable.UiView_bgColor,
-                    R.styleable.UiView_bgGdOrientation,
-                    R.styleable.UiView_bgGradientType,
-                    R.styleable.UiView_bgGradientCenterX,
-                    R.styleable.UiView_bgGradientCenterY,
-                    R.styleable.UiView_bgGradientRadius,
-                    R.styleable.UiView_bgGradientColors,
-                    R.styleable.UiView_bgColors
+                    R.styleable.UiView_uiBackgroundGradientEnabled,
+                    R.styleable.UiView_uiBackgroundGradientStart,
+                    R.styleable.UiView_uiBackgroundGradientCenter,
+                    R.styleable.UiView_uiBackgroundGradientEnd,
+                    R.styleable.UiView_uiBackgroundColor,
+                    R.styleable.UiView_uiBackgroundGradientOrientation,
+                    R.styleable.UiView_uiBackgroundGradientType,
+                    R.styleable.UiView_uiBackgroundGradientCenterX,
+                    R.styleable.UiView_uiBackgroundGradientCenterY,
+                    R.styleable.UiView_uiBackgroundGradientRadius,
+                    R.styleable.UiView_uiBackgroundGradientColors
                 )
                 helper.readStrokeAttrs(this,
-                    R.styleable.UiView_strokeWidth,
-                    R.styleable.UiView_stColor,
-                    R.styleable.UiView_strokeDistance,
-                    R.styleable.UiView_distanceSpace,
-                    R.styleable.UiView_strokeGradient,
-                    R.styleable.UiView_strokeGdOrientation,
-                    R.styleable.UiView_strokeOption,
-                    R.styleable.UiView_strokeCap,
-                    R.styleable.UiView_stColors,
-                    R.styleable.UiView_strokeWidths,
-                    R.styleable.UiView_strokeGradientStart,
-                    R.styleable.UiView_strokeGradientCenter,
-                    R.styleable.UiView_strokeGradientEnd
+                    R.styleable.UiView_uiStrokeWidth,
+                    R.styleable.UiView_uiStrokeColor,
+                    R.styleable.UiView_uiStrokeDashed,
+                    R.styleable.UiView_uiStrokeDashGap,
+                    R.styleable.UiView_uiStrokeGradientColors,
+                    R.styleable.UiView_uiStrokeGradientOrientation,
+                    R.styleable.UiView_uiStrokeSides,
+                    R.styleable.UiView_uiStrokeCap,
+                    R.styleable.UiView_uiStrokeWidths,
+                    R.styleable.UiView_uiStrokeGradientStart,
+                    R.styleable.UiView_uiStrokeGradientCenter,
+                    R.styleable.UiView_uiStrokeGradientEnd
                 )
                 helper.readShadowAttrs(this,
-                    R.styleable.UiView_shadowColor,
-                    R.styleable.UiView_shadowRadius,
-                    R.styleable.UiView_shadowDx,
-                    R.styleable.UiView_shadowDy,
-                    R.styleable.UiView_shadowElevation
+                    R.styleable.UiView_uiShadowColor,
+                    R.styleable.UiView_uiShadowElevation
                 )
                 helper.readDimensionAttrs(this,
-                    R.styleable.UiView_uiDimenRatio,
+                    R.styleable.UiView_uiDimensionRatio,
                     R.styleable.UiView_uiWidthPercent,
                     R.styleable.UiView_uiHeightPercent,
                     R.styleable.UiView_uiMaxWidthPercent,
@@ -94,10 +89,9 @@ class UiView @JvmOverloads constructor(
         val h = height.toFloat()
         
         helper.drawBackground(canvas, w, h)
-        val save = canvas.save()
-        canvas.clipPath(helper.getClipPath())
-        super.onDraw(canvas)
-        canvas.restoreToCount(save)
+        helper.drawClipped(canvas) {
+            super.onDraw(canvas)
+        }
         helper.drawStroke(canvas, w, h)
     }
 

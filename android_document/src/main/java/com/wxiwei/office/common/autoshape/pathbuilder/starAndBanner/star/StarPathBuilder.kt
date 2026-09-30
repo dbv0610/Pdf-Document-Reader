@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          StarAndFlagPathBuilder.java
  *  
  * 编译器:            android2.2
@@ -54,12 +61,12 @@ object StarPathBuilder {
     fun getStarPath(shape: AutoShape, rect: Rect): Path? {
         path.reset()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.IrregularSeal1 -> return getIrregularSeal1Path(shape, rect)
 
             ShapeTypes.IrregularSeal2 -> return getIrregularSeal2Path(shape, rect)
 
-            ShapeTypes.Star4, ShapeTypes.Star5, ShapeTypes.Star, ShapeTypes.Star6, ShapeTypes.Star7, ShapeTypes.Star8, ShapeTypes.Star10, ShapeTypes.Star12, ShapeTypes.Star16, ShapeTypes.Star24, ShapeTypes.Star32 -> if (shape.isAutoShape07()) {
+            ShapeTypes.Star4, ShapeTypes.Star5, ShapeTypes.Star, ShapeTypes.Star6, ShapeTypes.Star7, ShapeTypes.Star8, ShapeTypes.Star10, ShapeTypes.Star12, ShapeTypes.Star16, ShapeTypes.Star24, ShapeTypes.Star32 -> if (shape.isAutoShape07) {
                 return LaterStarPathBuilder.getStarPath(shape, rect)
             } else {
                 return EarlyStarPathBuilder.getStarPath(shape, rect)

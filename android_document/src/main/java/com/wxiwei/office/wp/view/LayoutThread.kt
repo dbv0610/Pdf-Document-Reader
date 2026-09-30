@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.wp.view
 
 import com.wxiwei.office.system.*
@@ -32,7 +39,12 @@ class LayoutThread(private var root: IRoot?) {
                     val currentRoot = root ?: break
                     if (currentRoot.canBackLayout()) {
                         Log.d("OfficePageLayout", "layout coroutine backLayout")
-                        currentRoot.backLayout()
+                        // Live editing changes the document on the main thread under this lock and
+                        // then replaces the root, cancelling this job: never lay out a page meanwhile.
+                        val lock = (currentRoot as? IView)?.getDocument() ?: currentRoot
+                        synchronized(lock) {
+                            if (isActive) currentRoot.backLayout()
+                        }
                         delay(50L)
                     } else {
                         delay(1000L)

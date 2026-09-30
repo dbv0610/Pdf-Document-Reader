@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 閺傚洣娆㈤崥宥囆�:          NumericCellFormatter.java
  * 閻楀牊娼堥幍?婀丂2001-2014 閾忕钂嬮敍鍫熸線瀹哥儑绱氱粔鎴炲Η閺堝妾洪崗顒�寰�
  * 缂傛牞鐦ч崳?            android2.2
@@ -150,12 +157,13 @@ class NumericFormatter private constructor() {
     private fun deleteInvalidateChars(str: String?): String? {
         var str = str
         if (str != null) {
-            str = str.replace("\\\\-".toRegex(), "-")
-            str = str.replace("\\\\,".toRegex(), ",")
-            str = str.replace("\\\\\\.".toRegex(), ".") // . is a special regexp char
-            str = str.replace("\\\\ ".toRegex(), " ")
-            str = str.replace("\\\\/".toRegex(), "/") // weird: m\\/d\\/yyyy
-            str = str.replace("\"/\"".toRegex(), "/") // "/" is escaped for no reason in: mm"/"dd"/"yyyy
+            // plain text replaces: these ran as regular expressions, compiled again for every cell drawn
+            str = str.replace("\\-", "-")
+            str = str.replace("\\,", ",")
+            str = str.replace("\\.", ".")
+            str = str.replace("\\ ", " ")
+            str = str.replace("\\/", "/") // weird: m\\/d\\/yyyy
+            str = str.replace("\"/\"", "/") // "/" is escaped for no reason in: mm"/"dd"/"yyyy
 
             str = str.replace("_-", " ")
             str = str.replace("_(", " ")

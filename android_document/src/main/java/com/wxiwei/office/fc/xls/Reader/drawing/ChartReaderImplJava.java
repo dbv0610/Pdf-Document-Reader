@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          ChartReader.java
  *  
  * 编译器:            android2.2
@@ -73,7 +80,8 @@ public class ChartReaderImplJava
         SchemeClrConstant.SCHEME_ACCENT5, 
         SchemeClrConstant.SCHEME_ACCENT6};
     
-    private static final double tints[] = {-0.25, 0, 0.4, 0.6, 0.8, -0.5};
+    // the first six series use the plain accents, later rounds get darker/lighter shades (like Office)
+    private static final double tints[] = {0, -0.25, 0.4, 0.6, 0.8, -0.5};
     
     private static ChartReaderImplJava reader = new ChartReaderImplJava();
     
@@ -125,7 +133,7 @@ public class ChartReaderImplJava
         		{
         			//auto fill
         			fill = new BackgroundAndFill();
-                	fill.setFillType(BackgroundAndFill.FILL_SOLID);
+                	fill.fillType = BackgroundAndFill.FILL_SOLID;
                 	fill.setForegroundColor(0xFFFFFFFF);
         		}
         	}
@@ -138,25 +146,25 @@ public class ChartReaderImplJava
         	{
         		line = new Line();
             	BackgroundAndFill lineFill = new BackgroundAndFill();
-            	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+            	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
             	lineFill.setForegroundColor(0xFF747474);
     	       	line.setBackgroundAndFill(lineFill);
-    	       	line.setLineWidth(1);
+    	       	line.lineWidth = 1;
         	}
         }
         else
         {
         	//auto fill and line
         	fill = new BackgroundAndFill();
-        	fill.setFillType(BackgroundAndFill.FILL_SOLID);
+        	fill.fillType = BackgroundAndFill.FILL_SOLID;
         	fill.setForegroundColor(0xFFFFFFFF);
         	
         	line = new Line();
         	BackgroundAndFill lineFill = new BackgroundAndFill();
-        	lineFill.setFillType(BackgroundAndFill.FILL_SOLID);
+        	lineFill.fillType = BackgroundAndFill.FILL_SOLID;
         	lineFill.setForegroundColor(0xFF747474);
 	       	line.setBackgroundAndFill(lineFill);
-	       	line.setLineWidth(1);
+	       	line.lineWidth = 1;
         }
         
         //default text size
@@ -295,8 +303,7 @@ public class ChartReaderImplJava
                 
             case AbstractChart.CHART_LINE:
                 renderer = buildXYMultipleSeriesRenderer(plotArea, defaultFontSize, appType); 
-                dataset = getXYMultipleSeriesDataset(chart, type, (XYMultipleSeriesRenderer)renderer, styles);               
-                ((XYMultipleSeriesRenderer)renderer).setYLabels(10);
+                dataset = getXYMultipleSeriesDataset(chart, type, (XYMultipleSeriesRenderer)renderer, styles);
                 abstractChart = ChartFactory.getLineChart(dataset, (XYMultipleSeriesRenderer)renderer);  
                 break;
                 
@@ -305,6 +312,7 @@ public class ChartReaderImplJava
                 renderer.setZoomEnabled(true);
                 pieDataset = buildCategoryDataset(chart, renderer);
                 abstractChart = ChartFactory.getPieChart(pieDataset, renderer);
+                ((com.wxiwei.office.thirdpart.achartengine.chart.PieChart)abstractChart).sliceBorderColor = sliceBorder(chart);
                 break;
                 
             case AbstractChart.CHART_SCATTER:
@@ -343,6 +351,11 @@ public class ChartReaderImplJava
             }
             
             renderer.setShowChartTitle(true);
+            if(fontSize == 0 && titleElement.element("txPr") != null)
+            {
+                // title without its own text: size from the title's default run properties
+                fontSize = getTextSize(titleElement.element("txPr"));
+            }
             if(fontSize == 0)
         	{
         		fontSize = defaultFontSize;
@@ -351,21 +364,7 @@ public class ChartReaderImplJava
         	
             if(chartTitle.length() == 0)
             {
-            	if(dataset != null)
-            	{
-            		if(dataset !=  null && dataset.getSeriesCount() == 1)
-                	{
-                		chartTitle = dataset.getSeriesAt(0).getTitle();
-                	}
-                	else
-                	{
-                		chartTitle = "Chart Title";
-                	}
-            	}
-            	else if(pieDataset != null)
-            	{
-            		chartTitle = pieDataset.getTitle();
-            	}            	
+            	chartTitle = autoTitle(plotArea);
             }
             renderer.setChartTitle(chartTitle);            
         }        
@@ -415,7 +414,7 @@ public class ChartReaderImplJava
             
             //Text Paragraphs            
             @ SuppressWarnings("unchecked")
-            Iterator<Element> iter = rich.elements("p").iterator();
+            Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) rich.elements("p").iterator();
             TextParagraph textParagraph;
             List<TextParagraph> paragraphs = new ArrayList<TextParagraph>();
             
@@ -444,6 +443,95 @@ public class ChartReaderImplJava
      * @param solidFillElement
      * @return
      */
+    /** Solid fill of an spPr, or -1. */
+    private int fillOf(Element spPr)
+    {
+        if(spPr == null || spPr.element("solidFill") == null)
+        {
+            return -1;
+        }
+        return getColor(spPr.element("solidFill"));
+    }
+
+    /** Fill of data point idx (c:dPt), or -1. */
+    private int pointFill(Element series, int idx)
+    {
+        for(Object o : series.elements("dPt"))
+        {
+            Element dPt = (Element)o;
+            Element i = dPt.element("idx");
+            if(i != null && String.valueOf(idx).equals(i.attributeValue("val")))
+            {
+                return fillOf(dPt.element("spPr"));
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Title shown for a c:title without text: the series name when the chart has one named
+     * series, otherwise "Chart Title" (what Excel and WPS show).
+     */
+    private String autoTitle(Element plotArea)
+    {
+        List<Element> all = new ArrayList<Element>();
+        for(Object t : plotArea.elements())
+        {
+            for(Object ser : ((Element)t).elements("ser"))
+            {
+                all.add((Element)ser);
+            }
+        }
+        if(all.size() == 1 && all.get(0).element("tx") != null)
+        {
+            String name = getSeriesTitle(all.get(0).element("tx"));
+            if(name != null && name.length() > 0)
+            {
+                return name;
+            }
+        }
+        return "Chart Title";
+    }
+
+    /** Slice outline of a pie from its first data point's a:ln fill (white "bg1" in Office's style), 0 for none. */
+    private int sliceBorder(Element pieChart)
+    {
+        Element ser = pieChart.element("ser");
+        Element dPt = ser != null ? ser.element("dPt") : null;
+        Element spPr = dPt != null ? dPt.element("spPr") : null;
+        Element ln = spPr != null ? spPr.element("ln") : null;
+        Element fill = ln != null ? ln.element("solidFill") : null;
+        if(fill == null)
+        {
+            return 0;
+        }
+        Element scheme = fill.element("schemeClr");
+        if(scheme != null && ("bg1".equals(scheme.attributeValue("val")) || "lt1".equals(scheme.attributeValue("val"))))
+        {
+            return 0xFFFFFFFF;
+        }
+        int c = getColor(fill);
+        return c == -1 ? 0 : c;
+    }
+
+    /** Office's step for an axis range: 1, 2 or 5 times a power of ten, at most 10 steps. */
+    private static double axisStep(double range)
+    {
+        if(range <= 0)
+        {
+            return 1;
+        }
+        double p = Math.pow(10, Math.floor(Math.log10(range / 10)));
+        for(double m : new double[]{1, 2, 5, 10})
+        {
+            if(range / (m * p) <= 10.0000001)
+            {
+                return m * p;
+            }
+        }
+        return 10 * p;
+    }
+
     private int getColor(Element solidFillElement)
     {
         Element clr;
@@ -462,7 +550,12 @@ public class ChartReaderImplJava
         else if(solidFillElement.element("schemeClr") != null)
         {
             clr = solidFillElement.element("schemeClr");
-            color = schemeColor.get(clr.attributeValue("val"));
+            Integer scheme = schemeColor.get(clr.attributeValue("val"));
+            if(scheme == null)
+            {
+                return -1;
+            }
+            color = scheme;
             
             if(clr.element("lumMod") != null)
             {
@@ -600,8 +693,8 @@ public class ChartReaderImplJava
         List<TextParagraph> yLabel = null;
         {
             //scatter chart
-        	List<Element> valAxs = plotArea.elements("valAx");
-        	List<Element> catAxs = plotArea.elements("catAx");
+        	List<Element> valAxs = (List<Element>) (List<?>) plotArea.elements("valAx");
+        	List<Element> catAxs = (List<Element>) (List<?>) plotArea.elements("catAx");
         	
         	List<Element> eles = new ArrayList<Element>();
         	for(int i = 0; i < valAxs.size(); i++)
@@ -777,8 +870,9 @@ public class ChartReaderImplJava
         
         int index = seriesOrder % themeIndex.length;
         index = schemeColor.get(themeIndex[index]);   
-        index = ColorUtil.instance().getColorWithTint(index, tints[seriesOrder / themeIndex.length]);
-        r.setColor(index);
+        index = ColorUtil.instance().getColorWithTint(index, tints[(seriesOrder / themeIndex.length) % tints.length]);
+        int own = fillOf(series.element("spPr"));
+        r.setColor(own != -1 ? own : index);
         
         if(styles != null && styles.length > 0)
         {
@@ -817,7 +911,7 @@ public class ChartReaderImplJava
         if(cache != null)
         {
         	@ SuppressWarnings("unchecked")
-            Iterator<Element> iter = cache.elements("pt").iterator();
+            Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) cache.elements("pt").iterator();
             Element pt;
             index = 1;
             while(iter.hasNext())
@@ -866,7 +960,7 @@ public class ChartReaderImplJava
                 Element numPoint;
                 double value;
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iter = number.elements("pt").iterator();
+                Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) number.elements("pt").iterator();
                 while(iter.hasNext())
                 {
                     numPoint = iter.next();
@@ -911,9 +1005,9 @@ public class ChartReaderImplJava
                 double valueX;
                 double valueY;
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iterX = xNumber.elements("pt").iterator();
+                Iterator<Element> iterX = (Iterator<Element>) (Iterator<?>) xNumber.elements("pt").iterator();
                 @SuppressWarnings("unchecked")
-				Iterator<Element> iterY = yNumber.elements("pt").iterator();
+				Iterator<Element> iterY = (Iterator<Element>) (Iterator<?>) yNumber.elements("pt").iterator();
                 while(iterX.hasNext() && iterY.hasNext())
                 {
                 	xNumPoint = iterX.next();
@@ -931,7 +1025,7 @@ public class ChartReaderImplJava
         		Element yNumPoint;
                 double valueY;
                 @SuppressWarnings("unchecked")
-				Iterator<Element> iterY = yNumber.elements("pt").iterator();
+				Iterator<Element> iterY = (Iterator<Element>) (Iterator<?>) yNumber.elements("pt").iterator();
                 while(iterY.hasNext())
                 {
                 	yNumPoint = iterY.next();
@@ -970,7 +1064,7 @@ public class ChartReaderImplJava
     {
         XYMultipleSeriesDataset dataset = new XYMultipleSeriesDataset();
         @ SuppressWarnings("unchecked")
-        List<Element> seriesList= chart.elements("ser");  
+        List<Element> seriesList= (List<Element>) (List<?>) chart.elements("ser");  
         
         
         final int seriesCount = seriesList.size();        
@@ -1054,6 +1148,35 @@ public class ChartReaderImplJava
         {
             maxY = 0;
         }
+        if(chartType != AbstractChart.CHART_SCATTER && maxY >= minY)
+        {
+            // Office's automatic value axis: from zero unless the data sits far from it, 5% headroom,
+            // ends on whole steps
+            double lo = minY, hi = maxY;
+            if(!hasMinY && lo >= 0 && lo <= hi * 5 / 6)
+            {
+                lo = 0;
+            }
+            if(!hasMaxY && hi <= 0 && hi >= lo * 5 / 6)
+            {
+                hi = 0;
+            }
+            double step = axisStep((hi - lo) * 1.05);
+            if(!hasMaxY && hi > 0)
+            {
+                hi = step * Math.ceil((hi + (hi - lo) * 0.05) / step - 0.0000001);
+            }
+            if(!hasMinY && lo < 0)
+            {
+                lo = step * Math.floor((lo - (hi - lo) * 0.05) / step + 0.0000001);
+            }
+            if(hi > lo)
+            {
+                minY = lo;
+                maxY = hi;
+                renderer.setYLabels((int)Math.round((hi - lo) / step));
+            }
+        }
         renderer.setYAxisMin(minY);
         renderer.setYAxisMax(maxY);        
         
@@ -1109,7 +1232,7 @@ public class ChartReaderImplJava
             if(series.element("cat") != null)
             {
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iter = series.element("cat").element("strRef").element("strCache").elements("pt").iterator();
+                Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) series.element("cat").element("strRef").element("strCache").elements("pt").iterator();
                 Element pt;
                 while(iter.hasNext())
                 {
@@ -1123,7 +1246,7 @@ public class ChartReaderImplJava
             if(series.element("val") != null)
             {
                 @ SuppressWarnings("unchecked")
-                Iterator<Element> iter = series.element("val").element("numRef").element("numCache").elements("pt").iterator();
+                Iterator<Element> iter = (Iterator<Element>) (Iterator<?>) series.element("val").element("numRef").element("numCache").elements("pt").iterator();
                 Element pt;
                 while(iter.hasNext())
                 {
@@ -1142,8 +1265,9 @@ public class ChartReaderImplJava
                     
                     color = i % themeIndex.length;
                     color = schemeColor.get(themeIndex[color]); 
-                    color = ColorUtil.instance().getColorWithTint(color, tints[i / themeIndex.length]);
-                    r.setColor(color);
+                    color = ColorUtil.instance().getColorWithTint(color, tints[(i / themeIndex.length) % tints.length]);
+                    int own = pointFill(series, i);
+                    r.setColor(own != -1 ? own : color);
                     renderer.addSeriesRenderer(r);
                     
                     aSeries.add(catList.get(i), valList.get(i));
@@ -1157,8 +1281,9 @@ public class ChartReaderImplJava
                     
                     color = i % themeIndex.length;
                     color = schemeColor.get(themeIndex[color]);  
-                    color = ColorUtil.instance().getColorWithTint(color, tints[i / themeIndex.length]);
-                    r.setColor(color);
+                    color = ColorUtil.instance().getColorWithTint(color, tints[(i / themeIndex.length) % tints.length]);
+                    int own = pointFill(series, i);
+                    r.setColor(own != -1 ? own : color);
                     renderer.addSeriesRenderer(r);
                     
                     aSeries.add(valList.get(i));

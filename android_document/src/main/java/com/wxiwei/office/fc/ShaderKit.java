@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc;
 
 import java.util.List;
@@ -27,7 +34,7 @@ public class ShaderKit
     {
     	Element gsLstElement= gradFill.element("gsLst");    	
     	//Gradient stops list
-    	List<Element> gsLst = gsLstElement.elements("gs");
+    	List<Element> gsLst = (List<Element>) (List<?>) gsLstElement.elements("gs");
     	if(gsLst == null || gsLst.size() == 0)
     	{
     		return null;
@@ -76,7 +83,7 @@ public class ShaderKit
     {
     	Element gsLstElement= gradFill.element("gsLst");    	
     	//Gradient stops list
-    	List<Element> gsLst = gsLstElement.elements("gs");
+    	List<Element> gsLst = (List<Element>) (List<?>) gsLstElement.elements("gs");
     	if(gsLst == null || gsLst.size() == 0)
     	{
     		return null;

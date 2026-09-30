@@ -1,5 +1,13 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.wp.control
 
+import com.wxiwei.office.constant.wp.WPModelConstant
 import com.wxiwei.office.system.*
 
 import android.content.Context
@@ -169,8 +177,8 @@ class Word : LinearLayout, IWord {
             item?.addRepaintImageView(null)
             return
         }
-        val b = PictureKit.instance().isDrawPictrue()
-        PictureKit.instance().setDrawPictrue(true)
+        val b = PictureKit.instance().isDrawPictrue
+        PictureKit.instance().isDrawPictrue = true
         val bitmap = otp.getBitmap(width, height) ?: return
         var paintZoom = getZoom()
         var tX = -scrollX.toFloat()
@@ -199,7 +207,7 @@ class Word : LinearLayout, IWord {
         }
         otp.callBack(bitmap)
 
-        PictureKit.instance().setDrawPictrue(b)
+        PictureKit.instance().isDrawPictrue = b
     }
 
     fun getSnapshot(bitmap: Bitmap?): Bitmap? {
@@ -207,8 +215,8 @@ class Word : LinearLayout, IWord {
         if (getCurrentRootType() == WPViewConstant.PRINT_ROOT.toInt() && printWord != null) {
             return printWord!!.getSnapshot(bitmap)
         }
-        val b = PictureKit.instance().isDrawPictrue()
-        PictureKit.instance().setDrawPictrue(true)
+        val b = PictureKit.instance().isDrawPictrue
+        PictureKit.instance().isDrawPictrue = true
         var paintZoom = getZoom()
         var tX = -scrollX.toFloat()
         var tY = -scrollY.toFloat()
@@ -234,7 +242,7 @@ class Word : LinearLayout, IWord {
         } else if (getCurrentRootType() == WPViewConstant.NORMAL_ROOT.toInt()) {
             normalRoot?.draw(canvas, 0, 0, paintZoom)
         }
-        PictureKit.instance().setDrawPictrue(b)
+        PictureKit.instance().isDrawPictrue = b
         return bitmap
     }
 
@@ -260,6 +268,45 @@ class Word : LinearLayout, IWord {
             setExportImageAfterZoom(true)
         }
         post { control?.actionEvent(EventConstant.APP_GENERATED_PICTURE_ID, null) }
+    }
+
+    /**
+     * Lays the document out again from the model after an edit, keeping the scroll position.
+     * The first page is laid out now, the rest in the background like when opening.
+     */
+    /**
+     * Lays the document out again after a live edit. With [fromOffset] (the start of the edit),
+     * pages before it keep their layout, which keeps typing fast in long documents.
+     */
+    fun relayoutContent(fromOffset: Long = -1) {
+        // a header or footer shows on every page: lay out from the first page
+        if (fromOffset >= 0 && (fromOffset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return relayoutContent(0)
+        when (currentRootType) {
+            WPViewConstant.PAGE_ROOT.toInt() -> {
+                val old = pageRoot ?: return
+                if (fromOffset >= 0 && old.relayoutFrom(fromOffset, ((scrollY + height) / zoom).toInt() + 1, zoom)) {
+                    postInvalidate()
+                    return
+                }
+                val sx = scrollX
+                val sy = scrollY
+                old.dispose()
+                val root = PageRoot(this)
+                pageRoot = root
+                root.doLayout(0, 0, mWidth, mHeight, Int.MAX_VALUE, 0)
+                LayoutKit.instance().layoutAllPage(root, zoom)
+                // the pages down to where the view was, or scrollTo stops at the first ones
+                if (fromOffset >= 0) root.layoutDownTo(((sy + height) / zoom).toInt() + 1, zoom)
+                scrollTo(sx, sy)
+                postInvalidate()
+            }
+            WPViewConstant.NORMAL_ROOT.toInt() -> {
+                val root = normalRoot ?: return
+                root.stopBackLayout()
+                root.layoutAll()
+                postInvalidate()
+            }
+        }
     }
 
     fun layoutNormal() {
@@ -294,7 +341,7 @@ class Word : LinearLayout, IWord {
         if (rootType == getCurrentRootType()) return
         eventManage?.stopFling()
         setCurrentRootType(rootType)
-        PictureKit.instance().setDrawPictrue(true)
+        PictureKit.instance().isDrawPictrue = true
         when (getCurrentRootType()) {
             WPViewConstant.NORMAL_ROOT.toInt() -> {
                 if (normalRoot == null) {
@@ -649,8 +696,8 @@ class Word : LinearLayout, IWord {
         }
         val view = pageRoot.getPageView(pageNumber - 1)
         if (view != null && SysKit.isValidateRect(view.getWidth(), view.getHeight(), srcLeft, srcTop, srcWidth, srcHeight)) {
-            val b = PictureKit.instance().isDrawPictrue()
-            PictureKit.instance().setDrawPictrue(true)
+            val b = PictureKit.instance().isDrawPictrue
+            PictureKit.instance().isDrawPictrue = true
             val paintZoom = min(desWidth / srcWidth.toFloat(), desHeight / srcHeight.toFloat())
             val bitmap = try {
                 Bitmap.createBitmap((srcWidth * paintZoom).toInt(), (srcHeight * paintZoom).toInt(), Bitmap.Config.ARGB_8888)
@@ -663,7 +710,7 @@ class Word : LinearLayout, IWord {
             canvas.translate(tX, tY)
             canvas.drawColor(Color.WHITE)
             (view as PageView).draw(canvas, 0, 0, paintZoom)
-            PictureKit.instance().setDrawPictrue(b)
+            PictureKit.instance().isDrawPictrue = b
             return bitmap
         }
         return null
@@ -683,6 +730,9 @@ class Word : LinearLayout, IWord {
         if (currentRootType == WPViewConstant.NORMAL_ROOT.toInt() || pageRoot == null) return 1
         return pageRoot!!.getPageCount()
     }
+
+    /** False while the pages are being laid out (on opening, or again after an edit); [getPageCount] is not final then. */
+    fun isLayoutFinished(): Boolean = currentRootType == WPViewConstant.NORMAL_ROOT.toInt() || pageRoot?.isFinishLayout() ?: true
 
     fun getCurrentRootType(): Int = currentRootType
 

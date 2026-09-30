@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.pg.control
 
 import com.wxiwei.office.common.shape.AbstractShape
@@ -23,10 +30,10 @@ class PGEditor(private var pgView: Presentation?) : IWord {
 
     override fun modelToView(offset: Long, rect: Rectangle, isBack: Boolean): Rectangle {
         editorTextBox?.let { box ->
-            val root: STRoot? = box.getRootView()
+            val root: STRoot? = box.rootView
             root?.modelToView(offset, rect, isBack)
-            rect.x += box.getBounds().x
-            rect.y += box.getBounds().y
+            rect.x += box.bounds!!.x
+            rect.y += box.bounds!!.y
         }
         return rect
     }
@@ -34,7 +41,7 @@ class PGEditor(private var pgView: Presentation?) : IWord {
     override fun getDocument(): IDocument? = null
 
     override fun getText(start: Long, end: Long): String? {
-        val elem = editorTextBox?.getElement() ?: return null
+        val elem = editorTextBox?.element ?: return null
         if (elem.getEndOffset() - elem.getStartOffset() > 0) {
             val str = elem.getText(null)
             if (str != null) return str.substring(maxOf(start, elem.getStartOffset()).toInt(), minOf(end, elem.getEndOffset()).toInt())
@@ -45,9 +52,9 @@ class PGEditor(private var pgView: Presentation?) : IWord {
     override fun viewToModel(x: Int, y: Int, isBack: Boolean): Long {
         val view = pgView ?: return -1
         val shape = view.getCurrentSlide()?.getShape(x, y)
-        if (shape != null && shape.getType() == AbstractShape.SHAPE_TEXTBOX) {
-            val root = (shape as TextBox).getRootView()
-            if (root != null) return root.viewToModel(x - shape.getBounds().x, y - shape.getBounds().y, isBack)
+        if (shape != null && shape.type == AbstractShape.SHAPE_TEXTBOX) {
+            val root = (shape as TextBox).rootView
+            if (root != null) return root.viewToModel(x - shape.bounds!!.x, y - shape.bounds!!.y, isBack)
         }
         return -1
     }

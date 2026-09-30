@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          WorkBooks.java
  *
  * 编译器:            android2.2
@@ -55,7 +62,8 @@ open class Workbook(before07: Boolean) {
 
     //shared strings, index is continuous
     @JvmField
-    protected var sharedString: MutableMap<Int, Any?>? = HashMap(20)
+    /** Shared strings by index (String or SectionElement): a list, as a map costs ~50 bytes more per string. */
+    protected var sharedString: ArrayList<Any?>? = ArrayList(20)
 
     //theme Color index
     private var themeColor: MutableMap<Int, Int>? = HashMap(20)
@@ -76,6 +84,14 @@ open class Workbook(before07: Boolean) {
      */
     fun addSheet(index: Int, sheet: Sheet?) {
         sheets!![index] = sheet
+    }
+
+    /** Takes out the last sheet (one added while editing); false for any other. */
+    fun removeLastSheet(sheet: Sheet): Boolean {
+        val last = sheets!!.size - 1
+        if (last <= 0 || sheets!![last] !== sheet) return false
+        sheets!!.remove(last)
+        return true
     }
 
     /**
@@ -206,24 +222,17 @@ open class Workbook(before07: Boolean) {
     @Synchronized
     fun addColor(argb: Int): Int {
         val colors = colors!!
-        if (colors.containsValue(argb)) {
-            val iter = colors.keys.iterator()
-            var index = 0
-            while (iter.hasNext()) {
-                index = iter.next()
-                if (colors[index]!! == argb) {
-                    break
-                }
-            }
-            return index
-        } else {
-            var index = colors.size - 1
-            while (colors[index] != null) {
-                index++
-            }
-            colors[index] = argb
-            return index
+        // Never hand out a palette slot (0..65): the file may redefine it later (styles.xml
+        // indexedColors, XLS PALETTE record), which would silently recolor theme/RGB colors.
+        for ((index, value) in colors) {
+            if (index >= FIRST_FREE_COLOR_INDEX && value == argb) return index
         }
+        var index = FIRST_FREE_COLOR_INDEX
+        while (colors[index] != null) {
+            index++
+        }
+        colors[index] = argb
+        return index
     }
 
     /**
@@ -309,7 +318,7 @@ open class Workbook(before07: Boolean) {
 //        else
         run {
             //add to end
-            sharedString!![sharedString!!.size] = item
+            sharedString!!.add(item)
             return sharedString!!.size - 1
         }
     }
@@ -320,7 +329,10 @@ open class Workbook(before07: Boolean) {
      * @param item
      */
     fun addSharedString(index: Int, item: Any?) {
-        sharedString!![index] = item
+        val list = sharedString!!
+        if (index < 0) return
+        while (list.size <= index) list.add(null)
+        list[index] = item
     }
 
     /**
@@ -329,7 +341,7 @@ open class Workbook(before07: Boolean) {
      * @return
      */
     fun getSharedString(index: Int): String? {
-        val si = sharedString!![index]
+        val si = sharedString!!.getOrNull(index)
         var value: String? = null
         if (si is SectionElement) {
             value = si.getText(null)
@@ -346,7 +358,7 @@ open class Workbook(before07: Boolean) {
      * @return string or SectionElement
      */
     fun getSharedItem(index: Int): Any? {
-        return sharedString!![index]
+        return sharedString!!.getOrNull(index)
     }
 
     /**
@@ -445,7 +457,7 @@ open class Workbook(before07: Boolean) {
         var index = 0
         while (iter.hasNext()) {
             index = iter.next()
-            if (pictures!![index]!!.getTempFilePath()!! == pic.getTempFilePath()) {
+            if (pictures!![index]!!.tempFilePath!! == pic.tempFilePath) {
                 //has exist
                 return index
             }
@@ -479,6 +491,16 @@ open class Workbook(before07: Boolean) {
     fun getMaxColumn(): Int {
         return if (before07) MAXCOLUMN_03 else MAXCOLUMN_07
     }
+
+    // table styles defined in styles.xml, by name
+    private val customTableStyles = HashMap<String, com.wxiwei.office.ss.model.table.SSTableStyle>()
+
+    fun addCustomTableStyle(name: String, style: com.wxiwei.office.ss.model.table.SSTableStyle) {
+        customTableStyles[name] = style
+    }
+
+    fun getCustomTableStyle(name: String?): com.wxiwei.office.ss.model.table.SSTableStyle? =
+        if (name == null) null else customTableStyles[name]
 
     fun setTableFormatManager(tableFormatManager: TableFormatManager?) {
         this.tableFormatManager = tableFormatManager
@@ -589,3 +611,6 @@ open class Workbook(before07: Boolean) {
         }
     }
 }
+
+/** First color index after the legacy palette (0..63) and the system colors 64, 65. */
+private const val FIRST_FREE_COLOR_INDEX = 66

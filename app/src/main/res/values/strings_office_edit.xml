@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="edit_document">Sửa tài liệu</string>
+    <string name="edit_not_supported">Chỉ sửa được tệp .docx, .xlsx và .pptx</string>
+    <string name="edit_not_ready">Đợi tài liệu mở xong rồi thử lại</string>
+    <string name="edit_unsaved_title">Thay đổi chưa lưu</string>
+    <string name="edit_unsaved_message">Lưu các thay đổi vào %1$s?</string>
+    <string name="edit_save">Lưu</string>
+    <string name="edit_discard">Bỏ thay đổi</string>
+    <string name="edit_keep_editing">Sửa tiếp</string>
+    <string name="edit_draft_title">Khôi phục bản sửa?</string>
+    <string name="edit_draft_message">Có thay đổi chưa lưu của %1$s từ %2$s (ứng dụng đã bị đóng trước khi lưu).</string>
+    <string name="edit_draft_restore">Khôi phục</string>
+    <string name="edit_draft_restore_failed">Không khôi phục được bản sửa</string>
+</resources>

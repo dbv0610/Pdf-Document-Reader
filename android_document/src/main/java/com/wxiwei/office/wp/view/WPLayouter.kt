@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          WPLayouter.java
  *
  * 编译器:            android2.2
@@ -57,11 +64,11 @@ class WPLayouter(root: PageRoot) {
     // 段落分页
     private var breakPara: ParagraphView? = null
 
-    // header
-    private var header: TitleView? = null
+    // header of each kind of page (HF_FIRST, HF_ODD, HF_EVEN), laid out on first use
+    private val headers = HashMap<Byte, Optional>()
 
-    // footer
-    private var footer: TitleView? = null
+    // footer of each kind of page
+    private val footers = HashMap<Byte, Optional>()
 
     //
     private var tableLayout: TableLayoutKit? = null
@@ -90,11 +97,25 @@ class WPLayouter(root: PageRoot) {
         section = doc!!.getSection(0)
         //
         AttrManage.instance().fillPageAttr(pageAttr, section!!.getAttribute())
+        stretchLinePitch(pageAttr!!)
         //
         val pv = ViewFactory.createView(root!!.getControl()!!, section, null, WPViewConstant.PAGE_VIEW.toInt()) as PageView
         root!!.appendChlidView(pv)
         layoutPage(pv)
         LayoutKit.instance().layoutAllPage(root!!, 1.0f)
+    }
+
+    /**
+     * Word fits a whole number of grid lines in the body and stretches the pitch to fill it
+     * (linePitch 312 on A4 with 1" margins: 44 lines of 317.2 twips). Only the body: text boxes
+     * keep the section's pitch as it is (a WPS text box sized for 10 lines of 312 twips).
+     */
+    private fun stretchLinePitch(pageAttr: PageAttr) {
+        val textHeight = pageAttr.pageHeight - pageAttr.topMargin - pageAttr.bottomMargin
+        if (pageAttr.pageLinePitch > 0 && textHeight > pageAttr.pageLinePitch) {
+            val lines = Math.floor((textHeight / pageAttr.pageLinePitch).toDouble()).toInt()
+            pageAttr.pageLinePitch = textHeight.toFloat() / lines
+        }
     }
 
     fun layoutPage(pageView: PageView): Int {
@@ -108,7 +129,6 @@ class WPLayouter(root: PageRoot) {
         pageView.setSize(pageAttr.pageWidth, pageAttr.pageHeight)
         pageView.setIndent(pageAttr.leftMargin, pageAttr.topMargin, pageAttr.rightMargin, pageAttr.bottomMargin)
         pageView.setStartOffset(currentLayoutOffset)
-        Log.e("WPLayouter.LayoutPage", "pageView.setStartOffset = " + currentLayoutOffset)
 
         val dx = pageAttr.leftMargin
         var dy = pageAttr.topMargin
@@ -124,7 +144,7 @@ class WPLayouter(root: PageRoot) {
                 "elemStart=${elem?.getStartOffset()} elemEnd=${elem?.getEndOffset()} maxEnd=$maxEnd " +
                 "page=${pageAttr.pageWidth}x${pageAttr.pageHeight} margins=" +
                 "${pageAttr.leftMargin},${pageAttr.topMargin},${pageAttr.rightMargin},${pageAttr.bottomMargin} " +
-                "span=$spanW x $spanH"
+                "span=$spanW x $spanH pitch=${pageAttr.pageLinePitch}"
         )
         // Header/footer layout can enlarge margins. Never let that remove the
         // entire body area; otherwise the first page cannot advance its model
@@ -152,10 +172,8 @@ class WPLayouter(root: PageRoot) {
         }
         pageView.appendChlidView(para)
 
-        Log.e("WPLayouter.LayoutPage", "para.setStartOffset = " + currentLayoutOffset)
         para.setStartOffset(currentLayoutOffset)
-        Log.e("WPLayouter.115", "para.setEndOffset = " + elem!!.getEndOffset())
-        para.setEndOffset(elem.getEndOffset())
+        para.setEndOffset(elem!!.getEndOffset())
         var keepOne = true
         // The last paragraph or table did not fit at all and was removed, the next page starts with it again
         var removedUnfitPara = false
@@ -221,7 +239,6 @@ class WPLayouter(root: PageRoot) {
             } else {
                 currentLayoutOffset = calculatedEndOffset
             }
-            Log.e("currentLayoutOffset", "" + currentLayoutOffset)
             spanH -= paraHeight
             if (spanH > 0 && currentLayoutOffset < maxEnd && breakType != WPViewConstant.BREAK_LIMIT.toInt()
                 && breakType != WPViewConstant.BREAK_PAGE.toInt()
@@ -236,7 +253,6 @@ class WPLayouter(root: PageRoot) {
                 } else {
                     para = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.PARAGRAPH_VIEW.toInt()) as ParagraphView
                 }
-                Log.e("WPLayouter.LayoutPage.166", "para.setStartOffset = " + currentLayoutOffset)
                 para.setStartOffset(currentLayoutOffset)
                 pageView.appendChlidView(para)
             }
@@ -251,11 +267,10 @@ class WPLayouter(root: PageRoot) {
         } else if (para.getType() == WPViewConstant.TABLE_VIEW && tableLayout!!.isTableBreakPages()) {
             breakPara = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.TABLE_VIEW.toInt()) as ParagraphView
             pageView.setHasBreakTable(true)
+            pageView.endsWithBrokenTable = true
             (para as TableView).setBreakPages(true)
-            Log.e("WPLayouter.layoutPage", "para.getType() = " + "WPViewConstant.TABLE_VIEW and " + (if (breakPara != null) "breakPara != null" else "breakPara == null"))
         } else if (elem != null && currentLayoutOffset < elem.getEndOffset()) {
             breakPara = ViewFactory.createView(root.getControl()!!, elem, null, WPViewConstant.PARAGRAPH_VIEW.toInt()) as ParagraphView
-            Log.e("WPLayouter.layoutPage", "else para.getType() other breakPara " + (if (breakPara != null) "breakPara != null" else "breakPara == null"))
         }
         // A DOCX may leave a stale break paragraph after the last paragraph has
         // already been consumed. Keeping it makes LayoutThread create empty pages
@@ -266,7 +281,6 @@ class WPLayouter(root: PageRoot) {
             }
             breakPara = null
         }
-        Log.e("WPLayouter.185", "pageView.setEndOffset = " + currentLayoutOffset)
         pageView.setEndOffset(currentLayoutOffset)
         //
         root.getViewContainer().sort()
@@ -296,54 +310,67 @@ class WPLayouter(root: PageRoot) {
 
     private fun layoutHeaderAndFooter(pageView: PageView) {
         val pageAttr = pageAttr!!
-        if (header == null) {
-            header = layoutHFParagraph(pageView, true)
+        // first page, even pages and the others may each have their own header and footer
+        val type = (doc as? WPDocument)?.hfTypeForPage(pageView.getPageNumber()) ?: WPModelConstant.HF_ODD
+        // laid out once per kind of page (its shapes are collected then); later pages add them again
+        val cachedHeader = headers[type]
+        val header: TitleView?
+        if (cachedHeader == null) {
+            header = layoutHFParagraph(pageView, true, type)
+            headers[type] = Optional(header)
             if (header != null) {
-                val h = header!!.getLayoutSpan(WPViewConstant.Y_AXIS)
-                if (pageAttr.headerMargin + h > pageAttr.topMargin) {
-                    pageAttr.topMargin = pageAttr.headerMargin + h
-                }
-                header!!.setParentView(pageView)
+                val height = header.getLayoutSpan(WPViewConstant.Y_AXIS)
+                if (pageAttr.headerMargin + height > pageAttr.topMargin) pageAttr.topMargin = pageAttr.headerMargin + height
+                header.setParentView(pageView)
             }
         } else {
-            for (sv in shapeViews) {
-                if (WPViewKit.instance().getArea(sv.getStartOffset(null)) == WPModelConstant.HEADER) {
-                    pageView.addShapeView(sv)
-                }
-            }
+            header = cachedHeader.view
+            if (header != null) addHFShapes(pageView, header)
         }
         pageView.setHeader(header)
-        if (footer == null) {
-            footer = layoutHFParagraph(pageView, false)
+        val cachedFooter = footers[type]
+        val footer: TitleView?
+        if (cachedFooter == null) {
+            footer = layoutHFParagraph(pageView, false, type)
+            footers[type] = Optional(footer)
             if (footer != null) {
-                if (footer!!.getY() < pageAttr.pageHeight - pageAttr.bottomMargin) {
-                    pageAttr.bottomMargin = pageAttr.pageHeight - footer!!.getY()
-                }
-                footer!!.setParentView(pageView)
+                if (footer.getY() < pageAttr.pageHeight - pageAttr.bottomMargin) pageAttr.bottomMargin = pageAttr.pageHeight - footer.getY()
+                footer.setParentView(pageView)
             }
         } else {
-            for (sv in shapeViews) {
-                if (WPViewKit.instance().getArea(sv.getStartOffset(null)) == WPModelConstant.FOOTER) {
-                    pageView.addShapeView(sv)
-                }
-            }
+            footer = cachedFooter.view
+            if (footer != null) addHFShapes(pageView, footer)
         }
-
         pageView.setFooter(footer)
     }
 
-    private fun layoutHFParagraph(pageView: PageView, isHeader: Boolean): TitleView? {
+    /** A laid-out header/footer, or none for that kind of page. */
+    private class Optional(val view: TitleView?)
+
+    /** The shapes anchored in [title] (laid out for an earlier page) also go on [pageView]. */
+    private fun addHFShapes(pageView: PageView, title: TitleView) {
+        val elem = title.getElement() ?: return
+        for (sv in shapeViews) {
+            val o = sv.getStartOffset(null)
+            if (o >= elem.getStartOffset() && o < elem.getEndOffset()) pageView.addShapeView(sv)
+        }
+    }
+
+    private fun layoutHFParagraph(pageView: PageView, isHeader: Boolean, type: Byte): TitleView? {
         val doc = doc!!
         val pageAttr = pageAttr!!
         val root = root!!
-        var offset = if (isHeader) WPModelConstant.HEADER else WPModelConstant.FOOTER
+        val hfElem = doc.getHFElement(if (isHeader) WPModelConstant.HEADER else WPModelConstant.FOOTER, type) ?: return null
+        // an empty header part: nothing to show
+        if (hfElem.getEndOffset() <= hfElem.getStartOffset()) return null
+        var offset = hfElem.getStartOffset()
         var breakType = WPViewConstant.BREAK_NO.toInt()
-        val hfElem = doc.getHFElement(offset, WPModelConstant.HF_ODD) ?: return null
 
         //ignore line pitch for header and footer layout
         val oldLinePitch = pageAttr.pageLinePitch
         pageAttr.pageLinePitch = -1f
 
+        val firstShape = shapeViews.size
         val titleView = ViewFactory.createView(root.getControl()!!, hfElem, null, WPViewConstant.TITLE_VIEW.toInt()) as TitleView
         titleView.setPageRoot(root)
         titleView.setLocation(pageAttr.leftMargin, pageAttr.headerMargin)
@@ -362,10 +389,8 @@ class WPLayouter(root: PageRoot) {
         }
         titleView.appendChlidView(para)
 
-        Log.e("WPLayouter.layoutHFParagraph.272", "para.setStartOffset = " + offset)
         para.setStartOffset(offset)
-        Log.e("WPLayouter.275", "para.setEndOffset = " + paraElem!!.getEndOffset())
-        para.setEndOffset(paraElem.getEndOffset())
+        para.setEndOffset(paraElem!!.getEndOffset())
         var keepOne = true
         val dx = 0
         var dy = 0
@@ -401,7 +426,6 @@ class WPLayouter(root: PageRoot) {
                 } else {
                     para = ViewFactory.createView(root.getControl()!!, paraElem, null, WPViewConstant.PARAGRAPH_VIEW.toInt()) as ParagraphView
                 }
-                Log.e("WPLayouter.310", "para.setStartOffset = " + offset)
                 para.setStartOffset(offset)
                 titleView.appendChlidView(para)
             }
@@ -411,6 +435,17 @@ class WPLayouter(root: PageRoot) {
         titleView.setSize(spanW, titleHeight)
         if (!isHeader) {
             titleView.setY(pageAttr.pageHeight - titleHeight - pageAttr.footerMargin)
+        }
+        // shapes anchored to a header/footer paragraph were placed relative to the title view
+        for (i in firstShape until shapeViews.size) {
+            val sv = shapeViews[i]
+            val shape = (sv as? ShapeView)?.getShape() ?: (sv as? ObjView)?.getShape() ?: continue
+            val v = shape.verticalRelativeTo.toInt()
+            if (v == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PARAGRAPH.toInt()
+                || v == com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LINE.toInt()
+            ) {
+                sv.setY(sv.getY() + titleView.getY())
+            }
         }
 
         //restore line pitch
@@ -465,9 +500,19 @@ class WPLayouter(root: PageRoot) {
         this.currentLayoutOffset = currentLayoutOffset
     }
 
+    /**
+     * Continues the layout at [offset] as page [pageNumber], after the kept pages that end at
+     * [lastPageEnd] (see PageRoot.relayoutFrom). A page never starts inside a broken table here.
+     */
+    fun restartAt(offset: Long, pageNumber: Int, lastPageEnd: Long) {
+        currentLayoutOffset = offset
+        currentPageNumber = pageNumber
+        lastCommittedPageEndOffset = lastPageEnd
+        breakPara = null
+        tableLayout!!.clearBreakPages()
+    }
+
     fun isLayoutFinish(): Boolean {
-        Log.e("WPLAYOUTER", "isLayoutFinish currentLayoutOffset " + currentLayoutOffset + " doc.getAreaEnd(WPModelConstant.MAIN) = " + doc!!.getAreaEnd(WPModelConstant.MAIN))
-        Log.e("WPLAYOUTER", "breakPara " + (if (breakPara != null) " != null" else "== null"))
         // areaEnd is the authoritative end of the main document. breakPara can
         // be stale after the final paragraph and must not keep pagination alive.
         return currentLayoutOffset >= doc!!.getAreaEnd(WPModelConstant.MAIN)
@@ -483,7 +528,7 @@ class WPLayouter(root: PageRoot) {
                 while (cell != null) {
                     var paraView = cell.getChildView()
                     while (paraView != null) {
-                        collectShapeViewForPara(page, para, isHF)
+                        (paraView as? ParagraphView)?.let { collectShapeViewForPara(page, it, isHF) }
                         paraView = paraView.getNextView()
                     }
                     cell = cell.getNextView()
@@ -531,8 +576,8 @@ class WPLayouter(root: PageRoot) {
         root = null
         doc = null
         breakPara = null
-        header = null
-        footer = null
+        headers.clear()
+        footers.clear()
         tableLayout = null
         hfTableLayout = null
         shapeViews.clear()

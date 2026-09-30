@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          DOCXReader.kt  (chuyển từ DOCXReader.java)
  *
  * 编译器:            android2.2
@@ -51,6 +58,7 @@ import com.wxiwei.office.common.shape.WPPictureShape
 import com.wxiwei.office.common.shape.WatermarkShape
 import com.wxiwei.office.constant.MainConstant
 import com.wxiwei.office.constant.SchemeClrConstant
+import com.wxiwei.office.constant.wp.AttrIDConstant
 import com.wxiwei.office.constant.wp.WPAttrConstant
 import com.wxiwei.office.constant.wp.WPModelConstant
 import com.wxiwei.office.fc.FCKit
@@ -118,6 +126,8 @@ internal fun String?.toFloatSafe(default: Float = 0f): Float = this?.trim()?.toF
  * "FF0000" / "#FF0000" / "#80FF0000" -> màu ARGB. Giá trị lạ ("auto", rỗng...) -> default.
  * Nhanh hơn Color.parseColor("#" + v) (không nối chuỗi) và không ném exception.
  */
+private const val SETTINGS_PART = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
+
 internal fun parseHexColor(value: String?, default: Int): Int {
     if (value.isNullOrEmpty()) return default
     val hex = if (value[0] == '#') value.substring(1) else value
@@ -145,7 +155,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private var editRunBase = 0
     private var editParaBase = 0
     private var editObjectRun: Element? = null
-    private fun editMain() = offset >= WPModelConstant.MAIN && offset < WPModelConstant.HEADER
+    /** The body, the header/footer being read, or a text box of the body (its runs are in document.xml). */
+    private fun editMain() = (offset >= WPModelConstant.MAIN && offset < WPModelConstant.HEADER) ||
+        (isProcessHF && (offset and WPModelConstant.AREA_MASK).let { it == WPModelConstant.HEADER || it == WPModelConstant.FOOTER }) ||
+        (!isProcessHF && (offset and WPModelConstant.AREA_MASK) == WPModelConstant.TEXTBOX)
     private fun recordEdit(start: Long, text: String, run: Element?, kind: DocxSourceMap.Kind) {
         if (editMain() && start >= 0 && editParas.isNotEmpty()) {
             val id = run?.let { editRuns[it] }
@@ -161,6 +174,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private var isProcessHF = false
     private var isProcessWatermark = false
     private var styleID = 0
+    // style w:default="1" of type paragraph ("Normal"): Word applies it to paragraphs without pStyle
+    private var defaultParaStyleID = -1
     // offset计数器，此值非常重要，需要小心行事
     private var offset: Long = 0L
     private var textboxIndex: Long = 0L
@@ -172,6 +187,16 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private val styleStrID: MutableMap<String, Int> = HashMap()
     private val tableStyle: MutableMap<String, Int> = HashMap()
     private val tableGridCol: MutableMap<Int, Int> = HashMap()
+    // borders and cell margins of table styles (styles.xml tblPr), keyed by styleId
+    private val tableStyleBorders = HashMap<String, Map<String, DocxBorder>>()
+    private val tableStyleCellMar = HashMap<String, Map<String, Int>>()
+    // state of the table being read: borders/margins after style + tblPr, size of the grid
+    private var tblBorders: Map<String, DocxBorder> = emptyMap()
+    private var tblCellMar: Map<String, Int> = emptyMap()
+    private var tblRowCount = 0
+    private var tblGridCount = 0
+    // width of the table being read in twips (tblW, else the grid), for cell widths given in percent
+    private var tableWidthTwips = 0
     // TỐI ƯU: HashMap thay Hashtable (không cần synchronized)
     private val bulletNumbersID: HashMap<String, String> = HashMap()
     // theme color
@@ -246,23 +271,23 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 //            throw Exception("File parsing error")
 //        }
         // page background color
-        val br = doc.rootElement.element("background")
+        val br = doc!!.rootElement!!.element("background")
         if (br != null) {
             var fill: BackgroundAndFill? = null
             if (br.element("background") != null) {
                 //gradient background or tile
-                fill = processBackgroundAndFill(br.element("background"))
+                fill = processBackgroundAndFill(br.element("background")!!)
             } else {
                 val value = br.attributeValue("color")
                 if (value != null) {
                     fill = BackgroundAndFill()
-                    fill.setForegroundColor(parseHexColor(value, Color.WHITE))
+                    fill.foregroundColor = parseHexColor(value, Color.WHITE)
                 }
             }
             document.setPageBackground(fill)
         }
 
-        processSection(doc.rootElement.element("body"))
+        processSection(doc!!.rootElement!!.element("body")!!)
 
         processRelativeShapeSize()
     }
@@ -295,11 +320,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 val saxreader = SAXReader()
                 val input: InputStream = part.inputStream
                 val doc = saxreader.read(input)
-                val root = doc.rootElement
-                val styles = root.childElements("style")
+                val root = doc!!.rootElement
+                val styles = root!!.childElements("style")
 
                 //docDefaults
-                val docDefaults = root.element("docDefaults")
+                val docDefaults = root!!.element("docDefaults")
                 if (docDefaults != null) {
                     val style = Style()
                     // id
@@ -331,11 +356,16 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                         break
                     }
                     if ("table" == styleEle.attributeValue("type")) {
+                        styleEle.attributeValue("styleId")?.let { id ->
+                            val tblPr = styleEle.element("tblPr")
+                            tableStyleBorders[id] = parseBorders(tblPr?.element("tblBorders"))
+                            tableStyleCellMar[id] = parseCellMargins(tblPr?.element("tblCellMar"))
+                        }
                         val tlb = styleEle.element("tblStylePr")
                         if (tlb != null && "firstRow" == tlb.attributeValue("type")) {
                             val fillVal = tlb.element("tcPr")?.element("shd")?.attributeValue("fill")
-                            if (fillVal != null) {
-                                tableStyle[styleEle.attributeValue("styleId")] = parseHexColor(fillVal, Color.WHITE)
+                            if (fillVal != null && styleEle.attributeValue("styleId") != null) {
+                                tableStyle[styleEle.attributeValue("styleId")!!] = parseHexColor(fillVal, Color.WHITE)
                             }
                         }
                     }
@@ -392,6 +422,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     if (temp != null) {
                         processRunAttribute(temp, style.getAttrbuteSet()!!)
                     }
+                    if ("paragraph" == styleEle.attributeValue("type") && "1" == styleEle.attributeValue("default")) {
+                        defaultParaStyleID = style.getId()
+                        document.defaultParaStyleID = defaultParaStyleID
+                    }
                     StyleManage.instance().addStyle(style)
                 }
 
@@ -413,40 +447,42 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 val saxreader = SAXReader()
                 val input: InputStream = part.inputStream
                 val doc = saxreader.read(input)
-                val root = doc.rootElement
-                for (num in root.childElements("num")) {
+                val root = doc!!.rootElement
+                for (num in root!!.childElements("num")) {
                     val temp = num.element("abstractNumId")
                     if (temp != null) {
                         val v = temp.attributeValue("val")
                         val numID = num.attributeValue("numId")
-                        bulletNumbersID[numID] = v
+                        if (numID != null && v != null) {
+                            bulletNumbersID[numID] = v
+                        }
                     }
                 }
                 // bullet and number object
-                for (num in root.childElements("abstractNum")) {
+                for (num in root!!.childElements("abstractNum")) {
                     val listData = ListData()
                     // ID
                     val abstractNumId = num.attributeValue("abstractNumId")
                     if (abstractNumId != null) {
-                        listData.setListID(abstractNumId.toIntSafe(0))
+                        listData.listID = abstractNumId.toIntSafe(0)
                     }
                     // list level
                     val levels = num.childElements("lvl")
                     val len = levels.size
                     val listLevels = Array(len) { ListLevel() }
-                    listData.setSimpleList(len.toByte())
+                    listData.simpleList = len.toByte()
                     for (i in 0 until len) {
                         processListLevel(listLevels[i], levels[i])
                     }
-                    listData.setLevels(listLevels)
+                    listData.levels = listLevels
                     // simple list
-                    listData.setSimpleList(len.toByte())
+                    listData.simpleList = len.toByte()
                     if (len == 0) {
                         val linkID = num.element("numStyleLink")?.attributeValue("val")
                         if (linkID != null) {
                             val a = styleStrID[linkID]
                             if (a != null) {
-                                listData.setLinkStyleID(a.toShort())
+                                listData.linkStyleID = a.toShort()
                                 // change style
                                 val style = StyleManage.instance().getStyle(a) ?: continue
                                 val styleListNumID = am.getParaListID(style!!.getAttrbuteSet()!!)
@@ -474,29 +510,29 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         var v: String?
         var temp = elem.element("start")
         if (temp != null) {
-            level.setStartAt(temp.attributeValue("val").toIntSafe(1))
+            level.startAt = temp.attributeValue("val").toIntSafe(1)
         }
         // horizontal alignment;
         temp = elem.element("lvlJc")
         if (temp != null) {
             when (temp.attributeValue("val")) {
-                "left" -> level.setAlign(WPAttrConstant.PARA_HOR_ALIGN_LEFT)
-                "center" -> level.setAlign(WPAttrConstant.PARA_HOR_ALIGN_CENTER)
-                "right" -> level.setAlign(WPAttrConstant.PARA_HOR_ALIGN_RIGHT)
+                "left" -> level.align = WPAttrConstant.PARA_HOR_ALIGN_LEFT
+                "center" -> level.align = WPAttrConstant.PARA_HOR_ALIGN_CENTER
+                "right" -> level.align = WPAttrConstant.PARA_HOR_ALIGN_RIGHT
             }
         }
         // follow char
         temp = elem.element("suff")
         if (temp != null) {
             when (temp.attributeValue("val")) {
-                "space" -> level.setFollowChar(1.toByte())
-                "nothing" -> level.setFollowChar(2.toByte())
+                "space" -> level.followChar = 1.toByte()
+                "nothing" -> level.followChar = 2.toByte()
             }
         }
         // number format
         temp = elem.element("numFmt")
         if (temp != null) {
-            level.setNumberFormat(convertedNumberFormat(temp.attributeValue("val")))
+            level.numberFormat = convertedNumberFormat(temp.attributeValue("val"))
         }
         // number text
         temp = elem.element("lvlText")
@@ -504,10 +540,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             val sb = StringBuilder()
             val text = temp.attributeValue("val")
             var i = 0
-            while (i < text.length) {
-                val c = text[i]
+            while (i < text!!.length) {
+                val c = text!![i]
                 if (c == '%') {
-                    val a = text.substring(i + 1, minOf(i + 2, text.length)).toIntSafe(1)
+                    val a = text!!.substring(i + 1, minOf(i + 2, text!!.length)).toIntSafe(1)
                     sb.append((a - 1).toChar())
                     i++
                 } else {
@@ -526,7 +562,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 }
                 i++
             }
-            level.setNumberText(sb.toString().toCharArray())
+            level.numberText = sb.toString().toCharArray()
         }
         // indent
         temp = elem.element("pPr")?.element("ind")
@@ -534,12 +570,12 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             // special indent, default 21 POINT
             v = temp.attributeValue("hanging")
             if (v != null) {
-                level.setSpecialIndent(-v.toIntSafe(0))
+                level.specialIndent = -v.toIntSafe(0)
             }
             // left text indent, default 21 point * level
             v = temp.attributeValue("left")
             if (v != null) {
-                level.setTextIndent(v.toIntSafe(0))
+                level.textIndent = v.toIntSafe(0)
             }
         }
     }
@@ -583,29 +619,64 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
      * reader
      */
     @Throws(Exception::class)
-    private fun processHeaderAndFooter(hfRel: PackageRelationship?, isHeader: Boolean) {
+    /** w:evenAndOddHeaders in settings.xml: even pages have their own header and footer. */
+    private fun evenAndOddHeaders(): Boolean = try {
+        val rel = mainPart.getRelationshipsByType(SETTINGS_PART).getRelationship(0)
+        val part = rel?.let { zip.getPart(it.targetURI) }
+        part?.inputStream?.use { input -> SAXReader().read(input)?.rootElement?.element("evenAndOddHeaders")?.let { isOnOff(it) } } == true
+    } catch (e: Exception) { false }
+
+    // next free offsets of the header and footer stories: several headers (first, odd, even) follow each other
+    private var headerNext = WPModelConstant.HEADER
+    private var footerNext = WPModelConstant.FOOTER
+
+    private fun processHeaderAndFooter(hfRel: PackageRelationship?, isHeader: Boolean, hfType: Byte = WPModelConstant.HF_ODD) {
         if (hfRel != null) {
             val part = zip.getPart(hfRel.targetURI)
             hfPart = part
             if (part != null) {
                 isProcessHF = true
-                offset = if (isHeader) WPModelConstant.HEADER else WPModelConstant.FOOTER
+                offset = if (isHeader) headerNext else footerNext
+                val hfStart = offset
                 val saxreader = SAXReader()
                 val input: InputStream = part.inputStream
                 val doc = saxreader.read(input)
-                val root = doc.rootElement
-                val paras = root.childElements()
+                val root = doc!!.rootElement
+                val paras = root!!.childElements()
 
                 val hfElem = HFElement(
                     if (isHeader) WPModelConstant.HEADER_ELEMENT else WPModelConstant.FOOTER_ELEMENT,
-                    WPModelConstant.HF_ODD
+                    hfType
                 )
                 hfElem.setStartOffset(offset)
 
+                // source identities for editing, counted in this part like the body counts its own.
+                // A section break inside the body reads the header mid-body: keep the body's.
+                val bodyRuns = IdentityHashMap(editRuns)
+                val bodyParas = IdentityHashMap(editParas)
+                val bodyObjectRun = editObjectRun
+                editRuns.clear(); editParas.clear(); editObjectRun = null
+                var runCount = 0
+                var paraCount = 0
+                fun index(node: Element) {
+                    if (node.namespaceURI == "http://schemas.openxmlformats.org/wordprocessingml/2006/main") {
+                        if (node.name == "r") editRuns[node] = runCount++
+                        if (node.name == "p") editParas[node] = paraCount++
+                    }
+                    val children = node.elementIterator()
+                    while (children!!.hasNext()) index(children.next() as Element)
+                }
+                paras.filter { it.name == "p" || it.name == "tbl" || it.name == "sdt" }.forEach { index(it) }
+                val partName = part.partName.name.removePrefix("/")
+
                 processParagraphs(paras)
+                editRuns.clear(); editParas.clear()
+                editRuns.putAll(bodyRuns); editParas.putAll(bodyParas); editObjectRun = bodyObjectRun
 
                 hfElem.setEndOffset(offset)
                 document.appendElement(hfElem, offset)
+                editMap.setPart(hfStart, offset, partName)
+                if (isHeader) headerNext = offset else footerNext = offset
 
                 input.close()
                 isProcessHF = false
@@ -699,31 +770,31 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         if (borderElem != null) {
             val borders = Borders()
             if ("page" == borderElem.attributeValue("offsetFrom")) {
-                borders.setOnType(1.toByte())
+                borders.onType = 1.toByte()
             }
             // topBorder
             borderElem.element("top")?.let {
                 val border = Border()
                 processBorder(it, border)
-                borders.setTopBorder(border)
+                borders.topBorder = border
             }
             // leftBorder
             borderElem.element("left")?.let {
                 val border = Border()
                 processBorder(it, border)
-                borders.setLeftBorder(border)
+                borders.leftBorder = border
             }
             // rightBorder
             borderElem.element("right")?.let {
                 val border = Border()
                 processBorder(it, border)
-                borders.setRightBorder(border)
+                borders.rightBorder = border
             }
             // bottomBorder
             borderElem.element("bottom")?.let {
                 val border = Border()
                 processBorder(it, border)
-                borders.setBottomBorder(border)
+                borders.bottomBorder = border
             }
             am.setPageBorder(attr, control!!.getSysKit().getBordersManage().addBorders(borders))
         }
@@ -746,59 +817,28 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 }
             }
         }
-        // header
+        // header and footer: the default one, and the first-page (titlePg) and even-page
+        // (settings evenAndOddHeaders) ones when the document uses them
         val a = offset
-        //
-        val headers = sectPr.childElements("headerReference")
-        if (headers.isNotEmpty()) {
-            var id: String? = ""
-            if (headers.size == 1) {
-                id = headers[0].attributeValue("id")
-            } else {
-                for (header in headers) {
-                    if ("default" == header.attributeValue("type")) {
-                        id = header.attributeValue("id")
-                        break
-                    }
+        val titlePage = sectPr.element("titlePg")?.let { isOnOff(it) } == true
+        val evenAndOdd = evenAndOddHeaders()
+        wpdoc?.setHeaderPages(titlePage, evenAndOdd)
+        for (isHeader in listOf(true, false)) {
+            val refs = sectPr.childElements(if (isHeader) "headerReference" else "footerReference")
+            for (ref in refs) {
+                val type = when (ref.attributeValue("type")) {
+                    "first" -> if (titlePage) WPModelConstant.HF_FIRST else continue
+                    "even" -> if (evenAndOdd) WPModelConstant.HF_EVEN else continue
+                    "default", null -> WPModelConstant.HF_ODD
+                    else -> continue
                 }
-            }
-            if (!id.isNullOrEmpty()) {
+                val id = ref.attributeValue("id")
+                if (id.isNullOrEmpty()) continue
                 try {
-                    val hfRel = mainPart.getRelationshipsByType(PackageRelationshipTypes.HEADER_PART)
+                    val hfRel = mainPart.getRelationshipsByType(if (isHeader) PackageRelationshipTypes.HEADER_PART else PackageRelationshipTypes.FOOTER_PART)
                         .getRelationshipByID(id)
-                    if (hfRel != null) {
-                        processHeaderAndFooter(hfRel, true)
-                    }
+                    if (hfRel != null) processHeaderAndFooter(hfRel, isHeader, type)
                 } catch (e: Exception) {
-                    logD("writerLog " + "1")
-                    control!!.getSysKit().getErrorKit().writerLog(e, true)
-                }
-            }
-        }
-
-        // footer
-        val footers = sectPr.childElements("footerReference")
-        if (footers.isNotEmpty()) {
-            var id: String? = ""
-            if (footers.size == 1) {
-                id = footers[0].attributeValue("id")
-            } else {
-                for (footer in footers) {
-                    if ("default" == footer.attributeValue("type")) {
-                        id = footer.attributeValue("id")
-                        break
-                    }
-                }
-            }
-            if (!id.isNullOrEmpty()) {
-                try {
-                    val hfRel = mainPart.getRelationshipsByType(PackageRelationshipTypes.FOOTER_PART)
-                        .getRelationshipByID(id)
-                    if (hfRel != null) {
-                        processHeaderAndFooter(hfRel, false)
-                    }
-                } catch (e: Exception) {
-                    logD("writerLog " + "2")
                     control!!.getSysKit().getErrorKit().writerLog(e, true)
                 }
             }
@@ -813,15 +853,15 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private fun processBorder(borElem: Element, border: Border) {
         var value: String? = borElem.attributeValue("color")
         if (value == null || "auto" == value) {
-            border.setColor(Color.BLACK)
+            border.color = Color.BLACK
         } else {
-            border.setColor(parseHexColor(value, Color.BLACK))
+            border.color = parseHexColor(value, Color.BLACK)
         }
         value = borElem.attributeValue("space")
         if (value == null) {
-            border.setSpace(32.toShort())
+            border.space = 32.toShort()
         } else {
-            border.setSpace((value.toIntSafe(0) * MainConstant.POINT_TO_PIXEL).toInt().toShort())
+            border.space = (value.toIntSafe(0) * MainConstant.POINT_TO_PIXEL).toInt().toShort()
         }
     }
 
@@ -843,7 +883,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 tableStyleId = tStyleId.attributeValue("val") ?: ""
             }
         }
+        // direct table properties override the table style, side by side
+        tblBorders = (tableStyleBorders[tableStyleId] ?: emptyMap()) + parseBorders(tblPr?.element("tblBorders"))
+        tblCellMar = (tableStyleCellMar[tableStyleId] ?: emptyMap()) + parseCellMargins(tblPr?.element("tblCellMar"))
         // table grid column width
+        tableGridCol.clear()
         val tblGrid = table.element("tblGrid")
         if (tblGrid != null) {
             val grids = tblGrid.childElements("gridCol")
@@ -851,15 +895,37 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 tableGridCol[i] = grids[i].attributeValue("w").toIntSafe(0)
             }
         }
+        tblGridCount = tableGridCol.size
+        tableWidthTwips = tblPr?.element("tblW")?.let { tblW ->
+            when (tblW.attributeValue("type")) {
+                "dxa", null -> tblW.attributeValue("w").toIntSafe(0)
+                "pct" -> percentOf(tblW.attributeValue("w"), textWidthTwips())
+                else -> 0
+            }
+        }?.takeIf { it > 0 } ?: tableGridCol.values.sum()
 
-        var firstRow = true
-        for (row in table.childElements("tr")) {
-            processRow(row, tableElem, firstRow, tableStyleId)
-            firstRow = false
+        val rows = table.childElements("tr")
+        tblRowCount = rows.size
+        for ((rowIndex, row) in rows.withIndex()) {
+            processRow(row, tableElem, rowIndex, tableStyleId)
         }
 
         tableElem.setEndOffset(offset)
         document.appendParagraph(tableElem, offset)
+    }
+
+    /** [value] of an OOXML percent (fiftieths of a percent, or "NN%") applied to [whole]. */
+    private fun percentOf(value: String?, whole: Int): Int {
+        if (value.isNullOrEmpty()) return 0
+        val pct = if (value.endsWith("%")) value.dropLast(1).toFloatSafe(0f) else value.toFloatSafe(0f) / 50f
+        return (whole * pct / 100f).toInt()
+    }
+
+    /** Text width of the page in twips, when the section is known yet (sectPr may come last). */
+    private fun textWidthTwips(): Int {
+        val attr = section.getAttribute()
+        val w = am.getPageWidth(attr) - am.getPageMarginLeft(attr) - am.getPageMarginRight(attr)
+        return if (w > 0) w else 9360 // 6.5": Letter with 1" margins
     }
 
     /**
@@ -882,15 +948,15 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     /**
      *
      */
-    private fun processRow(row: Element, tableElem: TableElement, firstRow: Boolean, tableStyleId: String) {
+    private fun processRow(row: Element, tableElem: TableElement, rowIndex: Int, tableStyleId: String) {
         val rowElem = RowElement()
         rowElem.setStartOffset(offset)
 
         row.element("trPr")?.let { processRowAttribute(it, rowElem.getAttribute()!!) }
 
-        var i = 0
+        var i = row.element("trPr")?.element("gridBefore")?.attributeValue("val").toIntSafe(0)
         for (cell in row.childElements("tc")) {
-            i += processCell(cell, rowElem, i, firstRow, tableStyleId)
+            i += processCell(cell, rowElem, i, rowIndex, tableStyleId)
         }
 
         rowElem.setEndOffset(offset)
@@ -905,27 +971,33 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         trPr.element("trHeight")?.let {
             am.setTableRowHeight(attr, it.attributeValue("val").toIntSafe(0))
         }
+        // header row, repeated on each page
+        trPr.element("tblHeader")?.let {
+            if (isOnOff(it)) am.setTableHeaderRow(attr, true)
+        }
     }
 
     /**
      *
      */
-    private fun processCell(cell: Element, row: RowElement, gridColIndex: Int, firstRow: Boolean, tableStyleId: String): Int {
+    private fun processCell(cell: Element, row: RowElement, gridColIndex: Int, rowIndex: Int, tableStyleId: String): Int {
         val cellElem = CellElement()
         cellElem.setStartOffset(offset)
+        val firstRow = rowIndex == 0
 
         var gridSpan = 0
         val tcPr = cell.element("tcPr")
         if (tcPr != null) {
             gridSpan = processCellAttribute(tcPr, cellElem.getAttribute()!!, gridColIndex)
         }
+        processCellBordersAndMargins(tcPr, cellElem.getAttribute()!!, rowIndex, gridColIndex, maxOf(gridSpan, 1))
 
         processParagraphs_Table(cell.childElements(), 1)
 
         cellElem.setEndOffset(offset)
         row.appendCell(cellElem)
-        // cell background
-        if (firstRow) {
+        // cell background from the table style, unless the cell has its own shading
+        if (firstRow && !am.hasAttribute(cellElem.getAttribute(), AttrIDConstant.PAGE_BACKGROUND_COLOR_ID)) {
             tableStyle[tableStyleId]?.let { am.setTableCellBackground(cellElem.getAttribute()!!, it) }
         }
         // 水平合并单元格
@@ -942,26 +1014,18 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         var gridSpan = 1
         tcPr.element("gridSpan")?.let { gridSpan = it.attributeValue("val").toIntSafe(1) }
 
-        // 宽度
+        // width: the grid is the layout Word resolved; without one, the preferred width (tcW)
+        var gridWidth = 0
+        for (i in gridColIndex until gridColIndex + gridSpan) gridWidth += tableGridCol[i] ?: 0
         val tcW = tcPr.element("tcW")
-        if (tcW != null) {
-            var w = tcW.attributeValue("w").toIntSafe(0)
-            val type = tcW.attributeValue("type")
-            if ("pct" == type || "auto" == type) {
-                var tW = 0
-                for (i in gridColIndex until gridColIndex + gridSpan) {
-                    tW += tableGridCol[i] ?: 0
-                }
-                w = maxOf(tW, w)
-            }
-            am.setTableCellWidth(attr, w)
-        } else {
-            var tW = 0
-            for (i in gridColIndex until gridColIndex + gridSpan) {
-                tW += tableGridCol[i] ?: 0
-            }
-            am.setTableCellWidth(attr, tW)
+        val width = when {
+            gridWidth > 0 || tcW == null -> gridWidth
+            // fiftieths of a percent (5000 = 100%) or "50%" of the table width
+            tcW.attributeValue("type") == "pct" -> percentOf(tcW.attributeValue("w"), tableWidthTwips)
+            tcW.attributeValue("type") == "auto" || tcW.attributeValue("type") == "nil" -> 0
+            else -> tcW.attributeValue("w").toIntSafe(0)
         }
+        am.setTableCellWidth(attr, width)
 
         // 合并单元格
         tcPr.element("vMerge")?.let {
@@ -969,6 +1033,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             if (it.attributeValue("val") != null) {
                 am.setTableVerFirstMerged(attr, true)
             }
+        }
+        // cell shading
+        tcPr.element("shd")?.attributeValue("fill")?.let { fill ->
+            if (!fill.equals("auto", true)) am.setTableCellBackground(attr, parseHexColor(fill, Color.WHITE))
         }
         tcPr.element("vAlign")?.let {
             when (it.attributeValue("val")) {
@@ -978,6 +1046,80 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             }
         }
         return gridSpan
+    }
+
+    /**
+     * Resolves the four borders of a cell the way Word does: the cell's tcBorders win, then the
+     * table's outer border on the table edge or its insideH/insideV border inside. Every side is
+     * written (0 = no line) so [com.wxiwei.office.wp.view.TableView] draws exactly these.
+     * Margins: tcMar, then tblCellMar, then Word's default of 108 twips left/right.
+     */
+    private fun processCellBordersAndMargins(tcPr: Element?, attr: IAttributeSet, rowIndex: Int, gridColIndex: Int, gridSpan: Int) {
+        val own = parseBorders(tcPr?.element("tcBorders"))
+        val firstRow = rowIndex == 0
+        val lastRow = rowIndex >= tblRowCount - 1
+        val firstCol = gridColIndex == 0
+        val lastCol = tblGridCount == 0 || gridColIndex + gridSpan >= tblGridCount
+        fun side(name: String, outer: Boolean, inside: String): DocxBorder =
+            own[name] ?: tblBorders[if (outer) name else inside] ?: DocxBorder.NONE
+        val top = side("top", firstRow, "insideH")
+        val bottom = side("bottom", lastRow, "insideH")
+        val left = side("left", firstCol, "insideV")
+        val right = side("right", lastCol, "insideV")
+        am.setTableTopBorder(attr, top.eighths); am.setTableTopBorderColor(attr, top.color)
+        am.setTableBottomBorder(attr, bottom.eighths); am.setTableBottomBorderColor(attr, bottom.color)
+        am.setTableLeftBorder(attr, left.eighths); am.setTableLeftBorderColor(attr, left.color)
+        am.setTableRightBorder(attr, right.eighths); am.setTableRightBorderColor(attr, right.color)
+
+        val mar = tblCellMar + parseCellMargins(tcPr?.element("tcMar"))
+        am.setTableTopMargin(attr, mar["top"] ?: 0)
+        am.setTableBottomMargin(attr, mar["bottom"] ?: 0)
+        am.setTableLeftMargin(attr, mar["left"] ?: DEFAULT_CELL_MARGIN_LR)
+        am.setTableRightMargin(attr, mar["right"] ?: DEFAULT_CELL_MARGIN_LR)
+    }
+
+    /** tblBorders / tcBorders / pBdr children by side; start/end are the bidi-neutral left/right. */
+    private fun parseBorders(borders: Element?): Map<String, DocxBorder> {
+        if (borders == null) return emptyMap()
+        val result = HashMap<String, DocxBorder>()
+        for (e in borders.childElements()) {
+            val side = when (e.name) {
+                "start" -> "left"
+                "end" -> "right"
+                else -> e.name ?: continue
+            }
+            result[side] = parseBorder(e)
+        }
+        return result
+    }
+
+    private fun parseBorder(e: Element): DocxBorder {
+        val v = e.attributeValue("val")
+        if (v == null || v == "nil" || v == "none") return DocxBorder.NONE
+        val color = e.attributeValue("color")
+        return DocxBorder(
+            // sz is in eighths of a point; 0 is still a visible hairline
+            maxOf(1, e.attributeValue("sz").toIntSafe(4)),
+            if (color == null || color.equals("auto", true)) Color.BLACK else parseHexColor(color, Color.BLACK),
+            e.attributeValue("space").toIntSafe(0),
+        )
+    }
+
+    /** tblCellMar / tcMar in twips by side (type dxa; other types are rare and ignored). */
+    private fun parseCellMargins(mar: Element?): Map<String, Int> {
+        if (mar == null) return emptyMap()
+        val result = HashMap<String, Int>()
+        for (e in mar.childElements()) {
+            val type = e.attributeValue("type")
+            if (type != null && type != "dxa") continue
+            val side = when (e.name) {
+                "start" -> "left"
+                "end" -> "right"
+                else -> e.name ?: continue
+            }
+            result[side] = e.attributeValue("w").toIntSafe(0)
+        }
+        return result
     }
 
     private fun processParagraphs_Table(elems: List<Element>, level: Int) {
@@ -1013,6 +1155,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         paraElem.setStartOffset(offset)
         // 段落属性
         processParaAttribute(para.element("pPr"), paraElem.getAttribute()!!, level)
+        applyDefaultParaStyle(paraElem.getAttribute()!!)
         // 处理leaf
         processRun(para, paraElem, true)
 
@@ -1020,6 +1163,15 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         if (editMain()) editParas[para]?.let { editMap.addParagraph(it, t, offset) }
         if (offset > t) {
             document.appendParagraph(paraElem, offset)
+        }
+    }
+
+    /** A paragraph without pStyle uses the default paragraph style, which itself inherits docDefaults. */
+    private fun applyDefaultParaStyle(attr: IAttributeSet) {
+        if (defaultParaStyleID < 0) return
+        val current = am.getParaStyleID(attr)
+        if (current < 0 || current == styleStrID["docDefaults"]) {
+            am.setParaStyleID(attr, defaultParaStyleID)
         }
     }
 
@@ -1077,9 +1229,22 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         temp = pPr.element("jc")
         if (temp != null) {
             when (temp.attributeValue("val")) {
-                "left", "both", "distribute" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_LEFT.toInt())
+                "left", "start" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_LEFT.toInt())
+                "both", "distribute" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED.toInt())
                 "center" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt())
-                "right" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_RIGHT.toInt())
+                "right", "end" -> am.setParaHorizontalAlign(attr, WPAttrConstant.PARA_HOR_ALIGN_RIGHT.toInt())
+            }
+        }
+
+        pPr.element("contextualSpacing")?.let { am.setParaContextualSpacing(attr, it.attributeValue("val").let { v -> v != "0" && v != "false" }) }
+        // shading and borders
+        pPr.element("shd")?.attributeValue("fill")?.let { fill ->
+            if (!fill.equals("auto", true)) am.setParaShading(attr, parseHexColor(fill, Color.WHITE))
+        }
+        pPr.element("pBdr")?.let { pBdr ->
+            val borders = parseBorders(pBdr)
+            listOf("top", "bottom", "left", "right").forEachIndexed { i, side ->
+                borders[side]?.let { am.setParaBorder(attr, i, it.eighths, it.color, it.space) }
             }
         }
 
@@ -1405,6 +1570,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                                     }
                                     else -> str = fieldText.toString()
                                 }
+                                // WPS writes PAGE/NUMPAGES without a cached result; the leaf text is
+                                // only a placeholder, LeafView draws the real number of the page
+                                if (str.isEmpty() && pageNumberType > 0 && isProcessHF) {
+                                    str = "1"
+                                }
 
                                 if (str.isNotEmpty()) {
                                     hasLeaf = true
@@ -1447,8 +1617,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     val obj = run.element("object")
                     if (obj != null) {
                         val it = obj.elementIterator()
-                        while (it.hasNext()) {
-                            processAutoShapeForPict(it.next() as Element, paraElem, null, 1.0f, 1.0f)
+                        while (it!!.hasNext()) {
+                            processAutoShapeForPict(it!!.next() as Element, paraElem, null, 1.0f, 1.0f)
                         }
                         leaf = null
                         continue
@@ -1466,8 +1636,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     val pict = run.element("pict")
                     if (pict != null) {
                         val it = pict.elementIterator()
-                        while (it.hasNext()) {
-                            processAutoShapeForPict(it.next() as Element, paraElem, null, 1.0f, 1.0f)
+                        while (it!!.hasNext()) {
+                            processAutoShapeForPict(it!!.next() as Element, paraElem, null, 1.0f, 1.0f)
                         }
                         leaf = null
                         continue
@@ -1679,15 +1849,15 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 
         val shape = PictureShape()
         try {
-            shape.setPictureIndex(control!!.getSysKit().getPictureManage().addPicture(picPart))
+            shape.pictureIndex = control!!.getSysKit().getPictureManage().addPicture(picPart)
         } catch (e: Exception) {
             logD("writerLog 4")
             control!!.getSysKit().getErrorKit().writerLog(e)
         }
         shape.setZoomX(1000.toShort())
         shape.setZoomY(1000.toShort())
-        shape.setPictureEffectInfor(effectInfor)
-        shape.setBounds(rect)
+        shape.pictureEffectInfor = effectInfor
+        shape.bounds = rect
         return shape
     }
 
@@ -1727,6 +1897,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     }
 
     private fun processWrapAndPosition_Drawing(shape: WPAbstractShape, anchor: Element, rect: Rectangle) {
+        // stacking order among floating shapes (higher is drawn later, on top)
+        anchor.attributeValue("relativeHeight")?.toLongOrNull()?.let { shape.zOrder = it }
         //behindDoc or not
         if ("1".equals(anchor.attributeValue("behindDoc"), ignoreCase = true)) {
             shape.setWrap(WPAbstractShape.WRAP_BOTTOM)
@@ -1746,35 +1918,35 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         // 水平
         val posH = positionHElement ?: anchor.element("positionH")
         if (posH != null) {
-            shape.setHorizontalRelativeTo(getRelative(posH.attributeValue("relativeFrom")))
+            shape.horizontalRelativeTo = getRelative(posH.attributeValue("relativeFrom"))
             val align = posH.element("align")
             val posOffset = posH.element("posOffset")
             val pct = posH.element("pctPosHOffset")
             if (align != null) {
-                shape.setHorizontalAlignment(getAlign(align.text))
+                shape.horizontalAlignment = getAlign(align.text)
             } else if (posOffset != null) {
                 rect.translate(Math.round(posOffset.text.toIntSafe(0) * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH), 0)
             } else if (pct != null) {
                 //horizontal relative position
-                shape.setHorRelativeValue(pct.text.toIntSafe(0) / 100)
-                shape.setHorPositionType(WPAbstractShape.POSITIONTYPE_RELATIVE)
+                shape.horRelativeValue = pct.text.toIntSafe(0) / 100
+                shape.horPositionType = WPAbstractShape.POSITIONTYPE_RELATIVE
             }
         }
 
         //vertical position and vertical relative position
         val posV = positionVElement ?: anchor.element("positionV")
         if (posV != null) {
-            shape.setVerticalRelativeTo(getRelative(posV.attributeValue("relativeFrom")))
+            shape.verticalRelativeTo = getRelative(posV.attributeValue("relativeFrom"))
             val align = posV.element("align")
             val posOffset = posV.element("posOffset")
             val pct = posV.element("pctPosVOffset")
             if (align != null) {
-                shape.setVerticalAlignment(getAlign(align.text))
+                shape.verticalAlignment = getAlign(align.text)
             } else if (posOffset != null) {
                 rect.translate(0, Math.round(posOffset.text.toIntSafe(0) * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH))
             } else if (pct != null) {
-                shape.setVerRelativeValue(pct.text.toIntSafe(0) / 100)
-                shape.setVerPositionType(WPAbstractShape.POSITIONTYPE_RELATIVE)
+                shape.verRelativeValue = pct.text.toIntSafe(0) / 100
+                shape.verPositionType = WPAbstractShape.POSITIONTYPE_RELATIVE
             }
         }
     }
@@ -1811,10 +1983,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 AutoShapeDataKit.processPictureShape(control, zipPackage, picPart, spPr, themeColor, shape)
                 val wpPictureShape = WPPictureShape()
                 wpPictureShape.setPictureShape(shape)
-                wpPictureShape.setBounds(shape.bounds)
+                wpPictureShape.bounds = shape.bounds
 
                 if (!isInline) {
-                    processWrapAndPosition_Drawing(wpPictureShape, inline, shape.bounds)
+                    processWrapAndPosition_Drawing(wpPictureShape, inline, requireNotNull(shape.bounds))
                 } else {
                     wpPictureShape.setWrap(WPAbstractShape.WRAP_OLE)
                 }
@@ -1840,8 +2012,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                         extent.attributeValue("cy")?.let { bounds.height = emuToPixel(it) }
                     }
                     val shape = WPChartShape()
-                    shape.setAChart(abstrChart)
-                    shape.setBounds(bounds)
+                    shape.aChart = abstrChart
+                    shape.bounds = bounds
                     if (!isInline) {
                         processWrapAndPosition_Drawing(shape, inline, bounds)
                     } else {
@@ -1884,10 +2056,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         val dataDoc = dataPart.inputStream?.use { saxreader.read(it) } ?: return
         var root = dataDoc.rootElement
 
-        val fill = AutoShapeDataKit.processBackground(control, zipPackage, dataPart, root.element("bg"), themeColor)
-        val line = LineKit.createLine(control, zipPackage, dataPart, root.element("whole")?.element("ln"), themeColor)
+        val fill = AutoShapeDataKit.processBackground(control, zipPackage, dataPart, root!!.element("bg"), themeColor)
+        val line = LineKit.createLine(control, zipPackage, dataPart, root!!.element("whole")?.element("ln"), themeColor)
         var drawingPart: PackagePart? = null
-        val relId = root.element("extLst")?.element("ext")?.element("dataModelExt")?.attributeValue("relId")
+        val relId = root!!.element("extLst")?.element("ext")?.element("dataModelExt")?.attributeValue("relId")
         if (relId != null) {
             val smartArDrawingRel = mainPart.getRelationship(relId)
             drawingPart = zipPackage.getPart(smartArDrawingRel.targetURI)
@@ -1908,22 +2080,22 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             wrapType = getDrawingWrapType(anchor)
         }
 
-        groupShape.setBounds(rect)
-        autoShape.setBackgroundAndFill(fill)
-        autoShape.setLine(line)
-        autoShape.setShapeType(ShapeTypes.Rectangle)
+        groupShape.bounds = rect
+        autoShape.backgroundAndFill = fill
+        autoShape.line = line
+        autoShape.shapeType = ShapeTypes.Rectangle
         if (wrapType != WPAbstractShape.WRAP_OLE) {
-            groupShape.setWrapType(wrapType)
+            groupShape.wrapType = wrapType
             autoShape.setWrap(wrapType)
         } else {
-            groupShape.setWrapType(WPAbstractShape.WRAP_OLE)
+            groupShape.wrapType = WPAbstractShape.WRAP_OLE
             autoShape.setWrap(WPAbstractShape.WRAP_OLE)
         }
 
-        autoShape.setBounds(rect)
+        autoShape.bounds = rect
         val it = spTree.elementIterator()
-        while (it.hasNext()) {
-            processAutoShape2010(drawingPart, paraElem, it.next() as Element, groupShape, 1.0f, 1.0f, 0, 0, false)
+        while (it!!.hasNext()) {
+            processAutoShape2010(drawingPart, paraElem, it!!.next() as Element, groupShape, 1.0f, 1.0f, 0, 0, false)
         }
         addShape(autoShape, paraElem)
     }
@@ -1996,27 +2168,27 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             }
             groupShape.setOffPostion(rect.x - childRect.x, rect.y - childRect.y)
 
-            groupShape.setBounds(rect)
-            groupShape.setParent(parent)
-            groupShape.setRotation(shape.rotation)
-            groupShape.setFlipHorizontal(shape.flipHorizontal)
-            groupShape.setFlipVertical(shape.flipVertical)
+            groupShape.bounds = rect
+            groupShape.parent = parent
+            groupShape.rotation = shape.rotation
+            groupShape.flipHorizontal = shape.flipHorizontal
+            groupShape.flipVertical = shape.flipVertical
 
             if (parent == null) {
                 val wrapType = getShapeWrapType(sp)
-                groupShape.setWrapType(wrapType)
+                groupShape.wrapType = wrapType
                 (shape as WPAutoShape).setWrap(wrapType)
             } else {
-                groupShape.setWrapType(parent.wrapType)
+                groupShape.wrapType = parent.wrapType
             }
 
             val it = sp.elementIterator()
-            while (it.hasNext()) {
-                processAutoShapeForPict(it.next() as Element, paraElem, groupShape, zoom[0] * zoomX, zoom[1] * zoomY)
+            while (it!!.hasNext()) {
+                processAutoShapeForPict(it!!.next() as Element, paraElem, groupShape, zoom[0] * zoomX, zoom[1] * zoomY)
             }
 
             if (shape is WPAbstractShape) {
-                for (sh in groupShape.shapes) {
+                for (sh in groupShape.getShapes()) {
                     if (sh is WPAbstractShape) {
                         copyWrapAndPosition(shape, sh)
                     }
@@ -2047,15 +2219,15 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     /** Copy kiểu wrap + vị trí từ shape cha sang shape con (bản Java viết 9 dòng cast lặp lại) */
     private fun copyWrapAndPosition(from: WPAbstractShape, to: WPAbstractShape) {
         to.setWrap(from.wrap.toShort())
-        to.setHorPositionType(from.horPositionType)
-        to.setHorizontalRelativeTo(from.horizontalRelativeTo)
-        to.setHorRelativeValue(from.horRelativeValue)
-        to.setHorizontalAlignment(from.horizontalAlignment)
+        to.horPositionType = from.horPositionType
+        to.horizontalRelativeTo = from.horizontalRelativeTo
+        to.horRelativeValue = from.horRelativeValue
+        to.horizontalAlignment = from.horizontalAlignment
 
-        to.setVerPositionType(from.verPositionType)
-        to.setVerticalRelativeTo(from.verticalRelativeTo)
-        to.setVerRelativeValue(from.verRelativeValue)
-        to.setVerticalAlignment(from.verticalAlignment)
+        to.verPositionType = from.verPositionType
+        to.verticalRelativeTo = from.verticalRelativeTo
+        to.verRelativeValue = from.verRelativeValue
+        to.verticalAlignment = from.verticalAlignment
     }
 
     /**
@@ -2137,19 +2309,21 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             val abstractShape: AbstractShape
             if (isProcessWatermark) {
                 val wm = WatermarkShape()
-                imagedata.attributeValue("blacklevel")?.let { wm.setBlacklevel(it.toFloatSafe(0f) / 100000f) }
-                imagedata.attributeValue("gain")?.let { wm.setGain(it.toFloatSafe(0f) / 100000f) }
-                wm.setWatermarkType(WatermarkShape.Watermark_Picture)
-                wm.setPictureIndex(pictureIndex)
+                imagedata.attributeValue("blacklevel")?.let {
+                    wm.blacklevel = it.toFloatSafe(0f) / 100000f
+                }
+                imagedata.attributeValue("gain")?.let { wm.gain = it.toFloatSafe(0f) / 100000f }
+                wm.watermarkType = WatermarkShape.Watermark_Picture
+                wm.pictureIndex = pictureIndex
                 wm.setWrap(wrapType)
                 abstractShape = wm
             } else {
                 val effectInfor = PictureEffectInfoFactory.getPictureEffectInfor_ImageData(imagedata)
                 val pictureShape = PictureShape()
-                pictureShape.setPictureIndex(pictureIndex)
+                pictureShape.pictureIndex = pictureIndex
                 pictureShape.setZoomX(1000.toShort())
                 pictureShape.setZoomY(1000.toShort())
-                pictureShape.setPictureEffectInfor(effectInfor)
+                pictureShape.pictureEffectInfor = effectInfor
 
                 val wpPic = WPPictureShape()
                 wpPic.setPictureShape(pictureShape)
@@ -2159,10 +2333,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 
             val rect = processAutoShapeStyle(shape, abstractShape, null, 1000f, 1000f)
             if (!isProcessWatermark) {
-                val picShape = (abstractShape as WPPictureShape).pictureShape
-                picShape.setBounds(rect)
-                picShape.setBackgroundAndFill(processBackgroundAndFill(shape))
-                picShape.setLine(processLine(shape))
+                val picShape = requireNotNull((abstractShape as WPPictureShape).getPictureShape())
+                picShape.bounds = rect
+                picShape.backgroundAndFill = processBackgroundAndFill(shape)
+                picShape.line = processLine(shape)
             }
             addShape(abstractShape, paraElem)
             isProcessWatermark = false
@@ -2240,7 +2414,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 angle -= 90f
             }
         }
-        shape.setRotation(angle)
+        shape.rotation = angle
     }
 
     /**
@@ -2356,57 +2530,57 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     relativeValue.getOrPut(autoShape) { IntArray(4) }[2] = value.toFloatSafe(0f).toInt()
                 "flip".equals(key, true) -> {
                     if ("x".equals(value, true)) {
-                        autoShape.setFlipHorizontal(true)
+                        autoShape.flipHorizontal = true
                     } else if ("y".equals(value, true)) {
-                        autoShape.setFlipVertical(true)
+                        autoShape.flipVertical = true
                     }
                 }
                 "rotation".equals(key, true) -> {
                     if (value.indexOf("fd") > 0) {
-                        autoShape.setRotation((value.substring(0, value.length - 2).toIntSafe(0) / 60000).toFloat())
+                        autoShape.rotation = (value.substring(0, value.length - 2).toIntSafe(0) / 60000).toFloat()
                     } else {
-                        autoShape.setRotation(value.toIntSafe(0).toFloat())
+                        autoShape.rotation = value.toIntSafe(0).toFloat()
                     }
                 }
                 "mso-width-relative".equals(key, true) || "mso-height-relative".equals(key, true) -> Unit
                 topLevelShape == null -> Unit
                 // 水平位置
                 "mso-position-horizontal".equals(key, true) ->
-                    topLevelShape.setHorizontalAlignment(getAlign(value))
+                    topLevelShape.horizontalAlignment = getAlign(value)
                 "mso-left-percent".equals(key, true) -> {
                     //horizontal relative position
-                    topLevelShape.setHorRelativeValue(value.toIntSafe(0))
-                    topLevelShape.setHorPositionType(WPAbstractShape.POSITIONTYPE_RELATIVE)
+                    topLevelShape.horRelativeValue = value.toIntSafe(0)
+                    topLevelShape.horPositionType = WPAbstractShape.POSITIONTYPE_RELATIVE
                 }
                 // 水平相对于
                 "mso-position-horizontal-relative".equals(key, true) -> when {
-                    "margin".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_MARGIN)
-                    "page".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_PAGE)
-                    "left-margin-area".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_LEFT)
-                    "right-margin-area".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_RIGHT)
-                    "inner-margin-area".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_INNER)
-                    "outer-margin-area".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_OUTER)
-                    "text".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_COLUMN)
-                    "char".equals(value, true) -> topLevelShape.setHorizontalRelativeTo(WPAutoShape.RELATIVE_CHARACTER)
+                    "margin".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_MARGIN
+                    "page".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PAGE
+                    "left-margin-area".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LEFT
+                    "right-margin-area".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_RIGHT
+                    "inner-margin-area".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_INNER
+                    "outer-margin-area".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_OUTER
+                    "text".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_COLUMN
+                    "char".equals(value, true) -> topLevelShape.horizontalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_CHARACTER
                 }
                 // 垂直位置
                 "mso-position-vertical".equals(key, true) ->
-                    topLevelShape.setVerticalAlignment(getAlign(value))
+                    topLevelShape.verticalAlignment = getAlign(value)
                 "mso-top-percent".equals(key, true) -> {
                     //vertical relative position
-                    topLevelShape.setVerRelativeValue(value.toIntSafe(0))
-                    topLevelShape.setVerPositionType(WPAbstractShape.POSITIONTYPE_RELATIVE)
+                    topLevelShape.verRelativeValue = value.toIntSafe(0)
+                    topLevelShape.verPositionType = WPAbstractShape.POSITIONTYPE_RELATIVE
                 }
                 // 垂直相对值
                 "mso-position-vertical-relative".equals(key, true) -> when {
-                    "line".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_LINE)
-                    "text".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_PARAGRAPH)
-                    "margin".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_MARGIN)
-                    "page".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_PAGE)
-                    "top-margin-area".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_TOP)
-                    "bottom-margin-area".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_BOTTOM)
-                    "inner-margin-area".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_INNER)
-                    "outer-margin-area".equals(value, true) -> topLevelShape.setVerticalRelativeTo(WPAutoShape.RELATIVE_OUTER)
+                    "line".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_LINE
+                    "text".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PARAGRAPH
+                    "margin".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_MARGIN
+                    "page".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_PAGE
+                    "top-margin-area".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_TOP
+                    "bottom-margin-area".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_BOTTOM
+                    "inner-margin-area".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_INNER
+                    "outer-margin-area".equals(value, true) -> topLevelShape.verticalRelativeTo = com.wxiwei.office.common.shape.WPAbstractShape.RELATIVE_OUTER
                 }
             }
         }
@@ -2429,13 +2603,13 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                         val m = Matrix()
                         m.postScale(rect.width / width, rect.height / height)
                         for (path in autoShape.paths) {
-                            path.path?.transform(m)
+                            path?.path?.transform(m)
                         }
                     }
                 }
             }
         }
-        autoShape.setBounds(rect)
+        autoShape.bounds = rect
         return rect
     }
 
@@ -2605,23 +2779,23 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         ) {
             val s = WPAutoShape()
             autoShape = s
-            s.setShapeType(shapeType)
-            s.setLine(line)
+            s.shapeType = shapeType
+            s.line = line
             processArrow(s, shape)
             if (s.shapeType == ShapeTypes.BentConnector2 && values == null) {
-                s.setAdjustData(arrayOf<Float?>(1.0f))
+                s.adjustData = arrayOf<Float?>(1.0f)
             } else {
-                s.setAdjustData(values)
+                s.adjustData = values
             }
         } else if (shapeType == ShapeTypes.ArbitraryPolygon) {
             val s = WPAutoShape()
             autoShape = s
-            s.setShapeType(ShapeTypes.ArbitraryPolygon)
+            s.shapeType = ShapeTypes.ArbitraryPolygon
             processArrow(s, shape)
             val pathContext = shape.attributeValue("path")
             val pathzoom = processPolygonZoom(shape, s, parent, zoomX, zoomY)
             val lineWidth = Math.round((line?.lineWidth ?: 1) * pathzoom)
-            val pathWithArrow = VMLPathParser.instance().createPath(s, pathContext, lineWidth)
+            val pathWithArrow = VMLPathParser.instance().createPath(s, pathContext ?: "", lineWidth)
             if (pathWithArrow != null) {
                 pathWithArrow.getPolygonPath()?.forEach { p ->
                     val pathExtend = ExtendPath()
@@ -2631,10 +2805,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     s.appendPath(pathExtend)
                 }
                 pathWithArrow.getStartArrow()?.let {
-                    s.appendPath(getArrowExtendPath(it, fill, line, border, s.startArrow.type))
+                    s.appendPath(getArrowExtendPath(it, fill, line, border, s.startArrow!!.type))
                 }
                 pathWithArrow.getEndArrow()?.let {
-                    s.appendPath(getArrowExtendPath(it, fill, line, border, s.endArrow.type))
+                    s.appendPath(getArrowExtendPath(it, fill, line, border, s.endArrow!!.type))
                 }
             }
         } else if (shapeType == ShapeTypes.WP_Line
@@ -2643,7 +2817,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         ) {
             val s = WPAutoShape()
             autoShape = s
-            s.setShapeType(shapeType)
+            s.shapeType = shapeType
             processArrow(s, shape)
             val path = Path()
             var startArrowPath: Path? = null
@@ -2659,20 +2833,20 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 var startArrowTailCenter: PointF? = null
                 var endArrowTailCenter: PointF? = null
                 if (s.startArrowhead) {
-                    val apt = LineArrowPathBuilder.getDirectLineArrowPath(to.x, to.y, from.x, from.y, s.startArrow, lineWidth)
+                    val apt = LineArrowPathBuilder.getDirectLineArrowPath(to.x, to.y, from.x, from.y, s.startArrow!!, lineWidth)
                     startArrowPath = apt.arrowPath
                     startArrowTailCenter = apt.arrowTailCenter
                 }
                 if (s.endArrowhead) {
-                    val apt = LineArrowPathBuilder.getDirectLineArrowPath(from.x, from.y, to.x, to.y, s.endArrow, lineWidth)
+                    val apt = LineArrowPathBuilder.getDirectLineArrowPath(from.x, from.y, to.x, to.y, s.endArrow!!, lineWidth)
                     endArrowPath = apt.arrowPath
                     endArrowTailCenter = apt.arrowTailCenter
                 }
                 if (startArrowTailCenter != null) {
-                    from = LineArrowPathBuilder.getReferencedPosition(from.x, from.y, startArrowTailCenter.x, startArrowTailCenter.y, s.startArrow.type)
+                    from = LineArrowPathBuilder.getReferencedPosition(from.x, from.y, startArrowTailCenter.x, startArrowTailCenter.y, s.startArrow!!.type)
                 }
                 if (endArrowTailCenter != null) {
-                    to = LineArrowPathBuilder.getReferencedPosition(to.x, to.y, endArrowTailCenter.x, endArrowTailCenter.y, s.endArrow.type)
+                    to = LineArrowPathBuilder.getReferencedPosition(to.x, to.y, endArrowTailCenter.x, endArrowTailCenter.y, s.endArrow!!.type)
                 }
                 path.moveTo(from.x, from.y)
                 path.lineTo(to.x, to.y)
@@ -2685,20 +2859,20 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 var startArrowTailCenter: PointF? = null
                 var endArrowTailCenter: PointF? = null
                 if (s.startArrowhead) {
-                    val apt = LineArrowPathBuilder.getCubicBezArrowPath(to.x, to.y, ctr2.x, ctr2.y, ctr1.x, ctr1.y, from.x, from.y, s.startArrow, lineWidth)
+                    val apt = LineArrowPathBuilder.getCubicBezArrowPath(to.x, to.y, ctr2.x, ctr2.y, ctr1.x, ctr1.y, from.x, from.y, s.startArrow!!, lineWidth)
                     startArrowPath = apt.arrowPath
                     startArrowTailCenter = apt.arrowTailCenter
                 }
                 if (s.endArrowhead) {
-                    val apt = LineArrowPathBuilder.getCubicBezArrowPath(from.x, from.y, ctr1.x, ctr1.y, ctr2.x, ctr2.y, to.x, to.y, s.endArrow, lineWidth)
+                    val apt = LineArrowPathBuilder.getCubicBezArrowPath(from.x, from.y, ctr1.x, ctr1.y, ctr2.x, ctr2.y, to.x, to.y, s.endArrow!!, lineWidth)
                     endArrowPath = apt.arrowPath
                     endArrowTailCenter = apt.arrowTailCenter
                 }
                 if (startArrowTailCenter != null) {
-                    from = LineArrowPathBuilder.getReferencedPosition(from.x, from.y, startArrowTailCenter.x, startArrowTailCenter.y, s.startArrow.type)
+                    from = LineArrowPathBuilder.getReferencedPosition(from.x, from.y, startArrowTailCenter.x, startArrowTailCenter.y, s.startArrow!!.type)
                 }
                 if (endArrowTailCenter != null) {
-                    to = LineArrowPathBuilder.getReferencedPosition(to.x, to.y, endArrowTailCenter.x, endArrowTailCenter.y, s.endArrow.type)
+                    to = LineArrowPathBuilder.getReferencedPosition(to.x, to.y, endArrowTailCenter.x, endArrowTailCenter.y, s.endArrow!!.type)
                 }
                 path.moveTo(from.x, from.y)
                 path.cubicTo(ctr1.x, ctr1.y, ctr2.x, ctr2.y, to.x, to.y)
@@ -2710,23 +2884,23 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     var startArrowTailCenter: PointF? = null
                     var endArrowTailCenter: PointF? = null
                     if (s.startArrowhead) {
-                        val apt = LineArrowPathBuilder.getDirectLineArrowPath(pts[1].x, pts[1].y, pts[0].x, pts[0].y, s.startArrow, lineWidth)
+                        val apt = LineArrowPathBuilder.getDirectLineArrowPath(pts[1].x, pts[1].y, pts[0].x, pts[0].y, s.startArrow!!, lineWidth)
                         startArrowPath = apt.arrowPath
                         startArrowTailCenter = apt.arrowTailCenter
                     }
                     if (s.endArrowhead) {
                         val apt = LineArrowPathBuilder.getDirectLineArrowPath(
-                            pts[ptCnt - 2].x, pts[ptCnt - 2].y, pts[ptCnt - 1].x, pts[ptCnt - 1].y, s.endArrow, lineWidth
+                            pts[ptCnt - 2].x, pts[ptCnt - 2].y, pts[ptCnt - 1].x, pts[ptCnt - 1].y, s.endArrow!!, lineWidth
                         )
                         endArrowPath = apt.arrowPath
                         endArrowTailCenter = apt.arrowTailCenter
                     }
                     if (startArrowTailCenter != null) {
-                        pts[0] = LineArrowPathBuilder.getReferencedPosition(pts[0].x, pts[0].y, startArrowTailCenter.x, startArrowTailCenter.y, s.startArrow.type)
+                        pts[0] = LineArrowPathBuilder.getReferencedPosition(pts[0].x, pts[0].y, startArrowTailCenter.x, startArrowTailCenter.y, s.startArrow!!.type)
                     }
                     if (endArrowTailCenter != null) {
                         pts[ptCnt - 1] = LineArrowPathBuilder.getReferencedPosition(
-                            pts[ptCnt - 1].x, pts[ptCnt - 1].y, endArrowTailCenter.x, endArrowTailCenter.y, s.endArrow.type
+                            pts[ptCnt - 1].x, pts[ptCnt - 1].y, endArrowTailCenter.x, endArrowTailCenter.y, s.endArrow!!.type
                         )
                     }
                 }
@@ -2743,10 +2917,10 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             if (fill != null) pathExtend.backgroundAndFill = fill
             s.appendPath(pathExtend)
             if (startArrowPath != null) {
-                s.appendPath(getArrowExtendPath(startArrowPath, fill, line, border, s.startArrow.type))
+                s.appendPath(getArrowExtendPath(startArrowPath, fill, line, border, s.startArrow!!.type))
             }
             if (endArrowPath != null) {
-                s.appendPath(getArrowExtendPath(endArrowPath, fill, line, border, s.endArrow.type))
+                s.appendPath(getArrowExtendPath(endArrowPath, fill, line, border, s.endArrow!!.type))
             }
         } else if (hasTextbox || fill != null || border) {
             val id = shape.attributeValue("id")
@@ -2755,11 +2929,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             }
             val s = if (isProcessWatermark) WatermarkShape() else WPAutoShape()
             autoShape = s
-            s.setShapeType(shapeType)
+            s.shapeType = shapeType
             processArrow(s, shape)
-            if (fill != null) s.setBackgroundAndFill(fill)
-            if (line != null) s.setLine(line)
-            s.setAdjustData(values)
+            if (fill != null) s.backgroundAndFill = fill
+            if (line != null) s.line = line
+            s.adjustData = values
         }
 
         if (autoShape != null) {
@@ -2787,18 +2961,18 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     private fun processWatermark(waterMark: WatermarkShape, shape: Element) {
         val textpath = shape.element("textpath") ?: return
         // text watermark
-        waterMark.setWatermarkType(WatermarkShape.Watermark_Text)
+        waterMark.watermarkType = WatermarkShape.Watermark_Text
         //font color
         val fillColor = shape.attributeValue("fillcolor")
         if (!fillColor.isNullOrEmpty()) {
-            waterMark.setFontColor(getColor(fillColor, false))
+            waterMark.fontColor = getColor(fillColor, false)
         }
         //opacity
         shape.element("fill")?.attributeValue("opacity")?.let {
             waterMark.setOpacity(it.toFloatSafe(1f))
         }
         //water mark context
-        waterMark.setWatermartString(textpath.attributeValue("string"))
+        waterMark.watermartString = textpath.attributeValue("string")
         //water mark font size
         val style = textpath.attributeValue("style") ?: return
         forEachVmlStyle(style) { key, value ->
@@ -2806,9 +2980,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 val fontSize = value.replace("pt", "").toIntSafe(0)
                 if (fontSize == 1) {
                     //auto font size
-                    waterMark.setAutoFontSize(true)
+                    waterMark.isAutoFontSize = true
                 } else {
-                    waterMark.setFontSize(fontSize)
+                    waterMark.fontSize = fontSize
                 }
             }
         }
@@ -2841,7 +3015,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             lineColor = getColor(strokecolor, false)
         }
         val lineFill = BackgroundAndFill()
-        lineFill.setForegroundColor(lineColor)
+        lineFill.foregroundColor = lineColor
         var lineWidth = 1
         var weight = shape.attributeValue("strokeweight")
         if (weight != null) {
@@ -2856,9 +3030,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         val dash = shape.element("stroke")?.attributeValue("dashstyle") != null
 
         val line = Line()
-        line.setBackgroundAndFill(lineFill)
-        line.setLineWidth(lineWidth)
-        line.setDash(dash)
+        line.backgroundAndFill = lineFill
+        line.lineWidth = lineWidth
+        line.isDash = dash
         return line
     }
 
@@ -2886,9 +3060,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 try {
                     val pm = control!!.getSysKit().getPictureManage()
                     if (type == BackgroundAndFill.FILL_SHADE_TILE) {
-                        f.setFillType(BackgroundAndFill.FILL_SHADE_TILE)
+                        f.fillType = BackgroundAndFill.FILL_SHADE_TILE
                         val index = pm.addPicture(picPart)
-                        f.setShader(TileShader(pm.getPicture(index), TileShader.Flip_None, 1f, 1.0f))
+                        f.shader = TileShader(pm.getPicture(index), TileShader.Flip_None, 1f, 1.0f)
                     } else if (type == BackgroundAndFill.FILL_PATTERN) {
                         var foregroundColor = 0xFFFFFFFF.toInt()
                         val fc = shape.attributeValue("fillcolor")
@@ -2897,12 +3071,13 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                         }
                         var backgroundColor = 0xFFFFFFFF.toInt()
                         fillElem.attributeValue("color2")?.let { backgroundColor = getColor(it, true) }
-                        f.setFillType(BackgroundAndFill.FILL_PATTERN)
+                        f.fillType = BackgroundAndFill.FILL_PATTERN
                         val index = pm.addPicture(picPart)
-                        f.setShader(PatternShader(pm.getPicture(index), backgroundColor, foregroundColor))
+                        f.shader =
+                            PatternShader(pm.getPicture(index), backgroundColor, foregroundColor)
                     } else {
-                        f.setFillType(BackgroundAndFill.FILL_PICTURE)
-                        f.setPictureIndex(pm.addPicture(picPart))
+                        f.fillType = BackgroundAndFill.FILL_PICTURE
+                        f.pictureIndex = pm.addPicture(picPart)
                     }
                 } catch (e: Exception) {
                     control!!.getSysKit().getErrorKit().writerLog(e)
@@ -2915,7 +3090,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             val type = if (fillElem != null) getFillType(fillElem.attributeValue("type")) else BackgroundAndFill.FILL_SOLID
             if (fillElem == null || type == BackgroundAndFill.FILL_SOLID) {
                 var fillColor = Color.WHITE
-                f.setFillType(BackgroundAndFill.FILL_SOLID)
+                f.fillType = BackgroundAndFill.FILL_SOLID
                 val fc = shape.attributeValue("fillcolor")
                 if (!fc.isNullOrEmpty()) {
                     fillColor = getColor(fc, true)
@@ -2929,11 +3104,11 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     opacity *= 255
                     fillColor = ((opacity.toInt() and 0xFF) shl 24) or (fillColor and 0xFFFFFF)
                 }
-                f.setForegroundColor(fillColor)
+                f.foregroundColor = fillColor
             } else {
                 val gradient = readGradient(shape, fillElem, type)
-                f.setFillType(type)
-                f.setShader(gradient)
+                f.fillType = type
+                f.shader = gradient
             }
         }
         return fill
@@ -2985,7 +3160,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 RadialGradientShader(getRadialGradientPositionType(fillElem), colors, positions)
             else -> null
         }
-        gradient?.setFocus(focus)
+        gradient?.focus = focus
         return gradient
     }
 
@@ -3034,12 +3209,12 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 }
                 val grpShape = WPGroupShape()
                 grpShape.setOffPostion(rect.x - childRect!!.x, rect.y - childRect!!.y)
-                grpShape.setBounds(rect)
+                grpShape.bounds = rect
                 ReaderKit.instance().processRotation(grpSpPr, grpShape)
                 val it = sp.elementIterator()
-                while (it.hasNext()) {
+                while (it!!.hasNext()) {
                     processAutoShape2010(
-                        packagePart, paraElem, it.next() as Element, grpShape,
+                        packagePart, paraElem, it!!.next() as Element, grpShape,
                         zoomXY[0] * zoomX, zoomXY[1] * zoomY, 0, 0, false
                     )
                 }
@@ -3070,7 +3245,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             if (parent == null) {
                 addShape(shape, paraElem)
             } else {
-                shape.setParent(parent)
+                shape.parent = parent
                 if (shape is WPAutoShape) {
                     shape.setWrap(parent.wrapType)
                 }
@@ -3096,23 +3271,23 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         }
         val graphicData = anchor.element("graphic")?.element("graphicData") ?: return
         val it = graphicData.elementIterator()
-        while (it.hasNext()) {
-            val shape = processAutoShape2010(paraElem, it.next() as Element, null, 1.0f, 1.0f, 0, 0, true) ?: continue
+        while (it!!.hasNext()) {
+            val shape = processAutoShape2010(paraElem, it!!.next() as Element, null, 1.0f, 1.0f, 0, 0, true) ?: continue
             if (shape is WPAutoShape && shape.groupShape != null) {
-                val grp = shape.groupShape
+                val grp = shape.groupShape ?: continue
                 if (wrapType.toInt() == -1) {
                     wrapType = getDrawingWrapType(anchor)
                 }
-                grp.setWrapType(wrapType)
+                grp.wrapType = wrapType
                 setShapeWrapType(grp, wrapType)
             }
             // Java cũ ép kiểu (WPAutoShape) => crash nếu là PictureShape
-            (shape as? WPAbstractShape)?.let { processWrapAndPosition_Drawing(it, anchor, shape.bounds) }
+            (shape as? WPAbstractShape)?.let { processWrapAndPosition_Drawing(it, anchor, requireNotNull(shape.bounds)) }
         }
     }
 
     private fun setShapeWrapType(groupShape: WPGroupShape, wrapType: Short) {
-        for (item in groupShape.shapes) {
+        for (item in groupShape.getShapes()) {
             if (item is WPAbstractShape) {
                 item.setWrap(wrapType)
             } else if (item is WPGroupShape) {
@@ -3135,22 +3310,20 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
      */
     private fun processRunAttribute(rPr: Element, attr: IAttributeSet) {
         // 字号
-        val szCs = rPr.element("szCs")
-        val sz = rPr.element("sz")
-        if (szCs != null || sz != null) {
-            var szSize = 12f
-            if (szCs != null) {
-                szSize = maxOf(szSize, szCs.attributeValue("val").toFloatSafe(24f) / 2f)
-            }
-            if (sz != null) {
-                szSize = maxOf(szSize, sz.attributeValue("val").toFloatSafe(24f) / 2f)
-            }
-            am.setFontSize(attr, szSize.toInt())
+        // sz is in half-points. szCs only applies to complex-script text (Arabic, Hebrew...), so it
+        // must not enlarge Latin text; without sz the size is inherited from the style.
+        val halfPoints = rPr.element("sz")?.attributeValue("val").toFloatSafe(0f)
+        if (halfPoints > 0f) {
+            am.setFontSize(attr, maxOf(1f, halfPoints / 2f))
         }
         // 字体
         var temp = rPr.element("rFonts")
         if (temp != null) {
-            val fontName = temp.attributeValue("hAnsi") ?: temp.attributeValue("eastAsia")
+            // Latin text (Vietnamese included) uses ascii/hAnsi; a theme reference wins over the
+            // literal name, as in Word
+            val fontName = themeFont(temp.attributeValue("asciiTheme")) ?: temp.attributeValue("ascii")
+                ?: themeFont(temp.attributeValue("hAnsiTheme")) ?: temp.attributeValue("hAnsi")
+                ?: themeFont(temp.attributeValue("eastAsiaTheme")) ?: temp.attributeValue("eastAsia")
             if (fontName != null) {
                 val index = FontTypefaceManage.instance().addFontName(fontName)
                 if (index >= 0) {
@@ -3162,7 +3335,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         temp = rPr.element("color")
         if (temp != null) {
             val v = temp.attributeValue("val")
-            if ("auto" == v || "FFFFFF" == v) {
+            if ("auto" == v) {
                 am.setFontColor(attr, Color.BLACK)
             } else {
                 // AN TOÀN: Color.parseColor crash với giá trị lạ
@@ -3217,10 +3390,25 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 styleStrID[v]?.let { am.setParaStyleID(attr, it) }
             }
         }
+        // all caps / small caps (w:val="0" switches them off)
+        rPr.element("caps")?.let { am.setFontCaps(attr, if (isOnOff(it)) 1 else 0) }
+        rPr.element("smallCaps")?.let { if (isOnOff(it)) am.setFontCaps(attr, 2) }
+        // raised/lowered text (half points) and hidden text
+        rPr.element("position")?.attributeValue("val")?.toIntOrNull()?.let { am.setFontPosition(attr, it) }
+        rPr.element("vanish")?.let { am.setFontHidden(attr, isOnOff(it)) }
+        // character spacing, twips -> hundredths of a point
+        rPr.element("spacing")?.attributeValue("val")?.toIntOrNull()?.let { am.setFontSpacing(attr, it * 5) }
         // highlight
         temp = rPr.element("highlight")
         if (temp != null) {
             am.setFontHighLight(attr, FCKit.convertColor(temp.attributeValue("val")))
+        } else {
+            // run shading (what the editor writes for a color that is not a named highlight). Not
+            // "auto", not white: WPS puts white shading under white text on colored cells, which
+            // Word would draw as white boxes hiding the text; on a white page it shows nothing anyway
+            rPr.element("shd")?.attributeValue("fill")?.takeIf { it.matches(Regex("(?i)[0-9a-f]{6}")) && !it.equals("FFFFFF", true) }?.let {
+                am.setFontHighLight(attr, (0xFF shl 24) or it.toInt(16))
+            }
         }
     }
 
@@ -3257,10 +3445,14 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     }
 
     /** Tạo SectionElement cho textbox, trả về offset cũ để khôi phục */
+    // the run anchoring a text box, kept while the text box's own runs are read
+    private val anchorRuns = ArrayDeque<Element?>()
+
     private fun beginTextbox(wpShape: WPAutoShape): Pair<Long, SectionElement> {
+        anchorRuns.addLast(editObjectRun)
         val oldOffset = offset
         offset = WPModelConstant.TEXTBOX + (textboxIndex shl 32)
-        wpShape.setElementIndex(textboxIndex.toInt())
+        wpShape.elementIndex = textboxIndex.toInt()
         val textboxElement = SectionElement()
         textboxElement.setStartOffset(offset)
         document.appendElement(textboxElement, offset)
@@ -3268,17 +3460,18 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     }
 
     private fun endTextbox(wpShape: WPAutoShape, textboxElement: SectionElement, oldOffset: Long) {
-        wpShape.setElementIndex(textboxIndex.toInt())
+        wpShape.elementIndex = textboxIndex.toInt()
         textboxElement.setEndOffset(offset)
         textboxIndex++
         offset = oldOffset
+        editObjectRun = anchorRuns.removeLastOrNull()
     }
 
     private fun setTextboxSize(attr: IAttributeSet, wpShape: WPAutoShape) {
         // 宽度
-        am.setPageWidth(attr, (wpShape.bounds.width * MainConstant.PIXEL_TO_TWIPS).toInt())
+        am.setPageWidth(attr, (wpShape.bounds!!.width * MainConstant.PIXEL_TO_TWIPS).toInt())
         // 高度
-        am.setPageHeight(attr, (wpShape.bounds.height * MainConstant.PIXEL_TO_TWIPS).toInt())
+        am.setPageHeight(attr, (wpShape.bounds!!.height * MainConstant.PIXEL_TO_TWIPS).toInt())
     }
 
     /** v-text-anchor + mso-wrap-style (bản Java lặp lại khối này 2 lần) */
@@ -3292,7 +3485,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     "bottom" -> am.setPageVerticalAlign(attr, WPAttrConstant.PAGE_V_BOTTOM)
                     "top" -> am.setPageVerticalAlign(attr, WPAttrConstant.PAGE_V_TOP)
                 }
-                "mso-wrap-style".equals(key, true) -> wpShape.setTextWrapLine(!"none".equals(value, true))
+                "mso-wrap-style".equals(key, true) -> wpShape.isTextWrapLine =
+                    !"none".equals(value, true)
             }
         }
     }
@@ -3334,7 +3528,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
 
         //word art
         val context = textpath.attributeValue("string") ?: ""
-        wpShape.setBackgroundAndFill(null)
+        wpShape.backgroundAndFill = null
         val (oldOffset, textboxElement) = beginTextbox(wpShape)
         val paraElem = ParagraphElement()
         val t = offset
@@ -3347,8 +3541,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             if (!fc.isNullOrEmpty()) {
                 am.setFontColor(leaf.getAttribute()!!, getColor(fc, true))
             }
-            val width = wpShape.bounds.getWidth().toFloat() - ShapeKit.DefaultMargin_Twip * 4 * MainConstant.TWIPS_TO_PIXEL
-            val height = wpShape.bounds.getHeight().toFloat() - ShapeKit.DefaultMargin_Twip * 2 * MainConstant.TWIPS_TO_PIXEL
+            val width = wpShape.bounds!!.width.toFloat() - ShapeKit.DefaultMargin_Twip * 4 * MainConstant.TWIPS_TO_PIXEL
+            val height = wpShape.bounds!!.getHeight().toFloat() - ShapeKit.DefaultMargin_Twip * 2 * MainConstant.TWIPS_TO_PIXEL
             val fontsize = fitWordArtFontSize(context, width, height)
             am.setFontSize(leaf.getAttribute()!!, ((fontsize - 1) * MainConstant.PIXEL_TO_POINT).toInt())
             leaf.setStartOffset(offset)
@@ -3377,7 +3571,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
      * ở đây dùng tìm kiếm nhị phân, kết quả giống hệt.
      */
     private fun fitWordArtFontSize(text: String, width: Float, height: Float): Int {
-        val paint = PaintKit.instance().paint
+        val paint = PaintKit.instance().getPaint()
         fun fits(size: Int): Boolean {
             paint.textSize = size.toFloat()
             val fm = paint.fontMetrics
@@ -3409,11 +3603,13 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         val txbxContent = sp.element("txbx")?.element("txbxContent") ?: return false
         val oldOffset = offset
         offset = WPModelConstant.TEXTBOX + (textboxIndex shl 32)
-        wpShape.setElementIndex(textboxIndex.toInt())
+        wpShape.elementIndex = textboxIndex.toInt()
         val textboxElement = SectionElement()
         textboxElement.setStartOffset(offset)
         document.appendElement(textboxElement, offset)
+        val anchorRun = editObjectRun
         processParagraphs(txbxContent.childElements())
+        editObjectRun = anchorRun
         // section属性
         val attr = textboxElement.getAttribute()!!
         setTextboxSize(attr, wpShape)
@@ -3431,8 +3627,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
             }
             // 文本框内自动换行
             val wrap = bodyPr.attributeValue("wrap")
-            wpShape.setTextWrapLine(wrap == null || "square".equals(wrap, true))
-            wpShape.setElementIndex(textboxIndex.toInt())
+            wpShape.isTextWrapLine = wrap == null || "square".equals(wrap, true)
+            wpShape.elementIndex = textboxIndex.toInt()
         }
         textboxElement.setEndOffset(offset)
         textboxIndex++
@@ -3531,8 +3727,8 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         var sb: StringBuilder? = null
         var hasText = false
         val it = run.elementIterator()
-        while (it.hasNext()) {
-            val child = it.next() as Element
+        while (it!!.hasNext()) {
+            val child = it!!.next() as Element
             val s: String? = when (child.name) {
                 "t" -> child.text?.also { if (it.isNotEmpty()) hasText = true }
                 "tab", "ptab" -> " "
@@ -3562,15 +3758,15 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
      * fix very large XML documents
      */
     internal inner class DOCXSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {
         }
 
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onEnd(elementPath: ElementPath?) {
             if (abortReader) {
                 throw AbortReaderError("abort Reader")
             }
-            val elem = elementPath.current
-            val recording = editMain() && (elem.name == "p" || elem.name == "tbl" || elem.name == "sdt")
+            val elem = elementPath?.current
+            val recording = editMain() && (elem!!.name == "p" || elem!!.name == "tbl" || elem!!.name == "sdt")
             var runCount = 0
             var paraCount = 0
             if (recording) {
@@ -3580,14 +3776,14 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                         if (node.name == "p") editParas[node] = editParaBase + paraCount++
                     }
                     val children = node.elementIterator()
-                    while (children.hasNext()) index(children.next() as Element)
+                    while (children!!.hasNext()) index(children!!.next() as Element)
                 }
                 index(elem)
             }
-            when (elem.name) {
+            when (elem!!.name) {
                 "p" -> processParagraph(elem, 0)
                 // FIX: dùng biến riêng, không gán đè elem (tránh NPE và detach nhầm phần tử)
-                "sdt" -> elem.element("sdtContent")?.let { processParagraphs(it.childElements()) }
+                "sdt" -> elem!!.element("sdtContent")?.let { processParagraphs(it.childElements()) }
                 "tbl" -> processTable(elem)
                 "pict" -> {
                     val paraElem = ParagraphElement()
@@ -3604,17 +3800,48 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                 editRunBase += runCount; editParaBase += paraCount
                 editRuns.clear(); editParas.clear(); editObjectRun = null
             }
-            elem.detach()
+            elem!!.detach()
         }
     }
 
     // ===================== THEME / MISC =====================
+
+    // theme fonts (a:majorFont / a:minorFont), keyed "major"/"minor" + "Latin"/"EastAsia"/"Cs"
+    private val themeFonts = HashMap<String, String>()
+
+    private fun readThemeFonts(themePart: PackagePart) {
+        try {
+            val root = themePart.inputStream.use { SAXReader().read(it) }!!.rootElement ?: return
+            val scheme = root.element("themeElements")?.element("fontScheme") ?: return
+            for (kind in listOf("major", "minor")) {
+                val font = scheme.element(kind + "Font") ?: continue
+                font.element("latin")?.attributeValue("typeface")?.takeIf { it.isNotEmpty() }?.let { themeFonts[kind + "Latin"] = it }
+                font.element("ea")?.attributeValue("typeface")?.takeIf { it.isNotEmpty() }?.let { themeFonts[kind + "EastAsia"] = it }
+                font.element("cs")?.attributeValue("typeface")?.takeIf { it.isNotEmpty() }?.let { themeFonts[kind + "Cs"] = it }
+            }
+        } catch (e: Exception) {
+            control?.getSysKit()?.getErrorKit()?.writerLog(e)
+        }
+    }
+
+    /** "minorHAnsi" -> the minor latin font of the theme, etc. */
+    private fun themeFont(theme: String?): String? {
+        if (theme == null) return null
+        val kind = if (theme.startsWith("major")) "major" else "minor"
+        val script = when {
+            theme.endsWith("EastAsia") -> "EastAsia"
+            theme.endsWith("Bidi") -> "Cs"
+            else -> "Latin"
+        }
+        return themeFonts[kind + script] ?: themeFonts[kind + "Latin"]
+    }
 
     @Throws(Exception::class)
     private fun processThemeColor() {
         val part = packagePart ?: return
         val themeShip = part.getRelationshipsByType(PackageRelationshipTypes.THEME_PART).getRelationship(0) ?: return
         val themePart = zip.getPart(themeShip.targetURI) ?: return
+        readThemeFonts(themePart)
         val colors: MutableMap<String, Int> = ThemeReader.instance().getThemeColorMap(themePart)?.toMutableMap() ?: return
         themeColor = colors
         colors[SchemeClrConstant.SCHEME_LT1]?.let { colors[SchemeClrConstant.SCHEME_BG1] = it }
@@ -3630,7 +3857,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         val w = am.getPageWidth(section.getAttribute()!!)
         val h = am.getPageHeight(section.getAttribute()!!)
         for ((shape, v) in relativeValue) {
-            val r = shape.bounds
+            val r = requireNotNull(shape.bounds)
             // width
             if (v[0] > 0) {
                 r.width = (w * MainConstant.TWIPS_TO_PIXEL * v[0] / 1000f).toInt()
@@ -3669,6 +3896,9 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
     override fun dispose() {
         if (isReaderFinish()) {
             filePath = null
+            // close the file now: left to the finalizer, closing a file deleted meanwhile (shared
+            // storage) fails with EIO and that exception kills the app
+            zipPackage?.revert()
             zipPackage = null
             wpdoc = null
             packagePart = null
@@ -3729,3 +3959,14 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
         }
     }
 }
+
+/** A resolved DOCX border: width in eighths of a point (0 = none), ARGB color, space in points. */
+internal class DocxBorder(val eighths: Int, val color: Int, val space: Int = 0) {
+    companion object {
+        @JvmField
+        val NONE = DocxBorder(0, 0)
+    }
+}
+
+/** Word's default left/right cell margin, in twips (0.075 inch). */
+private const val DEFAULT_CELL_MARGIN_LR = 108

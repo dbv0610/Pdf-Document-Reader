@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.wp.control
 
 import android.view.MotionEvent
@@ -21,7 +28,7 @@ class WPEventManage(protected var word: Word?, control: IControl) : AEventManage
             super.onTouch(v, event)
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    PictureKit.instance().setDrawPictrue(true)
+                    PictureKit.instance().isDrawPictrue = true
                     processDown(touchView, event)
                 }
 
@@ -187,19 +194,19 @@ class WPEventManage(protected var word: Word?, control: IControl) : AEventManage
         val currentWord = word ?: return
         if (mScroller.computeScrollOffset()) {
             isFling = true
-            PictureKit.instance().setDrawPictrue(false)
+            PictureKit.instance().isDrawPictrue = false
             val sX = mScroller.currX
             val sY = mScroller.currY
             if (oldX == sX && oldY == sY || sX == currentWord.getScrollX() && sY == currentWord.getScrollY()) {
-                PictureKit.instance().setDrawPictrue(true)
+                PictureKit.instance().isDrawPictrue = true
             }
             oldX = sX
             oldY = sY
             currentWord.scrollTo(sX, sY)
             return
         }
-        if (!PictureKit.instance().isDrawPictrue()) {
-            PictureKit.instance().setDrawPictrue(true)
+        if (!PictureKit.instance().isDrawPictrue) {
+            PictureKit.instance().isDrawPictrue = true
             currentWord.postInvalidate()
         }
     }

@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 /**
  * Copyright (C) 2009, 2010 SC 4ViewSoft SRL
  *  
@@ -34,6 +41,9 @@ import android.graphics.RectF;
  * The pie chart rendering class.
  */
 public class PieChart extends RoundChart {
+  /** Outline drawn around each slice (c:dPt/c:spPr/a:ln), 0 for none. */
+  public int sliceBorderColor;
+
   /**
    * Builds a new pie chart instance.
    * 
@@ -124,7 +134,16 @@ public class PieChart extends RoundChart {
 	 	
     paint.setFakeBoldText(false);    
     
-    bottom = y + height - legendSize;
+    if(mRenderer.isShowLegend() && legendAreaSize != null && legendPos == LegendPosition_Top)
+    {
+        // legend above the pie: the pie takes the space below it
+        top = titleBottom(y) + legendAreaSize.height;
+        bottom = y + height - (int)(margins[2] * height);
+    }
+    else
+    {
+        bottom = y + height - legendSize;
+    }
 
     float currentAngle = 0;
     int mRadius = Math.min(Math.abs(right - left), Math.abs(bottom - top));
@@ -143,6 +162,15 @@ public class PieChart extends RoundChart {
       float value = (float) mDataset.getValue(i);
       float angle = (float) (value / total * 360);
       canvas.drawArc(oval, currentAngle - 90, angle, true, paint);
+      if(sliceBorderColor != 0)
+      {
+          Paint.Style style = paint.getStyle();
+          paint.setStyle(Paint.Style.STROKE);
+          paint.setStrokeWidth(Math.max(1f, mRenderer.getZoomRate()));
+          paint.setColor(sliceBorderColor);
+          canvas.drawArc(oval, currentAngle - 90, angle, true, paint);
+          paint.setStyle(style);
+      }
 //      drawLabel(canvas, mDataset.getCategory(i), mRenderer, prevLabelsBounds, centerX, centerY,
 //          shortRadius, longRadius, currentAngle - 90, angle, left, right, paint);
       currentAngle += angle;
@@ -172,6 +200,9 @@ public class PieChart extends RoundChart {
 	    		break;
 	    	
 	    	case LegendPosition_Top:
+	    		legendLeft = x + (width - legendWidth) / 2;
+	    		legendTop = titleBottom(y);
+	    		break;
 	    	case LegendPosition_Bottom:
 	    		legendLeft = x + (width - legendWidth) / 2;
 	    		legendTop = y + height - legendHeight;
@@ -182,5 +213,15 @@ public class PieChart extends RoundChart {
 	}
     
     canvas.restore();
+  }
+
+  /** Bottom of the chart title (drawn with its baseline two text sizes below the top), or y without one. */
+  private int titleBottom(int y)
+  {
+      if(!mRenderer.isShowChartTitle() || mRenderer.getChartTitle() == null || mRenderer.getChartTitle().length() == 0)
+      {
+          return y;
+      }
+      return y + (int)(mRenderer.getChartTitleTextSize() * mRenderer.getZoomRate() * 2.5f);
   }
 }

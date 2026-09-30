@@ -111,10 +111,10 @@
         android:orientation="horizontal"
         android:paddingHorizontal="@dimen/_12sdp"
         android:paddingVertical="@dimen/_10sdp"
-        app:cornerRadius="@dimen/_8sdp"
+        app:uiCornerRadius="@dimen/_8sdp"
         app:layout_constraintTop_toBottomOf="@+id/nstOption"
-        app:stColor="@color/color_d0d0d0"
-        app:strokeWidth="@dimen/_1sdp"
+        app:uiStrokeColor="@color/color_d0d0d0"
+        app:uiStrokeWidth="@dimen/_1sdp"
         tools:layout_editor_absoluteX="16dp">
 
         <ImageView
@@ -151,6 +151,7 @@
         android:layout_marginHorizontal="@dimen/_12sdp"
         android:layout_marginTop="@dimen/_12sdp"
         android:clipToPadding="false"
+        android:paddingBottom="@dimen/_64sdp"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/rcvTabMenu"
@@ -184,6 +185,22 @@
             android:textColor="@color/text_secondary"
             android:textSize="@dimen/_12sdp" />
     </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCreateDocument"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="@dimen/_16sdp"
+        android:minHeight="48dp"
+        android:text="@string/create_document"
+        android:textAllCaps="false"
+        android:textColor="@color/white"
+        app:backgroundTint="@color/primary"
+        app:cornerRadius="@dimen/_24sdp"
+        app:icon="@drawable/ic_create_document"
+        app:iconTint="@color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <ProgressBar
         android:id="@+id/progressLoading"

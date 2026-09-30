@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          ParagraphElement.java
  *
  * 编译器:            android2.2
@@ -45,6 +52,62 @@ open class ParagraphElement : AbstractElement() {
      */
     open fun getLeaf(offset: Long): IElement? {
         return leaf!!.getElement(offset)
+    }
+
+    /** Number of leaves (text runs, shapes, fields). */
+    fun leafCount(): Int = leaf?.size() ?: 0
+
+    /** Puts [leafElem] in at [index] (its offsets must already be right). */
+    fun insertLeafAt(index: Int, leafElem: LeafElement) {
+        leaf!!.insertElementForIndex(leafElem, index)
+    }
+
+    /** Takes the leaf at [index] out without disposing it. */
+    fun detachLeafAt(index: Int): IElement? = leaf?.detachElementForIndex(index)
+
+    /** Removes the leaf at [index] (it must not be used afterwards). */
+    fun removeLeafAt(index: Int) {
+        leaf?.removeElementForIndex(index)
+    }
+
+    /**
+     * Plain text leaves overlapping [start, end), after splitting the ones that cross a boundary
+     * (the halves keep copies of the attributes). Other leaves (shapes, fields) are never split
+     * and are left out. Used by live editing to format part of a run.
+     */
+    fun leavesFor(start: Long, end: Long): List<LeafElement> {
+        val leaves = leaf ?: return emptyList()
+        fun splitAt(offset: Long) {
+            for (i in 0 until leaves.size()) {
+                val l = leaves.getElementForIndex(i) as? LeafElement ?: continue
+                if (l.javaClass != LeafElement::class.java) continue
+                val ls = l.getStartOffset()
+                val le = l.getEndOffset()
+                if (offset <= ls || offset >= le) continue
+                val text = l.getText(null) ?: return
+                val k = (offset - ls).toInt()
+                if (k <= 0 || k >= text.length) return
+                val left = LeafElement(text.substring(0, k)).apply {
+                    setAttribute(l.getAttribute().clone()); setStartOffset(ls); setEndOffset(offset)
+                }
+                val right = LeafElement(text.substring(k)).apply {
+                    setAttribute(l.getAttribute().clone()); setStartOffset(offset); setEndOffset(le)
+                }
+                leaves.removeElementForIndex(i)
+                leaves.insertElementForIndex(left, i)
+                leaves.insertElementForIndex(right, i + 1)
+                return
+            }
+        }
+        splitAt(start)
+        splitAt(end)
+        val result = ArrayList<LeafElement>()
+        for (i in 0 until leaves.size()) {
+            val l = leaves.getElementForIndex(i) as? LeafElement ?: continue
+            if (l.javaClass != LeafElement::class.java) continue
+            if (l.getStartOffset() >= start && l.getEndOffset() <= end && l.getEndOffset() > l.getStartOffset()) result.add(l)
+        }
+        return result
     }
 
     /**

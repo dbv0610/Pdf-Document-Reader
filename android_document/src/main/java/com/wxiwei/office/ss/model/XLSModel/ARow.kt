@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          ARow.java
  *
  * 编译器:            android2.2
@@ -80,9 +87,9 @@ open class ARow
         }
 
         val book = sheet!!.getWorkbook()!!
-        return (Workbook.isValidateStyle(book.getCellStyle(cval.getXFIndex().toInt()))
+        return (Workbook.isValidateStyle(book.getCellStyle(cval.xFIndex.toInt()))
                 || Workbook.isValidateStyle(book.getCellStyle(getRowStyle()))
-                || Workbook.isValidateStyle(book.getCellStyle(sheet!!.getColumnStyle(cval.getColumn().toInt()))))
+                || Workbook.isValidateStyle(book.getCellStyle(sheet!!.getColumnStyle(cval.column.toInt()))))
     }
 
     /**
@@ -91,19 +98,13 @@ open class ARow
      * @param cellRec low level cell to create the high level representation from
      * @return ACell representing the low level record passed in
      */
-    @Suppress("UNCHECKED_CAST")
     fun createCellFromRecord(cellRec: CellValueRecordInterface): ACell? {
-        // NOTE: the original Java looked the cell up with a boxed Short key
-        // (cells.get(cellRec.getColumn())) in a Hashtable<Integer, Cell>, which never matches;
-        // the lookup is kept identical here to preserve behavior.
-        val cell = (cells as Map<Any?, Cell?>)[cellRec.getColumn()]
-        if (cell != null) {
-            return cell as ACell
-        }
-
+        // NOTE: the original Java first looked the cell up with a boxed Short key
+        // (cells.get(cellRec.getColumn())) in a Hashtable<Integer, Cell>, which never matched:
+        // no lookup here, a record always makes its cell (cells is a CellMap, not a Map, now).
         if (isValidateCell(cellRec)) {
             val acell = ACell(sheet, cellRec)
-            val colIx = cellRec.getColumn().toInt()
+            val colIx = cellRec.column.toInt()
             if (colIx < firstCol) {
                 firstCol = colIx
             } else if (colIx > lastCol) {

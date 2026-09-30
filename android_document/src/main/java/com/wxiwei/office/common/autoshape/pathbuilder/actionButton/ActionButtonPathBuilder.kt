@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          actionButtonUtil.java
  *  
  * 编译器:            android2.2
@@ -70,7 +77,7 @@ object ActionButtonPathBuilder {
     fun getActionButtonExtendPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?>? {
         pathExList.clear()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.ActionButtonBackPrevious -> return getBackPreviousPath(shape, rect)
 
             ShapeTypes.ActionButtonForwardNext -> return getForwardNextPath(shape, rect)
@@ -106,7 +113,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
@@ -120,16 +127,16 @@ object ActionButtonPathBuilder {
         path.close()
 
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
 
@@ -146,7 +153,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
@@ -161,16 +168,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -186,7 +193,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
@@ -209,16 +216,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -233,7 +240,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
@@ -256,16 +263,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -280,7 +287,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         /**/////////// */
@@ -304,16 +311,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         var fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_LIGHT1.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_LIGHT1.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR_LIGHT)
+            fill.foregroundColor = PICTURECOLOR_LIGHT
         }
 
         pathExtend.backgroundAndFill = fill
@@ -338,15 +345,15 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -361,7 +368,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         /**/////////// */
@@ -378,16 +385,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         var fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -418,15 +425,15 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_LIGHT2.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_LIGHT2.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR_DARK)
+            fill.foregroundColor = PICTURECOLOR_DARK
         }
 
         pathExtend.backgroundAndFill = fill
@@ -441,7 +448,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         ////
@@ -494,16 +501,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -518,7 +525,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         ////
@@ -554,16 +561,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -578,7 +585,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         ////
@@ -595,16 +602,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         var fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_LIGHT1.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_LIGHT1.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR_LIGHT)
+            fill.foregroundColor = PICTURECOLOR_LIGHT
         }
 
         pathExtend.backgroundAndFill = fill
@@ -622,15 +629,15 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
 
         pathExtend.backgroundAndFill = fill
@@ -645,7 +652,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         ////
@@ -681,16 +688,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR_LIGHT)
+            fill.foregroundColor = PICTURECOLOR_LIGHT
         }
 
         pathExtend.backgroundAndFill = fill
@@ -706,7 +713,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         ////
@@ -763,16 +770,16 @@ object ActionButtonPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT_DARK.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT_DARK.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR_LIGHT)
+            fill.foregroundColor = PICTURECOLOR_LIGHT
         }
 
         pathExtend.backgroundAndFill = fill
@@ -787,7 +794,7 @@ object ActionButtonPathBuilder {
         tempRect.set(rect)
         path.addRect(tempRect, Path.Direction.CW)
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         return pathExList

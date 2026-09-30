@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.xls
 
 import android.util.Xml
@@ -188,22 +195,23 @@ class XLSXReader(control: IControl, filePath: String) : SSReader() {
         super.dispose()
         filePath = null
         book = null
+        // not closed here: the workbook reads its other sheets from the package later
         zipPackage = null
         packagePart = null
         key = null
     }
 
     private inner class SharedStringSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {
         }
 
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onEnd(elementPath: ElementPath?) {
             if (abortReader) {
                 throw AbortReaderError("abort Reader")
             }
-            val element = elementPath.current
-            if (element.name == "si") {
-                val textElement = element.element("t")
+            val element = elementPath?.current
+            if (element!!.name == "si") {
+                val textElement = element!!.element("t")
                 if (textElement != null) {
                     book!!.addSharedString(sharedStringIndex, textElement.text)
                 } else {
@@ -211,42 +219,42 @@ class XLSXReader(control: IControl, filePath: String) : SSReader() {
                     // A 50MB workbook can contain hundreds of thousands of
                     // these trees; keeping them makes the worksheet parse
                     // exceed Android's heap before cells are even read.
-                    book!!.addSharedString(sharedStringIndex, element.getStringValue())
+                    book!!.addSharedString(sharedStringIndex, element!!.getStringValue())
                 }
                 sharedStringIndex++
             }
-            element.detach()
+            element!!.detach()
         }
     }
 
     private inner class SearchSharedStringSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {
         }
 
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onEnd(elementPath: ElementPath?) {
             if (abortReader) {
                 throw AbortReaderError("abort Reader")
             }
-            val stringItem = elementPath.current
-            if (stringItem.name == "si") {
-                val textElement = stringItem.element("t")
+            val stringItem = elementPath?.current
+            if (stringItem!!.name == "si") {
+                val textElement = stringItem!!.element("t")
                 if (textElement != null) {
-                    if (textElement.text.lowercase().contains(key!!)) {
+                    if (textElement.text!!.lowercase().contains(key!!)) {
                         searched = true
                     }
                 } else {
-                    val iterator = stringItem.elementIterator("r")
+                    val iterator = stringItem!!.elementIterator("r")
                     var text = ""
-                    while (iterator.hasNext()) {
-                        val run = iterator.next() as Element
-                        text += run.element("t").text
+                    while (iterator!!.hasNext()) {
+                        val run = iterator!!.next() as Element
+                        text += run.element("t")!!.text
                     }
                     if (text.lowercase().contains(key!!)) {
                         searched = true
                     }
                 }
             }
-            stringItem.detach()
+            stringItem!!.detach()
             if (searched) {
                 throw StopReaderError("stop")
             }

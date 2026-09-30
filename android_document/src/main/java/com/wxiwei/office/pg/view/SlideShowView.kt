@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.pg.view
 
 import android.graphics.Bitmap
@@ -9,7 +16,6 @@ import android.view.View
 import com.wxiwei.office.common.shape.GroupShape
 import com.wxiwei.office.common.shape.IShape
 import com.wxiwei.office.java.awt.Dimension
-import com.wxiwei.office.java.awt.Rectangle
 import com.wxiwei.office.pg.animate.Animation
 import com.wxiwei.office.pg.animate.AnimationManager
 import com.wxiwei.office.pg.animate.EmphanceAnimation
@@ -19,6 +25,7 @@ import com.wxiwei.office.pg.animate.ShapeAnimation
 import com.wxiwei.office.pg.control.Presentation
 import com.wxiwei.office.pg.model.PGSlide
 import com.wxiwei.office.system.beans.CalloutView.CalloutView
+import kotlin.math.roundToInt
 
 class SlideShowView(var presentation: Presentation?, var slide: PGSlide?) {
     private var paint: Paint? = Paint().apply {
@@ -52,8 +59,8 @@ class SlideShowView(var presentation: Presentation?, var slide: PGSlide?) {
 
     private fun removeShapeAnimation(shape: IShape) {
         if (shape is GroupShape) shape.getShapes().forEach { removeShapeAnimation(it) }
-        else shape.getAnimation()?.let {
-            shape.setAnimation(null)
+        else shape.animation?.let {
+            shape.animation = null
             it.dispose()
         }
     }
@@ -86,17 +93,18 @@ class SlideShowView(var presentation: Presentation?, var slide: PGSlide?) {
         val current = slide ?: return
         for (i in 0 until current.getShapeCount()) {
             val shape = current.getShape(i) ?: continue
-            if ((shape.getShapeID() == shapeID || shape.getGroupShapeID() == shapeID) && shape.getAnimation() == null) setShapeAnimation(shape, animation)
+            if ((shape.shapeID == shapeID || shape.groupShapeID == shapeID) && shape.animation == null) setShapeAnimation(shape, animation)
         }
     }
 
     private fun setShapeAnimation(shape: IShape, animation: IAnimation) {
-        if (shape is GroupShape) shape.getShapes().forEach { setShapeAnimation(it, animation) } else shape.setAnimation(animation)
+        if (shape is GroupShape) shape.getShapes().forEach { setShapeAnimation(it, animation) } else shape.animation =
+            animation
     }
 
     fun endSlideShow() = removeAnimation()
     fun isExitSlideShow(): Boolean = slide == null
-    fun gotopreviousSlide(): Boolean = slide?.getSlideShowAnimation()?.let { slideshowStep <= 0 } ?: true
+    fun previousSlide(): Boolean = slide?.getSlideShowAnimation()?.let { slideshowStep <= 0 } ?: true
     fun gotoNextSlide(): Boolean = slide?.getSlideShowAnimation()?.let { slideshowStep >= it.size } ?: true
 
     fun previousActionSlideShow() {
@@ -134,7 +142,7 @@ class SlideShowView(var presentation: Presentation?, var slide: PGSlide?) {
         animationMgr!!.setAnimation(animation)
         for (i in 0 until current.getShapeCount()) {
             val shape = current.getShape(i) ?: continue
-            if (shape.getShapeID() == shapeID || shape.getGroupShapeID() == shapeID) setShapeAnimation(shape, animation)
+            if (shape.shapeID == shapeID || shape.groupShapeID == shapeID) setShapeAnimation(shape, animation)
         }
         if (showAnimation) animationMgr!!.beginAnimation(1000 / animation.getFPS()) else animationMgr!!.stopAnimation()
     }
@@ -143,11 +151,11 @@ class SlideShowView(var presentation: Presentation?, var slide: PGSlide?) {
         val current = slide ?: return
         for (i in 0 until current.getShapeCount()) {
             val shape = current.getShape(i) ?: continue
-            val rect = shape.takeIf { it.getShapeID() == shapeID }?.getBounds() ?: continue
-            val left = Math.round(rect.x * zoom)
-            val top = Math.round(rect.y * zoom)
-            val width = Math.round(rect.width * zoom)
-            val height = Math.round(rect.height * zoom)
+            val rect = shape.takeIf { it.shapeID == shapeID }?.bounds ?: continue
+            val left = (rect.x * zoom).roundToInt()
+            val top = (rect.y * zoom).roundToInt()
+            val width = (rect.width * zoom).roundToInt()
+            val height = (rect.height * zoom).roundToInt()
             if (animShapeArea == null) animShapeArea = Rect(left, top, left + width, top + height) else animShapeArea!!.set(left, top, left + width, top + height)
             return
         }

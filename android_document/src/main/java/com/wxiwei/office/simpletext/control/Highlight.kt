@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          Highlight.java
  *
  * 编译器:            android2.2
@@ -78,8 +85,8 @@ class Highlight(word: IWord?) : IHighlight {
             if (word!!.getEditType() == MainConstant.APPLICATION_TYPE_PPT
                 && word!!.getTextBox() != null
             ) {
-                leafRect.x += word!!.getTextBox()!!.getBounds().x
-                leafRect.y += word!!.getTextBox()!!.getBounds().y
+                leafRect.x += word!!.getTextBox()!!.bounds!!.x
+                leafRect.y += word!!.getTextBox()!!.bounds!!.y
             }
             w -= (sRect.x - leafRect.x)
         }

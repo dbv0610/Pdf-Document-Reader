@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           SlidePic.java
  *  
  * 编译器:             android2.2
@@ -78,7 +85,7 @@ class PictureReader {
             val saxreader = SAXReader()
             val `in` = vmlDrawingPart!!.getInputStream()
             val poiVml = saxreader.read(`in`)
-            val root = poiVml.getRootElement()
+            val root = poiVml!!.rootElement
             if (root != null) {
                 if (spIDs == null) {
                     spIDs = Hashtable<String?, String?>()

@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.reader.pdfviewer
 
 import com.wxiwei.office.R
@@ -235,6 +242,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     var preloadSearchText = true
 
     private val selectionHandlePaint: Paint
+    private val selectionHandlePath = Path()
 
     /**
      * Paint object for drawing debug stuff
@@ -269,7 +277,6 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
      */
     private var selectionStartHandleDrawable: Drawable? = null
     private var selectionEndHandleDrawable: Drawable? = null
-    private var selectionHandleDrawablesLoaded = false
     private var tintSelectionHandles = true
 
     /**
@@ -484,6 +491,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         magnifierBorderPaint.color = DEFAULT_MAGNIFIER_BORDER_COLOR
         selectionHandlePaint = Paint()
         selectionHandlePaint.style = Paint.Style.FILL
+        selectionHandlePaint.isAntiAlias = true
         selectionHandlePaint.color = selectionHandleColor
         debugPaint = Paint()
         debugPaint.style = Paint.Style.STROKE
@@ -628,8 +636,30 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             return pdfFile!!.pagesCount
         }
 
+    /** Pages in warm, paper-like colors (a sepia tint); turns night mode off. */
+    fun setSepiaMode(sepia: Boolean) {
+        if (sepia) {
+            nightMode = false
+            sepiaMode = true
+            // white paper becomes beige (#F4ECD8), black ink dark brown
+            paint.colorFilter = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
+                0.878f, 0f, 0f, 0f, 20f,
+                0f, 0.871f, 0f, 0f, 14f,
+                0f, 0f, 0.8f, 0f, 12f,
+                0f, 0f, 0f, 1f, 0f,
+            )))
+        } else if (sepiaMode) {
+            sepiaMode = false
+            paint.colorFilter = null
+        }
+        invalidate()
+    }
+
+    private var sepiaMode = false
+
     fun setNightMode(nightMode: Boolean) {
         this.nightMode = nightMode
+        if (nightMode) sepiaMode = false
         if (nightMode) {
             val colorMatrixInverted =
                 ColorMatrix(
@@ -663,6 +693,8 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         editUndo.clear()
         editRedo.clear()
         sessionAnnotations.clear()
+        // their add functions hold the old document
+        placed.clear()
         sessionInk.clear()
         pendingInk.clear()
         inkRevisions.clear()
@@ -876,7 +908,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
 
         val bg = background
         if (bg == null) {
-            canvas.drawColor(if (nightMode) Color.BLACK else Color.WHITE)
+            canvas.drawColor(if (nightMode) Color.BLACK else if (sepiaMode) SEPIA_BACKGROUND else Color.WHITE)
         } else {
             bg.draw(canvas)
         }
@@ -913,6 +945,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         onDrawPagesNums.clear()
 
         drawInk(canvas)
+        drawReadingHighlight(canvas)
         drawSearchHighlights(canvas)
         drawTextSelection(canvas)
         drawSelectionHandles(canvas)
@@ -1236,12 +1269,12 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
 
     /**
      * Draw a handle hanging below the text at ([x], [bottom]) in document coordinates, like Android text selection:
-     * the start handle points up-right to the first character, the end handle up-left to the last one.
+     * a drop whose point touches the text, up-right to the first character for the start handle, up-left to the
+     * last one for the end handle. Drawables given with [setSelectionHandleDrawables] are used instead.
      *
      * @return the touch area of the handle in view coordinates
      */
     private fun drawSelectionHandle(canvas: Canvas, x: Float, bottom: Float, isStart: Boolean): RectF {
-        ensureSelectionHandleDrawables()
         val drawable = if (isStart) selectionStartHandleDrawable else selectionEndHandleDrawable
         val minTouchSize = Util.getDP(context, SELECTION_HANDLE_MIN_TOUCH_DP).toFloat()
         val bounds: RectF
@@ -1256,11 +1289,14 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             drawable.draw(canvas)
             bounds = RectF(drawable.bounds)
         } else {
-            val radius = SELECTION_HANDLE_RADIUS
-            val centerX = if (isStart) x - radius else x + radius
-            val centerY = bottom + radius
-            canvas.drawCircle(centerX, centerY, radius, selectionHandlePaint)
-            bounds = RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius)
+            // a circle whose corner toward the text is square: the point of the drop
+            val r = Util.getDP(context, SELECTION_HANDLE_RADIUS_DP).toFloat()
+            val left = if (isStart) x - 2 * r else x
+            bounds = RectF(left, bottom, left + 2 * r, bottom + 2 * r)
+            val radii = if (isStart) floatArrayOf(r, r, 0f, 0f, r, r, r, r) else floatArrayOf(0f, 0f, r, r, r, r, r, r)
+            selectionHandlePath.reset()
+            selectionHandlePath.addRoundRect(bounds, radii, Path.Direction.CW)
+            canvas.drawPath(selectionHandlePath, selectionHandlePaint)
         }
         bounds.offset(currentXOffset, currentYOffset)
         // Keep a comfortable touch target even for small drawables
@@ -1268,32 +1304,6 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         val extraY = max(0f, (minTouchSize - bounds.height()) / 2)
         bounds.inset(-extraX, -extraY)
         return bounds
-    }
-
-    private fun ensureSelectionHandleDrawables() {
-        if (selectionHandleDrawablesLoaded) {
-            return
-        }
-        selectionHandleDrawablesLoaded = true
-        if (selectionStartHandleDrawable == null) {
-            selectionStartHandleDrawable = loadThemeDrawable(android.R.attr.textSelectHandleLeft)
-        }
-        if (selectionEndHandleDrawable == null) {
-            selectionEndHandleDrawable = loadThemeDrawable(android.R.attr.textSelectHandleRight)
-        }
-        applySelectionHandleTint()
-    }
-
-    private fun loadThemeDrawable(attr: Int): Drawable? {
-        val attributes = context.obtainStyledAttributes(intArrayOf(attr))
-        try {
-            return attributes.getDrawable(0)?.mutate()
-        } catch (e: Exception) {
-            Log.w(TAG, "Cannot load selection handle drawable", e)
-            return null
-        } finally {
-            attributes.recycle()
-        }
     }
 
     private fun applySelectionHandleTint() {
@@ -1879,7 +1889,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
      * Use custom drawables for the selection handles. They hang below the text like Android handles:
      * the start drawable points to the first character from its top at 3/4 of its width,
      * the end drawable from its top at 1/4 of its width.
-     * A null drawable keeps the Android handle of the theme for that side.
+     * A null drawable draws the default drop handle for that side.
      *
      * @param tint whether to tint the drawables with the selection handle color
      */
@@ -1887,7 +1897,6 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         selectionStartHandleDrawable = start?.mutate()
         selectionEndHandleDrawable = end?.mutate()
         tintSelectionHandles = tint
-        selectionHandleDrawablesLoaded = false
         redraw()
     }
 
@@ -2019,13 +2028,15 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     /** Compatibility alias for [redoEdit]. */
     fun redoInk(): Boolean = redoEdit()
 
-    private data class EditRecord(val page: Int, val name: String, val apply: () -> Boolean, val revert: () -> Boolean)
+    /** [snapshot]: undoing it restores a copy of the whole document (it would also undo later form values). */
+    private data class EditRecord(val page: Int, val name: String, val apply: () -> Boolean, val revert: () -> Boolean,
+                                  val snapshot: Boolean = false)
     private val editUndo = ArrayList<EditRecord>()
     private val editRedo = ArrayList<EditRecord>()
     private val sessionAnnotations = HashMap<String, EditRecord>()
 
     private fun recordAddition(page: Int, name: String, apply: () -> Boolean) {
-        val record = EditRecord(page, name, apply) { pdfFile?.removeAnnotByName(page, name) == true }
+        val record = EditRecord(page, name, apply, revert = { pdfFile?.removeAnnotByName(page, name) == true })
         sessionAnnotations[name] = record
         editUndo.add(record)
         editRedo.clear()
@@ -2099,6 +2110,25 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             kotlin.math.round(y / size.height * h).toInt())?.let { page to it }
     }
 
+    /** Where [page] is drawn, in view pixels (it may be partly off screen), or null. */
+    fun pageViewRect(page: Int): RectF? {
+        val file = pdfFile ?: return null
+        if (state != State.SHOWN || page !in 0 until file.pagesCount) return null
+        val size = file.getScaledPageSize(page, zoom)
+        val offset = computePageOffsets(page)
+        val left = currentXOffset + offset.x
+        val top = currentYOffset + offset.y
+        return RectF(left, top, left + size.width, top + size.height)
+    }
+
+    /** The page under a view point, or null in the gaps between pages. */
+    fun pageAt(viewX: Float, viewY: Float): Int? {
+        val file = pdfFile ?: return null
+        if (state != State.SHOWN || file.pagesCount == 0) return null
+        val page = file.getPageAtOffset(if (isSwipeVertical) viewY - currentYOffset else viewX - currentXOffset, zoom)
+        return page.takeIf { pageViewRect(it)?.contains(viewX, viewY) == true }
+    }
+
     /** Map PDF bounds (top > bottom) to normalized view bounds, respecting rotation and zoom. */
     fun pageRectToView(page: Int, pageRect: RectF): RectF? {
         requireEditThread()
@@ -2123,12 +2153,18 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         requireEditThread()
         val file = pdfFile ?: return null
         if (text.isBlank() || !sizePt.isFinite() || sizePt <= 0 || !pageX.isFinite() || !pageY.isFinite()) return null
-        val font = fontPath ?: listOf("/system/fonts/Roboto-Regular.ttf", "/system/fonts/NotoSans-Regular.ttf",
-            "/system/fonts/DroidSans.ttf").firstOrNull { File(it).canRead() }
+        val font = fontPath ?: com.reader.pdfviewer.util.SystemFonts.unicode()
         val name = "pdfview-text-" + java.util.UUID.randomUUID()
-        val apply = { file.addFreeText(page, text, font, sizePt, pageX, pageY, color, name) != null }
-        if (!apply()) return null
-        recordAddition(page, name, apply)
+        val first = file.addFreeText(page, text, font, sizePt, pageX, pageY, color, name) ?: return null
+        // moved or resized: the text keeps its lines, its size follows the height of the bounds
+        val origin = RectF(first)
+        val place = { r: RectF ->
+            val size = sizePt * (r.top - r.bottom) / (origin.top - origin.bottom)
+            file.addFreeText(page, text, font, size, pageX + (r.left - origin.left), pageY + (r.top - origin.top), color, name) != null
+        }
+        val item = Placed(page, RectF(origin), place)
+        placed[name] = item
+        recordAddition(page, name) { place(item.bounds) }
         inkChanged(page)
         return name
     }
@@ -2142,11 +2178,162 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         val copy = bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return null
         val rect = RectF(pageRect)
         val name = "pdfview-image-" + java.util.UUID.randomUUID()
-        val apply = { file.addImage(page, rect, copy, name) }
-        if (!apply()) { copy.recycle(); return null }
-        recordAddition(page, name, apply)
+        return addPlaced(page, name, rect) { r -> file.addImage(page, r, copy, name) } ?: run { copy.recycle(); null }
+    }
+
+    /** Add a sticky note whose icon's top left is at a PDF point. Returns its NM name, or null. */
+    fun addNote(page: Int, pageX: Float, pageY: Float, text: String, @ColorInt color: Int = NOTE_COLOR): String? {
+        requireEditThread()
+        val file = pdfFile ?: return null
+        val name = "pdfview-note-" + java.util.UUID.randomUUID()
+        val place = { r: RectF -> file.addNote(page, r.left, r.top, color, text, name) }
+        return addPlaced(page, name, RectF(pageX, pageY, pageX + 20, pageY - 20), place)
+    }
+
+    /**
+     * Add a shape: [kind] SHAPE_RECT, SHAPE_ELLIPSE, SHAPE_LINE or SHAPE_ARROW. For a line or an
+     * arrow [pageRect] runs from (left, top) to (right, bottom), its direction; otherwise it is
+     * the bounds. [fill] 0 leaves rectangles and ellipses empty. Returns its NM name, or null.
+     */
+    fun addShape(page: Int, kind: Int, pageRect: RectF, @ColorInt stroke: Int, widthPt: Float, @ColorInt fill: Int = 0): String? {
+        requireEditThread()
+        val file = pdfFile ?: return null
+        if (!widthPt.isFinite() || widthPt <= 0) return null
+        val name = "pdfview-shape-" + java.util.UUID.randomUUID()
+        val place = { r: RectF -> file.addShape(page, kind, floatArrayOf(r.left, r.top, r.right, r.bottom), stroke, widthPt, fill, name) }
+        return addPlaced(page, name, RectF(pageRect), place)
+    }
+
+    /** An annotation added in this session that can be moved and resized, see [moveAnnotation]. */
+    private class Placed(val page: Int, var bounds: RectF, val place: (RectF) -> Boolean)
+    private val placed = HashMap<String, Placed>()
+
+    private fun addPlaced(page: Int, name: String, bounds: RectF, place: (RectF) -> Boolean): String? {
+        if (!place(bounds)) return null
+        val item = Placed(page, RectF(bounds), place)
+        placed[name] = item
+        recordAddition(page, name) { place(item.bounds) }
         inkChanged(page)
         return name
+    }
+
+    /** Whether the annotation [name] was added in this session with [addText], [addImage], [addNote] or [addShape]. */
+    fun canMoveAnnotation(name: String?): Boolean = name != null && placed.containsKey(name)
+
+    /** Bounds in PDF points of a movable annotation; lines and arrows keep their direction. */
+    fun movableBounds(name: String): RectF? = placed[name]?.bounds?.let { RectF(it) }
+
+    /** Puts a movable annotation at [bounds] (its new place and size), as one undoable edit. */
+    fun moveAnnotation(name: String, bounds: RectF): Boolean {
+        requireEditThread()
+        val file = pdfFile ?: return false
+        val item = placed[name] ?: return false
+        val from = RectF(item.bounds)
+        val to = RectF(bounds)
+        fun put(r: RectF): Boolean {
+            if (!file.removeAnnotByName(item.page, name)) return false
+            if (item.place(r)) { item.bounds = RectF(r); return true }
+            item.place(item.bounds) // put it back where it was
+            return false
+        }
+        if (!put(to)) return false
+        editUndo.add(EditRecord(item.page, name, { put(to) }, { put(from) }))
+        editRedo.clear()
+        inkChanged(item.page)
+        return true
+    }
+
+    /** The /Contents text of an annotation (a note's text), or null. */
+    fun getAnnotationText(info: PdfAnnotationInfo): String? {
+        requireEditThread()
+        val file = pdfFile ?: return null
+        return currentIndex(info)?.let { file.getAnnotContents(info.page, it) }
+    }
+
+    /** Changes the text of an annotation (a note), as one undoable edit. */
+    fun setAnnotationText(info: PdfAnnotationInfo, text: String): Boolean {
+        requireEditThread()
+        val file = pdfFile ?: return false
+        val before = getAnnotationText(info) ?: ""
+        fun set(value: String): Boolean = currentIndex(info)?.let { file.setAnnotContents(info.page, it, value) } == true
+        if (!set(text)) return false
+        editUndo.add(EditRecord(info.page, info.name ?: "", { set(text) }, { set(before) }))
+        editRedo.clear()
+        inkChanged(info.page)
+        return true
+    }
+
+    /** Index of [info] now: indexes shift when annotations before it are removed. */
+    private fun currentIndex(info: PdfAnnotationInfo): Int? = getAnnotations(info.page).firstOrNull {
+        if (!info.name.isNullOrEmpty()) it.name == info.name else it.index == info.index && it.subtype == info.subtype
+    }?.index
+
+    // ---- form fields ----
+
+    /** The fields of a PDF form on [page]; empty when the document has no form. Main thread. */
+    fun getFormFields(page: Int): List<com.reader.pdfviewer.pdfium.PdfFormField> {
+        requireEditThread()
+        return pdfFile?.getFormFields(page) ?: emptyList()
+    }
+
+    /** Whether the document has a fillable form. */
+    val hasForm: Boolean get() = pdfFile?.hasForm == true
+
+    /** The form field under a view point, or null. */
+    fun findFormFieldAt(viewX: Float, viewY: Float): com.reader.pdfviewer.pdfium.PdfFormField? {
+        val (page, _) = viewToPagePoint(viewX, viewY) ?: return null
+        val slop = 4f * resources.displayMetrics.density
+        return getFormFields(page).lastOrNull {
+            val rect = pageRectToView(page, it.rect) ?: return@lastOrNull false
+            rect.inset(-slop, -slop)
+            rect.contains(viewX, viewY)
+        }
+    }
+
+    /** Types [text] into a text field, replacing its value. Saved with [saveDocument]; not undoable. */
+    fun setFormText(field: com.reader.pdfviewer.pdfium.PdfFormField, text: String): Boolean =
+        formEdit(field) { pdfFile?.setFormText(field.page, field, text) == true }
+
+    /** Toggles a check box or picks a radio button. */
+    fun toggleFormField(field: com.reader.pdfviewer.pdfium.PdfFormField): Boolean =
+        formEdit(field) { pdfFile?.clickFormField(field.page, field) == true }
+
+    /** Picks option [option] of a combo box or list. */
+    fun setFormChoice(field: com.reader.pdfviewer.pdfium.PdfFormField, option: Int): Boolean =
+        formEdit(field) { pdfFile?.setFormChoice(field.page, field, option) == true }
+
+    private fun formEdit(field: com.reader.pdfviewer.pdfium.PdfFormField, edit: () -> Boolean): Boolean {
+        requireEditThread()
+        if (field.readOnly || !edit()) return false
+        // form values are not in the history; an undo that restores a copy of the document would lose them
+        editUndo.removeAll { it.snapshot }
+        editRedo.removeAll { it.snapshot }
+        inkChanged(field.page)
+        return true
+    }
+
+    // ---- reading aloud ----
+
+    private var readingPage = -1
+    private var readingRects: List<RectF> = emptyList()
+    private val readingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x5534A853 }
+
+    /** Highlights [rects] (relative to the page, 0..1) of [page], the sentence being read; an empty list clears it. */
+    fun setReadingHighlight(page: Int, rects: List<RectF>) {
+        readingPage = if (rects.isEmpty()) -1 else page
+        readingRects = rects.map { RectF(it) }
+        invalidate()
+    }
+
+    private fun drawReadingHighlight(canvas: Canvas) {
+        val file = pdfFile ?: return
+        if (readingPage !in 0 until file.pagesCount) return
+        val size = file.getScaledPageSize(readingPage, zoom)
+        val offset = computePageOffsets(readingPage)
+        for (r in readingRects) {
+            canvas.drawRect(offset.x + r.left * size.width, offset.y + r.top * size.height,
+                offset.x + r.right * size.width, offset.y + r.bottom * size.height, readingPaint)
+        }
     }
 
     /** List annotation metadata in stacking order. Call on the main thread. */
@@ -2201,7 +2388,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
                         }
                         true
                     }
-                }))
+                }, snapshot = true))
         } else {
             // An unrecorded deletion is a history boundary so an older snapshot cannot resurrect it.
             editUndo.clear()
@@ -2213,7 +2400,12 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         return true
     }
 
+    /** Grows with every edit, undo and redo: what depends on the annotations can tell they changed. */
+    var editRevision = 0L
+        private set
+
     private fun inkChanged(page: Int) {
+        editRevision++
         hasUnsavedChanges = true
         if (!isAnnotationRendering) enableAnnotationRendering(true)
         reloadPage(page)
@@ -4046,11 +4238,17 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     }
 
     companion object {
+        const val SHAPE_RECT = 0
+        const val SHAPE_ELLIPSE = 1
+        const val SHAPE_LINE = 2
+        const val SHAPE_ARROW = 3
+        const val NOTE_COLOR = 0xFFFFC107.toInt()
+        private const val SEPIA_BACKGROUND = 0xFFF4ECD8.toInt()
         private val TAG: String = PDFView::class.java.simpleName
         private val INVALID_CHAR_INDEX = -1
         private const val MAX_FALLBACK_CHAR_DISTANCE_SQ = 400f
         private const val MAX_FALLBACK_DEVICE_DISTANCE_SQ = 900f
-        private const val SELECTION_HANDLE_RADIUS = 40f
+        private const val SELECTION_HANDLE_RADIUS_DP = 13
         private const val SELECTION_HANDLE_MIN_TOUCH_DP = 48
 
         const val DEFAULT_UNDERLINE_COLOR: Int = 0xFF1E88E5.toInt()

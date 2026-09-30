@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          AttrIDConstant.java
  *
  * 编译器:            android2.2
@@ -45,6 +52,14 @@ object AttrIDConstant {
     const val FONT_PAGE_NUMBER_TYPE_ID: Short = (FONT_SCALE_ID + 1).toShort() // 0x000F
     // enclose character
     const val FONT_ENCLOSE_CHARACTER_TYPE_ID: Short = (FONT_PAGE_NUMBER_TYPE_ID + 1).toShort() // 0x0010;
+    // character spacing (tracking) in hundredths of a point; PPTX a:rPr@spc, DOCX w:rPr/w:spacing
+    const val FONT_SPACING_ID: Short = (FONT_ENCLOSE_CHARACTER_TYPE_ID + 1).toShort() // 0x0011
+    // 1 = all caps, 2 = small caps (DOCX w:caps / w:smallCaps, PPTX cap="all"/"small")
+    const val FONT_CAPS_ID: Short = (FONT_SPACING_ID + 1).toShort() // 0x0012
+    // raised (+) or lowered (-) text, half points (DOCX w:position)
+    const val FONT_POSITION_ID: Short = (FONT_CAPS_ID + 1).toShort() // 0x0013
+    // hidden text, 1 = hidden (DOCX w:vanish)
+    const val FONT_HIDDEN_ID: Short = (FONT_POSITION_ID + 1).toShort() // 0x0014
 
     /* ========== 段落属性 =========== */
     // 段落样式
@@ -78,6 +93,23 @@ object AttrIDConstant {
     const val PARA_PG_BULLET_ID: Short = (PARA_LIST_ID + 1).toShort() // 0x100E
     //
     const val PARA_TABS_CLEAR_POSITION_ID: Short = (PARA_PG_BULLET_ID + 1).toShort() //0x100F
+    // paragraph shading (ARGB), DOCX pPr/shd
+    const val PARA_SHADING_ID: Short = 0x1010
+    // paragraph borders, DOCX pPr/pBdr: per side width (eighths of a point, 0 = none), color, space (pt)
+    const val PARA_BORDER_TOP_ID: Short = 0x1011
+    const val PARA_BORDER_TOP_COLOR_ID: Short = 0x1012
+    const val PARA_BORDER_TOP_SPACE_ID: Short = 0x1013
+    const val PARA_BORDER_BOTTOM_ID: Short = 0x1014
+    const val PARA_BORDER_BOTTOM_COLOR_ID: Short = 0x1015
+    const val PARA_BORDER_BOTTOM_SPACE_ID: Short = 0x1016
+    const val PARA_BORDER_LEFT_ID: Short = 0x1017
+    const val PARA_BORDER_LEFT_COLOR_ID: Short = 0x1018
+    const val PARA_BORDER_LEFT_SPACE_ID: Short = 0x1019
+    const val PARA_BORDER_RIGHT_ID: Short = 0x101A
+    const val PARA_BORDER_RIGHT_COLOR_ID: Short = 0x101B
+    const val PARA_BORDER_RIGHT_SPACE_ID: Short = 0x101C
+    // DOCX pPr/contextualSpacing: no space before/after next to a paragraph of the same style (1/0)
+    const val PARA_CONTEXTUAL_SPACING_ID: Short = 0x101D
 
     /* ========= 章节属性 ========= */
     // 页面宽度

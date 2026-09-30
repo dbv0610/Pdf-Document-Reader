@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          CellStyle.java
  *
  * 编译器:            android2.2
@@ -44,6 +51,18 @@ class CellStyle
      * @return Returns the index.
      */
     fun getIndex(): Short = index
+
+    /** An independent copy for editing (border and fill objects are shared until replaced). */
+    fun copy(): CellStyle = CellStyle().also {
+        it.index = index
+        it.numFmt = numFmt?.let { f -> NumberFormat(f.getNumberFormatID(), f.getFormatCode()) }
+        it.fontIndex = fontIndex
+        it.isHidden = isHidden
+        it.isLocked = isLocked
+        it.alignment = alignment?.copy()
+        it.cellBorder = cellBorder
+        it.fill = fill
+    }
 
     /**
      * @param index The index to set.
@@ -187,6 +206,8 @@ class CellStyle
             alignment!!.setHorizontalAlign(ALIGN_JUSTIFY)
         } else if (horAlign.equals("distributed", ignoreCase = true)) {
             alignment!!.setHorizontalAlign(ALIGN_JUSTIFY)
+        } else if (horAlign.equals("centerContinuous", ignoreCase = true)) {
+            alignment!!.setHorizontalAlign(ALIGN_CENTER_SELECTION)
         }
     }
 
@@ -275,6 +296,9 @@ class CellStyle
      *
      * @param cellBorder
      */
+    /** The border object (shared by the styles of one file borderId: copy it before changing it). */
+    fun getBorder(): CellBorder? = cellBorder
+
     fun setBorder(cellBorder: CellBorder?) {
         this.cellBorder = cellBorder
     }
@@ -410,7 +434,7 @@ class CellStyle
     private fun checkFillPattern() {
         if (fill == null) {
             fill = BackgroundAndFill()
-            fill!!.setFillType(BackgroundAndFill.FILL_NO)
+            fill!!.fillType = BackgroundAndFill.FILL_NO
         }
     }
 
@@ -429,7 +453,7 @@ class CellStyle
      */
     fun setFillPatternType(type: Byte) {
         checkFillPattern()
-        fill!!.setFillType(type)
+        fill!!.fillType = type
     }
 
     /**
@@ -437,7 +461,7 @@ class CellStyle
      */
     fun getFillPatternType(): Byte {
         checkFillPattern()
-        return fill!!.getFillType()
+        return fill!!.fillType
     }
 
     /**
@@ -446,7 +470,7 @@ class CellStyle
      */
     fun setBgColor(color: Int) {
         checkFillPattern()
-        fill!!.setBackgoundColor(color)
+        fill!!.backgoundColor = color
     }
 
     /**
@@ -454,12 +478,12 @@ class CellStyle
      */
     fun getBgColor(): Int {
         checkFillPattern()
-        return fill!!.getBackgoundColor()
+        return fill!!.backgoundColor
     }
 
     fun setFgColor(color: Int) {
         checkFillPattern()
-        fill!!.setForegroundColor(color)
+        fill!!.foregroundColor = color
     }
 
     /**
@@ -467,7 +491,7 @@ class CellStyle
      */
     fun getFgColor(): Int {
         checkFillPattern()
-        return fill!!.getForegroundColor()
+        return fill!!.foregroundColor
     }
 
     /**

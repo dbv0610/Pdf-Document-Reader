@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 /* ====================================================================
    Licensed to the Apache Software Foundation (ASF) under one or more
    contributor license agreements.  See the NOTICE file distributed with
@@ -49,7 +56,7 @@ open class Picture : SimpleShape {
      */
     @JvmOverloads
     constructor(idx: Int, parent: Shape? = null) : super(null, parent) {
-        _escherContainer = createSpContainer(idx, parent is ShapeGroup)
+        spContainer = createSpContainer(idx, parent is ShapeGroup)
     }
 
     /**
@@ -71,14 +78,14 @@ open class Picture : SimpleShape {
          */
         get() {
             val opt = ShapeKit.getEscherChild(
-                _escherContainer,
+                spContainer,
                 EscherOptRecord.RECORD_ID.toInt()
             ) as EscherOptRecord?
             val prop = ShapeKit.getEscherProperty(
                 opt,
                 EscherProperties.BLIP__BLIPTODISPLAY.toInt()
             ) as EscherSimpleProperty?
-            return if (prop == null) 0 else prop.getPropertyValue()
+            return if (prop == null) 0 else prop.propertyValue
         }
 
     /**
@@ -88,15 +95,15 @@ open class Picture : SimpleShape {
      * @return the create Picture object
      */
     protected open fun createSpContainer(idx: Int, isChild: Boolean): EscherContainerRecord? {
-        _escherContainer = super.createSpContainer(isChild)
-        _escherContainer.setOptions(15.toShort())
+        spContainer = super.createSpContainer(isChild)
+        spContainer!!.options = 15.toShort()
 
-        val spRecord = _escherContainer.getChildById<EscherSpRecord?>(EscherSpRecord.RECORD_ID)
-        spRecord!!.setOptions(((ShapeTypes.PictureFrame shl 4) or 0x2).toShort())
+        val spRecord = spContainer!!.getChildById<EscherSpRecord?>(EscherSpRecord.RECORD_ID)
+        spRecord!!.options = ((ShapeTypes.PictureFrame shl 4) or 0x2).toShort()
 
         //set default properties for a picture
         val opt = ShapeKit.getEscherChild(
-            _escherContainer,
+            spContainer,
             EscherOptRecord.RECORD_ID.toInt()
         ) as EscherOptRecord?
         setEscherProperty(opt, EscherProperties.PROTECTION__LOCKAGAINSTGROUPING, 0x800080)
@@ -104,7 +111,7 @@ open class Picture : SimpleShape {
         //another weird feature of powerpoint: for picture id we must add 0x4000.
         setEscherProperty(opt, (EscherProperties.BLIP__BLIPTODISPLAY + 0x4000).toShort(), idx)
 
-        return _escherContainer
+        return spContainer
     }
 
     /**
@@ -154,7 +161,7 @@ open class Picture : SimpleShape {
          * @return the picture data for this picture.
          */
         get() {
-            val ppt = getSheet().getSlideShow()
+            val ppt = sheet!!.slideShow!!
             val pict =
                 ppt.pictureData
 
@@ -163,7 +170,7 @@ open class Picture : SimpleShape {
                 //logger.log(POILogger.ERROR, "no reference to picture data found ");
             } else {
                 for (i in pict!!.indices) {
-                    if (pict[i]!!.offset == bse.getOffset()) {
+                    if (pict[i]!!.offset == bse.offset) {
                         return pict[i]
                     }
                 }
@@ -178,15 +185,15 @@ open class Picture : SimpleShape {
          * @return
          */
         get() = ShapeKit.getEscherChild(
-            _escherContainer,
+            spContainer,
             EscherOptRecord.RECORD_ID.toInt()
         ) as EscherOptRecord?
 
     protected val escherBSERecord: EscherBSERecord?
         get() {
-            val ppt = getSheet().getSlideShow()
+            val ppt = sheet!!.slideShow!!
             val doc = ppt.documentRecord
-            val dggContainer = doc!!.getPPDrawingGroup().getDggContainer()
+            val dggContainer = doc!!.pPDrawingGroup!!.dggContainer
             val bstore = ShapeKit.getEscherChild(
                 dggContainer,
                 EscherContainerRecord.BSTORE_CONTAINER.toInt()
@@ -195,7 +202,7 @@ open class Picture : SimpleShape {
                 //logger.log(POILogger.DEBUG, "EscherContainerRecord.BSTORE_CONTAINER was not found ");
                 return null
             }
-            val lst: MutableList<*> = bstore.getChildRecords()
+            val lst: MutableList<*> = bstore.childRecords
             val idx = this.pictureIndex
             if (idx == 0) {
                 //logger.log(POILogger.DEBUG, "picture index was not found, returning ");
@@ -212,7 +219,7 @@ open class Picture : SimpleShape {
          */
         get() {
             val opt = ShapeKit.getEscherChild(
-                _escherContainer,
+                spContainer,
                 EscherOptRecord.RECORD_ID.toInt()
             ) as EscherOptRecord?
             val prop = ShapeKit.getEscherProperty(
@@ -223,7 +230,7 @@ open class Picture : SimpleShape {
             if (prop != null) {
                 try {
                     name =
-                        String(prop.getComplexData(), charset("UTF-16LE"))
+                        String(prop.complexData, charset("UTF-16LE"))
                     val idx = name.indexOf('\u0000')
                     return if (idx == -1) name else name.substring(0, idx)
                 } catch (e: UnsupportedEncodingException) {
@@ -239,11 +246,11 @@ open class Picture : SimpleShape {
          */
         set(name) {
             val opt = ShapeKit.getEscherChild(
-                _escherContainer,
+                spContainer,
                 EscherOptRecord.RECORD_ID.toInt()
             ) as EscherOptRecord?
             try {
-                val data: ByteArray? =
+                val data: ByteArray =
                     (name + '\u0000').toByteArray(charset("UTF-16LE"))
                 val prop = EscherComplexProperty(
                     EscherProperties.BLIP__BLIPFILENAME, false, data
@@ -257,13 +264,13 @@ open class Picture : SimpleShape {
     /**
      * By default set the orininal image size
      */
-    protected override fun afterInsert(sh: Sheet?) {
+    override fun afterInsert(sh: Sheet?) {
         super.afterInsert(sh)
 
         val bse = this.escherBSERecord
-        bse!!.setRef(bse.getRef() + 1)
+        bse!!.ref = bse.ref + 1
 
-        val anchor = getAnchor()
+        val anchor = anchor
         if (anchor.equals(Rectangle())) {
             setDefaultSize()
         }

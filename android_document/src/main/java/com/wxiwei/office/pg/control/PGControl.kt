@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.pg.control
 
 import android.app.Activity
@@ -93,7 +100,7 @@ class PGControl(mainControl: IControl, pgModel: PGModel, filePath: String?) : Ab
                 clip.text = view.getSelectedText()
             }
             EventConstant.APP_HYPERLINK -> {
-                val address = (obj as Hyperlink).getAddress()
+                val address = (obj as Hyperlink).address
                 if (address != null) try {
                     getMainFrame()!!.getActivity()!!.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(address)))
             } catch (e: Exception) {

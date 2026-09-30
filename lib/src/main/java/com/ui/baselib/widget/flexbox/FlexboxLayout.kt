@@ -55,39 +55,39 @@ open class FlexboxLayout @JvmOverloads constructor(
 
     init {
         context.withStyledAttributes(attrs, R.styleable.FlexboxLayout, defStyleAttr, 0) {
-            mFlexDirection = getInt(R.styleable.FlexboxLayout_flexDirection, FlexDirection.ROW)
-            mFlexWrap = getInt(R.styleable.FlexboxLayout_flexWrap, FlexWrap.NOWRAP)
+            mFlexDirection = getInt(R.styleable.FlexboxLayout_uiFlexDirection, FlexDirection.ROW)
+            mFlexWrap = getInt(R.styleable.FlexboxLayout_uiFlexWrap, FlexWrap.NOWRAP)
             mJustifyContent =
-                getInt(R.styleable.FlexboxLayout_justifyContent, JustifyContent.FLEX_START)
-            mAlignItems = getInt(R.styleable.FlexboxLayout_alignItems, AlignItems.FLEX_START)
-            mAlignContent = getInt(R.styleable.FlexboxLayout_alignContent, AlignContent.FLEX_START)
-            mMaxLine = getInt(R.styleable.FlexboxLayout_maxLine, NOT_SET)
-            val drawable = getDrawable(R.styleable.FlexboxLayout_dividerDrawable)
+                getInt(R.styleable.FlexboxLayout_uiJustifyContent, JustifyContent.FLEX_START)
+            mAlignItems = getInt(R.styleable.FlexboxLayout_uiAlignItems, AlignItems.FLEX_START)
+            mAlignContent = getInt(R.styleable.FlexboxLayout_uiAlignContent, AlignContent.FLEX_START)
+            mMaxLine = getInt(R.styleable.FlexboxLayout_uiMaxLine, NOT_SET)
+            val drawable = getDrawable(R.styleable.FlexboxLayout_uiDividerDrawable)
             if (drawable != null) {
                 setDividerDrawableHorizontals(drawable)
                 setDividerDrawableVerticals(drawable)
             }
             val drawableHorizontal =
-                getDrawable(R.styleable.FlexboxLayout_dividerDrawableHorizontal)
+                getDrawable(R.styleable.FlexboxLayout_uiDividerDrawableHorizontal)
             if (drawableHorizontal != null) {
                 setDividerDrawableHorizontals(drawableHorizontal)
             }
-            val drawableVertical = getDrawable(R.styleable.FlexboxLayout_dividerDrawableVertical)
+            val drawableVertical = getDrawable(R.styleable.FlexboxLayout_uiDividerDrawableVertical)
             if (drawableVertical != null) {
                 setDividerDrawableVerticals(drawableVertical)
             }
-            val dividerMode = getInt(R.styleable.FlexboxLayout_showDivider, SHOW_DIVIDER_NONE)
+            val dividerMode = getInt(R.styleable.FlexboxLayout_uiShowDivider, SHOW_DIVIDER_NONE)
             if (dividerMode != SHOW_DIVIDER_NONE) {
                 mShowDividerVertical = dividerMode
                 mShowDividerHorizontal = dividerMode
             }
             val dividerModeVertical =
-                getInt(R.styleable.FlexboxLayout_showDividerVertical, SHOW_DIVIDER_NONE)
+                getInt(R.styleable.FlexboxLayout_uiShowDividerVertical, SHOW_DIVIDER_NONE)
             if (dividerModeVertical != SHOW_DIVIDER_NONE) {
                 mShowDividerVertical = dividerModeVertical
             }
             val dividerModeHorizontal =
-                getInt(R.styleable.FlexboxLayout_showDividerHorizontal, SHOW_DIVIDER_NONE)
+                getInt(R.styleable.FlexboxLayout_uiShowDividerHorizontal, SHOW_DIVIDER_NONE)
             if (dividerModeHorizontal != SHOW_DIVIDER_NONE) {
                 mShowDividerHorizontal = dividerModeHorizontal
             }
@@ -1240,37 +1240,37 @@ open class FlexboxLayout @JvmOverloads constructor(
         constructor(context: Context, attrs: AttributeSet?) : super(context, attrs) {
             context.withStyledAttributes(attrs, R.styleable.FlexboxLayout_Layout) {
                 mOrder =
-                    getInt(R.styleable.FlexboxLayout_Layout_layout_order, FlexItem.ORDER_DEFAULT)
+                    getInt(R.styleable.FlexboxLayout_Layout_layout_uiOrder, FlexItem.ORDER_DEFAULT)
                 mFlexGrow = getFloat(
-                    R.styleable.FlexboxLayout_Layout_layout_flexGrow,
+                    R.styleable.FlexboxLayout_Layout_layout_uiFlexGrow,
                     FlexItem.FLEX_GROW_DEFAULT
                 )
                 mFlexShrink = getFloat(
-                    R.styleable.FlexboxLayout_Layout_layout_flexShrink,
+                    R.styleable.FlexboxLayout_Layout_layout_uiFlexShrink,
                     FlexItem.FLEX_SHRINK_DEFAULT
                 )
                 mAlignSelf =
-                    getInt(R.styleable.FlexboxLayout_Layout_layout_alignSelf, AlignSelf.AUTO)
+                    getInt(R.styleable.FlexboxLayout_Layout_layout_uiAlignSelf, AlignSelf.AUTO)
                 mFlexBasisPercent = getFraction(
-                    R.styleable.FlexboxLayout_Layout_layout_flexBasisPercent, 1, 1,
+                    R.styleable.FlexboxLayout_Layout_layout_uiFlexBasisPercent, 1, 1,
                     FlexItem.FLEX_BASIS_PERCENT_DEFAULT
                 )
                 mMinWidth =
-                    getDimensionPixelSize(R.styleable.FlexboxLayout_Layout_layout_minWidth, NOT_SET)
+                    getDimensionPixelSize(R.styleable.FlexboxLayout_Layout_layout_uiMinWidth, NOT_SET)
                 mMinHeight =
                     getDimensionPixelSize(
-                        R.styleable.FlexboxLayout_Layout_layout_minHeight,
+                        R.styleable.FlexboxLayout_Layout_layout_uiMinHeight,
                         NOT_SET
                     )
                 mMaxWidth = getDimensionPixelSize(
-                    R.styleable.FlexboxLayout_Layout_layout_maxWidth,
+                    R.styleable.FlexboxLayout_Layout_layout_uiMaxWidth,
                     FlexItem.MAX_SIZE
                 )
                 mMaxHeight = getDimensionPixelSize(
-                    R.styleable.FlexboxLayout_Layout_layout_maxHeight,
+                    R.styleable.FlexboxLayout_Layout_layout_uiMaxHeight,
                     FlexItem.MAX_SIZE
                 )
-                mWrapBefore = getBoolean(R.styleable.FlexboxLayout_Layout_layout_wrapBefore, false)
+                mWrapBefore = getBoolean(R.styleable.FlexboxLayout_Layout_layout_uiWrapBefore, false)
             }
         }
 

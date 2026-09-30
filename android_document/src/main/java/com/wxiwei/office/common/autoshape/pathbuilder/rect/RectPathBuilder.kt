@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          RectPathBuilder.java
  *  
  * 编译器:            android2.2
@@ -52,7 +59,7 @@ object RectPathBuilder {
     fun getRectPath(shape: AutoShape, rect: Rect): Path? {
         path.reset()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.Rectangle, ShapeTypes.TextBox, ShapeTypes.TextPlainText -> return getRectanglePath(
                 shape,
                 rect
@@ -91,7 +98,7 @@ object RectPathBuilder {
 
     private fun getRoundRectanglePath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -110,7 +117,7 @@ object RectPathBuilder {
 
     private fun getRound1Path(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -130,7 +137,7 @@ object RectPathBuilder {
     private fun getRound2Path(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
         var y = 0f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -153,7 +160,7 @@ object RectPathBuilder {
     private fun getRound2DiagRectPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
         var y = 0f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -175,7 +182,7 @@ object RectPathBuilder {
 
     private fun getSnip1RectPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -195,7 +202,7 @@ object RectPathBuilder {
     private fun getSnip2SameRectPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
         var y = 0f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -220,7 +227,7 @@ object RectPathBuilder {
     private fun getSnip2DiagPath(shape: AutoShape, rect: Rect): Path {
         var x = 0f
         var y = min(rect.width(), rect.height()) * 0.18f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -246,7 +253,7 @@ object RectPathBuilder {
     private fun getdrawSnipRoundRectPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
         var y = min(rect.width(), rect.height()) * 0.18f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -271,7 +278,7 @@ object RectPathBuilder {
     private fun getSnipRoundPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.18f
         var y = min(rect.width(), rect.height()) * 0.18f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!

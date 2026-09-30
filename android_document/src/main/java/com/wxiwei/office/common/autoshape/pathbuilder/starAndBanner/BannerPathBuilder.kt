@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          FlagPathBuilder.java
  *  
  * 编译器:            android2.2
@@ -65,7 +72,7 @@ object BannerPathBuilder {
     fun getFlagExtendPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?>? {
         pathExList.clear()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.Ribbon2 -> return getRibbon2Path(shape, rect)
 
             ShapeTypes.Ribbon -> return getRibbonPath(shape, rect)
@@ -89,7 +96,7 @@ object BannerPathBuilder {
     }
 
     private fun getRibbon2Path(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val width = rect.width()
         val height = rect.height()
@@ -97,7 +104,7 @@ object BannerPathBuilder {
 
         var adj1 = 0
         var adj2 = 0
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size == 2) {
                 //values[0]:[0, 1/3], values[1]:[0.25, 0.75]
                 adj1 = Math.round(height * values[0]!!)
@@ -135,8 +142,8 @@ object BannerPathBuilder {
         //left notched shape
         var pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
 
         var path = Path()
@@ -168,15 +175,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //right notched shape
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.right.toFloat(), (rect.top + adj1).toFloat())
@@ -207,15 +214,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //middle shape        
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.centerX() - adj2).toFloat(), rect.top + b)
@@ -261,15 +268,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //left dark part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.centerX() - adj2 + curleS).toFloat(), rect.bottom - b * 4)
@@ -296,16 +303,16 @@ object BannerPathBuilder {
         path.close()
 
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
 
@@ -316,8 +323,8 @@ object BannerPathBuilder {
         //right dark part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.centerX() + adj2 - curleS).toFloat(), rect.bottom - b * 4)
@@ -343,13 +350,13 @@ object BannerPathBuilder {
 
         path.close()
 
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
 
@@ -360,7 +367,7 @@ object BannerPathBuilder {
     }
 
     private fun getRibbonPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val width = rect.width()
         val height = rect.height()
@@ -368,7 +375,7 @@ object BannerPathBuilder {
 
         var adj1 = 0f
         var adj2 = 0f
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size == 2) {
                 //values[0]:[0, 1/3], values[1]:[0.25, 0.75]
                 adj1 = Math.round(height * values[0]!!).toFloat()
@@ -406,8 +413,8 @@ object BannerPathBuilder {
         //left notched shape
         var pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
 
         var path = Path()
@@ -438,15 +445,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //middle part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.centerX() - adj2 + a, rect.bottom.toFloat())
@@ -492,15 +499,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //right part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.right.toFloat(), rect.top.toFloat())
@@ -530,15 +537,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //left dark part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.centerX() - adj2 + a, rect.top + b * 4)
@@ -565,16 +572,16 @@ object BannerPathBuilder {
         path.close()
 
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
 
@@ -585,8 +592,8 @@ object BannerPathBuilder {
         //right dark part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.centerX() + adj2 - a, rect.top + b * 4)
@@ -612,13 +619,13 @@ object BannerPathBuilder {
         path.lineTo(rect.centerX() + adj2 - curleS, rect.top + b * 4)
         path.close()
 
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
 
@@ -629,7 +636,7 @@ object BannerPathBuilder {
     }
 
     private fun getEllipseRibbon2Path(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         var adj1 = 0
@@ -638,7 +645,7 @@ object BannerPathBuilder {
 
         var fU = 0.5f
 
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size == 3) {
                 if (values[0]!! - values[2]!! > 0.2f) {
                     values[2] = values[0]!! - 0.2f
@@ -702,8 +709,8 @@ object BannerPathBuilder {
 
             val pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
             val path = Path()
             path.moveTo(0f, adj1.toFloat())
@@ -730,7 +737,7 @@ object BannerPathBuilder {
             path.offset(rect.left.toFloat(), rect.top.toFloat())
 
             pathExtend.path = path
-            pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+            pathExtend.backgroundAndFill = shape.backgroundAndFill
             pathExList.add(pathExtend)
         } else {
             //left
@@ -769,8 +776,8 @@ object BannerPathBuilder {
 
             var pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
             var path = Path()
             path.moveTo(0f, adj1.toFloat())
@@ -835,7 +842,7 @@ object BannerPathBuilder {
             path.offset(rect.left.toFloat(), rect.top.toFloat())
 
             pathExtend.path = path
-            pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+            pathExtend.backgroundAndFill = shape.backgroundAndFill
             pathExList.add(pathExtend)
 
 
@@ -862,8 +869,8 @@ object BannerPathBuilder {
 
             pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
             path = Path()
             path.moveTo(p1.x, p1.y)
@@ -896,7 +903,7 @@ object BannerPathBuilder {
             path.offset(rect.left.toFloat(), rect.top.toFloat())
 
             pathExtend.path = path
-            pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+            pathExtend.backgroundAndFill = shape.backgroundAndFill
             pathExList.add(pathExtend)
         }
 
@@ -904,7 +911,7 @@ object BannerPathBuilder {
     }
 
     private fun getEllipseRibbonPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height()).toFloat()
         var adj1 = 0
@@ -913,7 +920,7 @@ object BannerPathBuilder {
 
         var fU = 0.5f
 
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size == 3) {
                 if (values[0]!! - values[2]!! > 0.2f) {
                     values[2] = values[0]!! - 0.2f
@@ -978,8 +985,8 @@ object BannerPathBuilder {
 
             val pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
 
             val path = Path()
@@ -1007,7 +1014,7 @@ object BannerPathBuilder {
             path.offset(rect.left.toFloat(), rect.top.toFloat())
 
             pathExtend.path = path
-            pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+            pathExtend.backgroundAndFill = shape.backgroundAndFill
             pathExList.add(pathExtend)
         } else {
             //left
@@ -1046,8 +1053,8 @@ object BannerPathBuilder {
 
             var pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
             var path = Path()
             path.moveTo(0f, 0f)
@@ -1112,7 +1119,7 @@ object BannerPathBuilder {
             path.offset(rect.left.toFloat(), rect.top.toFloat())
 
             pathExtend.path = path
-            pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+            pathExtend.backgroundAndFill = shape.backgroundAndFill
             pathExList.add(pathExtend)
 
 
@@ -1139,8 +1146,8 @@ object BannerPathBuilder {
 
             pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
             path = Path()
             path.moveTo(p1.x, p1.y)
@@ -1173,7 +1180,7 @@ object BannerPathBuilder {
             path.offset(rect.left.toFloat(), rect.top.toFloat())
 
             pathExtend.path = path
-            pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+            pathExtend.backgroundAndFill = shape.backgroundAndFill
             pathExList.add(pathExtend)
         }
 
@@ -1329,7 +1336,7 @@ object BannerPathBuilder {
     }
 
     private fun getVerticalScrollPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val width = rect.width()
         val height = rect.height()
@@ -1348,8 +1355,8 @@ object BannerPathBuilder {
         //
         var pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
 
         var path = Path()
@@ -1386,15 +1393,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.left + radius * 3, rect.top.toFloat())
@@ -1419,15 +1426,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.left + adj1).toFloat(), (rect.bottom - adj1).toFloat())
@@ -1446,15 +1453,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //dark part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.left + adj1).toFloat(), rect.bottom - radius)
@@ -1479,16 +1486,16 @@ object BannerPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
         pathExList.add(pathExtend)
@@ -1497,8 +1504,8 @@ object BannerPathBuilder {
         //
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.left + adj1 * 2).toFloat(), rect.top + radius)
@@ -1523,13 +1530,13 @@ object BannerPathBuilder {
 
         pathExtend.path = path
 
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
         pathExList.add(pathExtend)
@@ -1538,7 +1545,7 @@ object BannerPathBuilder {
     }
 
     private fun getHorizontalScrollPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val width = rect.width()
         val height = rect.height()
@@ -1557,8 +1564,8 @@ object BannerPathBuilder {
         //
         var pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
 
         var path = Path()
@@ -1584,15 +1591,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.left + adj1).toFloat(), rect.top + radius * 3)
@@ -1630,15 +1637,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo((rect.right - adj1).toFloat(), rect.top + radius)
@@ -1656,15 +1663,15 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
 
         //dark part
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.left + radius, (rect.top + adj1 * 2).toFloat())
@@ -1689,16 +1696,16 @@ object BannerPathBuilder {
 
         pathExtend.path = path
         val fill = BackgroundAndFill()
-        fill.setFillType(BackgroundAndFill.FILL_SOLID)
+        fill.fillType = BackgroundAndFill.FILL_SOLID
 
-        val shapeFill = shape.getBackgroundAndFill()
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        val shapeFill = shape.backgroundAndFill
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
         pathExList.add(pathExtend)
@@ -1707,8 +1714,8 @@ object BannerPathBuilder {
         //
         pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         path = Path()
         path.moveTo(rect.right - radius, rect.top + radius)
@@ -1732,13 +1739,13 @@ object BannerPathBuilder {
         path.close()
 
         pathExtend.path = path
-        if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-            fill.setForegroundColor(
+        if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+            fill.foregroundColor =
                 ColorUtil.instance()
-                    .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-            )
+                    .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
         } else {
-            fill.setForegroundColor(PICTURECOLOR)
+            fill.foregroundColor = PICTURECOLOR
         }
         pathExtend.backgroundAndFill = fill
         pathExList.add(pathExtend)
@@ -1746,13 +1753,13 @@ object BannerPathBuilder {
     }
 
     private fun getWavePath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val width = rect.width()
         val height = rect.height()
         var adj1 = 0
         var adj2 = 0
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size == 2) {
                 //values[0]:[0, 0.25]   values[1];[-0.1,0.1]
                 adj1 = Math.round(height * values[0]!!)
@@ -1786,8 +1793,8 @@ object BannerPathBuilder {
 
         val pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
         val path = Path()
         if (adj2 > 0) {
@@ -1830,20 +1837,20 @@ object BannerPathBuilder {
 
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         return pathExList
     }
 
     private fun getDoubleWavePath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val width = rect.width()
         val height = rect.height()
         var adj1 = 0
         var adj2 = 0
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size == 2) {
                 //values[0]:[0, 0.25]   values[1];[-0.1,0.1]
                 adj1 = Math.round(height * values[0]!!)
@@ -1876,8 +1883,8 @@ object BannerPathBuilder {
 
         val pathExtend = ExtendPath()
         if (shape.hasLine()) {
-            pathExtend.setLine(shape.getLine())
-            pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+            pathExtend.setLine(shape.line)
+            pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
         }
 
         val path = Path()
@@ -1944,14 +1951,14 @@ object BannerPathBuilder {
         }
 
         pathExtend.path = path
-        pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+        pathExtend.backgroundAndFill = shape.backgroundAndFill
         pathExList.add(pathExtend)
 
         return pathExList
     }
 
     private fun getLeftRightRibbon(shape: AutoShape, rect: Rect): MutableList<ExtendPath?>? {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
         val len = min(rect.width(), rect.height())
         val height = rect.height()
@@ -1959,7 +1966,7 @@ object BannerPathBuilder {
         var adj2 = 0
         var adj3V = 0
         var adj3H = 0
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size == 3) {
                 //
                 adj1 = Math.round(height * values[0]!!)
@@ -1977,8 +1984,8 @@ object BannerPathBuilder {
 
             var pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
 
             var path = Path()
@@ -2044,15 +2051,15 @@ object BannerPathBuilder {
             path.close()
 
             pathExtend.path = path
-            pathExtend.backgroundAndFill = shape.getBackgroundAndFill()
+            pathExtend.backgroundAndFill = shape.backgroundAndFill
             pathExList.add(pathExtend)
 
 
             //dark part
             pathExtend = ExtendPath()
             if (shape.hasLine()) {
-                pathExtend.setLine(shape.getLine())
-                pathExtend.backgroundAndFill = shape.getLine().getBackgroundAndFill()
+                pathExtend.setLine(shape.line)
+                pathExtend.backgroundAndFill = shape.line!!.backgroundAndFill
             }
             path = Path()
             path.arcTo(
@@ -2067,16 +2074,16 @@ object BannerPathBuilder {
             path.close()
 
             val fill = BackgroundAndFill()
-            fill.setFillType(BackgroundAndFill.FILL_SOLID)
+            fill.fillType = BackgroundAndFill.FILL_SOLID
 
-            val shapeFill = shape.getBackgroundAndFill()
-            if (shapeFill != null && shapeFill.getFillType() == BackgroundAndFill.FILL_SOLID) {
-                fill.setForegroundColor(
+            val shapeFill = shape.backgroundAndFill
+            if (shapeFill != null && shapeFill.fillType == BackgroundAndFill.FILL_SOLID) {
+                fill.foregroundColor =
                     ColorUtil.instance()
-                        .getColorWithTint(shapeFill.getForegroundColor(), TINT.toDouble())
-                )
+                        .getColorWithTint(shapeFill.foregroundColor, TINT.toDouble())
+
             } else {
-                fill.setForegroundColor(PICTURECOLOR)
+                fill.foregroundColor = PICTURECOLOR
             }
             pathExtend.backgroundAndFill = fill
 

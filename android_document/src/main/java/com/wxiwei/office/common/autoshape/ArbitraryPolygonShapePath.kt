@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           ArbitraryPolygonShapePath.java
  *  
  * 编译器:             android2.2
@@ -65,25 +72,24 @@ object ArbitraryPolygonShapePath {
             //line width
             if (ln.attributeValue("w") != null) {
                 lineWidth = Math.round(
-                    ln.attributeValue("w")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                    ln.attributeValue("w")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
                 )
             }
         }
 
         val line = arbitraryPolygonShape.createLine()
-        line.setBackgroundAndFill(lineFill)
-        line.setLineWidth(lineWidth)
+        line.backgroundAndFill = lineFill
+        line.lineWidth = lineWidth
 
 
         // anchor
-        arbitraryPolygonShape.setBounds(rect)
+        arbitraryPolygonShape.bounds = rect
 
 
         // paths
         val spPr = sp.element("spPr")
         val pathElements: MutableList<Element> =
-            spPr.element("custGeom").element("pathLst").elements("path") as MutableList<Element>
+            spPr!!.element("custGeom")!!.element("pathLst")!!.elements("path") as MutableList<Element>
 
         var headArrowTailCenter: PointF? = null
         var tailArrowTailCenter: PointF? = null
@@ -111,7 +117,7 @@ object ArbitraryPolygonShapePath {
                     //
                     val pathElement1 = pathElements.get(0)
                     val arrowPathAndTail = getPathHeadArrowPath(
-                        arbitraryPolygonShape.getStartArrow(), lineWidth,
+                        arbitraryPolygonShape.startArrow!!, lineWidth,
                         pathElement1
                     )
                     if (arrowPathAndTail != null) {
@@ -126,7 +132,7 @@ object ArbitraryPolygonShapePath {
                             if (fill != null || border) {
                                 if (border &&
                                     (pathElement1.attribute("stroke") == null
-                                            || pathElement1.attributeValue("stroke").toInt() != 0)
+                                            || pathElement1.attributeValue("stroke")!!.toInt() != 0)
                                 ) {
                                     if (arrowType != Arrow.Arrow_Arrow) {
                                         pathExtend_Header.backgroundAndFill = lineFill
@@ -157,7 +163,7 @@ object ArbitraryPolygonShapePath {
                     //
                     val pathElement1 = pathElements.get(0)
                     val arrowPathAndTail = getPathTailArrowPath(
-                        arbitraryPolygonShape.getEndArrow(), lineWidth,
+                        arbitraryPolygonShape.endArrow!!, lineWidth,
                         pathElement1
                     )
                     if (arrowPathAndTail != null) {
@@ -171,7 +177,7 @@ object ArbitraryPolygonShapePath {
                             if (fill != null || border) {
                                 if (border &&
                                     (pathElement1.attribute("stroke") == null
-                                            || pathElement1.attributeValue("stroke").toInt() != 0)
+                                            || pathElement1.attributeValue("stroke")!!.toInt() != 0)
                                 ) {
                                     if (arrowType != Arrow.Arrow_Arrow) {
                                         pathExtend_Tail.backgroundAndFill = lineFill
@@ -228,7 +234,7 @@ object ArbitraryPolygonShapePath {
 
                 if (border) {
                     if (pathElement.attribute("stroke") != null
-                        && pathElement.attributeValue("stroke").toInt() == 0
+                        && pathElement.attributeValue("stroke")!!.toInt() == 0
                     ) {
                         pathExtend.setLine(false)
                     } else {
@@ -272,74 +278,66 @@ object ArbitraryPolygonShapePath {
 
         for (i in 0..<cnt) {
             e = eleList.get(i) as Element
-            if (headerArrowTailCenter != null && i == 0 && e.getName() == "moveTo") {
+            if (headerArrowTailCenter != null && i == 0 && e.name == "moveTo") {
                 //header arrow
                 pathClosed = false
                 headerArrowTailCenter = LineArrowPathBuilder.getReferencedPosition(
-                    e.element("pt"),
+                    e.element("pt")!!,
                     headerArrowTailCenter,
-                    arbitraryPolygonShape.getStartArrowType()
+                    arbitraryPolygonShape.startArrowType
                 )
 
                 path.moveTo(headerArrowTailCenter.x, headerArrowTailCenter.y)
             } else if (tailArrowTailCenter != null && i == cnt - 1) {
                 //tail arrow
-                if (e.getName() == "lnTo") {
+                if (e.name == "lnTo") {
                     tailArrowTailCenter = LineArrowPathBuilder.getReferencedPosition(
-                        e.element("pt"),
+                        e.element("pt")!!,
                         tailArrowTailCenter,
-                        arbitraryPolygonShape.getEndArrowType()
+                        arbitraryPolygonShape.endArrowType
                     )
                     path.lineTo(tailArrowTailCenter.x, tailArrowTailCenter.y)
-                } else if (e.getName() == "quadBezTo") {
+                } else if (e.name == "quadBezTo") {
                     val ptList = e.elements()
-                    if (ptList.size != 2) {
+                    if (ptList!!.size != 2) {
                         break
                     }
 
                     tailArrowTailCenter = LineArrowPathBuilder.getReferencedPosition(
-                        ptList.get(1) as Element,
+                        ptList!!.get(1) as Element,
                         tailArrowTailCenter,
-                        arbitraryPolygonShape.getEndArrowType()
+                        arbitraryPolygonShape.endArrowType
                     )
 
                     path.quadTo(
-                        (ptList.get(0) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(0) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
                         tailArrowTailCenter.x,
                         tailArrowTailCenter.y
                     )
-                } else if (e.getName() == "cubicBezTo") {
+                } else if (e.name == "cubicBezTo") {
                     val ptList = e.elements()
-                    if (ptList.size != 3) {
+                    if (ptList!!.size != 3) {
                         break
                     }
 
                     tailArrowTailCenter = LineArrowPathBuilder.getReferencedPosition(
-                        ptList.get(2) as Element,
+                        ptList!!.get(2) as Element,
                         tailArrowTailCenter,
-                        arbitraryPolygonShape.getEndArrowType()
+                        arbitraryPolygonShape.endArrowType
                     )
 
                     path.cubicTo(
-                        (ptList.get(0) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(0) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(1) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(1) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
                         tailArrowTailCenter.x,
                         tailArrowTailCenter.y
                     )
-                } else if (e.getName() == "arcTo") {
-                    val wR = e.attributeValue("wR")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                    val hR = e.attributeValue("hR")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                } else if (e.name == "arcTo") {
+                    val wR = e.attributeValue("wR")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                    val hR = e.attributeValue("hR")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
                     path.arcTo(
                         RectF(
@@ -348,68 +346,52 @@ object ArbitraryPolygonShapePath {
                             rect.getCenterX().toFloat() + wR - rect.x,
                             rect.getCenterY().toFloat() + hR - rect.y
                         ),
-                        e.attributeValue("stAng").toInt() / 60000f,
-                        e.attributeValue("swAng").toInt() / 60000f
+                        e.attributeValue("stAng")!!.toInt() / 60000f,
+                        e.attributeValue("swAng")!!.toInt() / 60000f
                     )
                 }
             } else {
                 //no arrow
-                if (e.getName() == "moveTo") {
+                if (e.name == "moveTo") {
                     pathClosed = false
-                    e = e.element("pt")
+                    e = e.element("pt")!!
                     path.moveTo(
-                        e.attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        e.attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                        e.attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        e.attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
                     )
-                } else if (e.getName() == "lnTo") {
-                    e = e.element("pt")
+                } else if (e.name == "lnTo") {
+                    e = e.element("pt")!!
                     path.lineTo(
-                        e.attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        e.attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                        e.attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        e.attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
                     )
-                } else if (e.getName() == "quadBezTo") {
+                } else if (e.name == "quadBezTo") {
                     val ptList = e.elements()
-                    if (ptList.size != 2) {
+                    if (ptList!!.size != 2) {
                         break
                     }
                     path.quadTo(
-                        (ptList.get(0) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(0) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(1) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(1) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                        (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
                     )
-                } else if (e.getName() == "cubicBezTo") {
+                } else if (e.name == "cubicBezTo") {
                     val ptList = e.elements()
-                    if (ptList.size != 3) {
+                    if (ptList!!.size != 3) {
                         break
                     }
                     path.cubicTo(
-                        (ptList.get(0) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(0) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(1) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(1) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(2) as Element).attributeValue("x")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
-                        (ptList.get(2) as Element).attributeValue("y")
-                            .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                        (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(2) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH,
+                        (ptList!!.get(2) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
                     )
-                } else if (e.getName() == "arcTo") {
-                    val wR = e.attributeValue("wR")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                    val hR = e.attributeValue("hR")
-                        .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                } else if (e.name == "arcTo") {
+                    val wR = e.attributeValue("wR")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                    val hR = e.attributeValue("hR")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
                     path.arcTo(
                         RectF(
@@ -418,10 +400,10 @@ object ArbitraryPolygonShapePath {
                             rect.getCenterX().toFloat() + wR - rect.x,
                             rect.getCenterY().toFloat() + hR - rect.y
                         ),
-                        e.attributeValue("stAng").toInt() / 60000f,
-                        e.attributeValue("swAng").toInt() / 60000f
+                        e.attributeValue("stAng")!!.toInt() / 60000f,
+                        e.attributeValue("swAng")!!.toInt() / 60000f
                     )
-                } else if (e.getName() == "close") {
+                } else if (e.name == "close") {
                     pathClosed = true
                     path.close()
                 }
@@ -450,29 +432,25 @@ object ArbitraryPolygonShapePath {
         var e = eleList.get(0)!!.element("pt") as Element
 
         var path: ArrowPathAndTail? = null
-        val p0X = e.attributeValue("x").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-        val p0Y = e.attributeValue("y").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+        val p0X = e.attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+        val p0Y = e.attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
         var p1X = 0f
         var p1Y = 0f
 
         e = eleList.get(1) as Element
-        if (e.getName() == "lnTo") {
-            e = e.element("pt")
-            p1X = e.attributeValue("x").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-            p1Y = e.attributeValue("y").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+        if (e.name == "lnTo") {
+            e = e.element("pt")!!
+            p1X = e.attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            p1Y = e.attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
             path = LineArrowPathBuilder.getDirectLineArrowPath(p1X, p1Y, p0X, p0Y, arrow, lineWidth)
-        } else if (e.getName() == "quadBezTo") {
+        } else if (e.name == "quadBezTo") {
             val ptList = e.elements()
-            if (ptList.size == 2) {
-                val ctrX1 = (ptList.get(0) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrY1 = (ptList.get(0) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1X = (ptList.get(1) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1Y = (ptList.get(1) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            if (ptList!!.size == 2) {
+                val ctrX1 = (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrY1 = (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1X = (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1Y = (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
                 path = LineArrowPathBuilder.getQuadBezArrowPath(
                     p1X,
@@ -485,21 +463,15 @@ object ArbitraryPolygonShapePath {
                     lineWidth
                 )
             }
-        } else if (e.getName() == "cubicBezTo") {
+        } else if (e.name == "cubicBezTo") {
             val ptList = e.elements()
-            if (ptList.size == 3) {
-                val ctrX1 = (ptList.get(0) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrY1 = (ptList.get(0) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrX2 = (ptList.get(1) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrY2 = (ptList.get(1) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1X = (ptList.get(2) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1Y = (ptList.get(2) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            if (ptList!!.size == 3) {
+                val ctrX1 = (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrY1 = (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrX2 = (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrY2 = (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1X = (ptList!!.get(2) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1Y = (ptList!!.get(2) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
                 path = LineArrowPathBuilder.getCubicBezArrowPath(
                     p1X,
@@ -530,7 +502,7 @@ object ArbitraryPolygonShapePath {
 
         var cnt = 0
         if (eleList == null || (eleList.size.also { cnt = it }) < 2 || eleList.get(cnt - 1)!!
-                .getName() == "close"
+                .name == "close"
         ) {
             return null
         }
@@ -540,25 +512,21 @@ object ArbitraryPolygonShapePath {
         var e = eleList.get(cnt - 2) as Element
         var p0X = 0f
         var p0Y = 0f
-        if (e.getName() == "lnTo") {
-            e = e.element("pt")
-            p0X = e.attributeValue("x").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-            p0Y = e.attributeValue("y").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-        } else if (e.getName() == "quadBezTo") {
+        if (e.name == "lnTo") {
+            e = e.element("pt")!!
+            p0X = e.attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            p0Y = e.attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+        } else if (e.name == "quadBezTo") {
             val ptList = e.elements()
-            if (ptList.size == 2) {
-                p0X = (ptList.get(1) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p0Y = (ptList.get(1) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            if (ptList!!.size == 2) {
+                p0X = (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p0Y = (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
             }
-        } else if (e.getName() == "cubicBezTo") {
+        } else if (e.name == "cubicBezTo") {
             val ptList = e.elements()
-            if (ptList.size == 3) {
-                p0X = (ptList.get(2) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p0Y = (ptList.get(2) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            if (ptList!!.size == 3) {
+                p0X = (ptList!!.get(2) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p0Y = (ptList!!.get(2) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
             }
         }
 
@@ -567,24 +535,20 @@ object ArbitraryPolygonShapePath {
         e = eleList.get(cnt - 1) as Element
         var p1X = 0f
         var p1Y = 0f
-        if (e.getName() == "lnTo") {
-            e = e.element("pt")
-            p1X = e.attributeValue("x").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-            p1Y = e.attributeValue("y").toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+        if (e.name == "lnTo") {
+            e = e.element("pt")!!
+            p1X = e.attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            p1Y = e.attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
             arrowPathAndTail =
                 LineArrowPathBuilder.getDirectLineArrowPath(p0X, p0Y, p1X, p1Y, arrow, lineWidth)
-        } else if (e.getName() == "quadBezTo") {
+        } else if (e.name == "quadBezTo") {
             val ptList = e.elements()
-            if (ptList.size == 2) {
-                val ctrX1 = (ptList.get(0) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrY1 = (ptList.get(0) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1X = (ptList.get(1) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1Y = (ptList.get(1) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            if (ptList!!.size == 2) {
+                val ctrX1 = (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrY1 = (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1X = (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1Y = (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
                 arrowPathAndTail = LineArrowPathBuilder.getQuadBezArrowPath(
                     p0X,
@@ -597,21 +561,15 @@ object ArbitraryPolygonShapePath {
                     lineWidth
                 )
             }
-        } else if (e.getName() == "cubicBezTo") {
+        } else if (e.name == "cubicBezTo") {
             val ptList = e.elements()
-            if (ptList.size == 3) {
-                val ctrX1 = (ptList.get(0) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrY1 = (ptList.get(0) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrX2 = (ptList.get(1) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                val ctrY2 = (ptList.get(1) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1X = (ptList.get(2) as Element).attributeValue("x")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
-                p1Y = (ptList.get(2) as Element).attributeValue("y")
-                    .toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+            if (ptList!!.size == 3) {
+                val ctrX1 = (ptList!!.get(0) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrY1 = (ptList!!.get(0) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrX2 = (ptList!!.get(1) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                val ctrY2 = (ptList!!.get(1) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1X = (ptList!!.get(2) as Element).attributeValue("x")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
+                p1Y = (ptList!!.get(2) as Element).attributeValue("y")!!.toInt() * MainConstant.PIXEL_DPI / MainConstant.EMU_PER_INCH
 
                 arrowPathAndTail = LineArrowPathBuilder.getCubicBezArrowPath(
                     p0X,

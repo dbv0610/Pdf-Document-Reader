@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          CellView.java
  *
  * 编译器:            android2.2
@@ -123,7 +130,7 @@ class CellView(sheetView: SheetView?) {
         val oldColor = paint.color
         val oldStyle = paint.style
 
-        paint.color = SSConstant.GRIDLINE_COLOR
+        paint.color = SSConstant.gridlineColor(sheetView?.getCurrentSheet())
         paint.style = Style.STROKE
         canvas.drawRect(
             left,
@@ -288,9 +295,9 @@ class CellView(sheetView: SheetView?) {
         canvas: Canvas, control: IControl, viewIndex: Int,
         fill: BackgroundAndFill, rect: RectF, zoom: Float, paint: Paint
     ) {
-        val aShader = fill.getShader()
+        val aShader = fill.shader
         if (aShader != null) {
-            var shader = aShader.getShader()
+            var shader = aShader.shader
             if (shader == null) {
                 val r = 1 / zoom
                 shader = aShader.createShader(
@@ -327,7 +334,7 @@ class CellView(sheetView: SheetView?) {
                         var focusY = 1f
 
                         if (aShader.getAngle() == 90) {
-                            when (aShader.getFocus()) {
+                            when (aShader.focus) {
                                 100 -> {
                                     focusX = 0f
                                     focusY = 0f
@@ -346,7 +353,7 @@ class CellView(sheetView: SheetView?) {
                                 }
                             }
                         } else {
-                            when (aShader.getFocus()) {
+                            when (aShader.focus) {
                                 100 -> {
                                     focusX = 0f
                                     focusY = 0f
@@ -386,9 +393,9 @@ class CellView(sheetView: SheetView?) {
 
     fun getTableCellStyle(table: SSTable, book: Workbook, row: Int, col: Int): SSTableCellStyle? {
         val rangeAddr = table.getTableReference()!!
-        val tableStyle =
-            tableStyleKit!!.getTableStyle(table.getName(), SchemeColorUtil.getSchemeColor(book))
-                ?: return null
+        val tableStyle = book.getCustomTableStyle(table.getName())
+            ?: tableStyleKit!!.getTableStyle(table.getName(), SchemeColorUtil.getSchemeColor(book))
+            ?: return null
 
         if (table.isHeaderRowShown()) {
             if (row == rangeAddr.getFirstRow()) {
@@ -519,6 +526,14 @@ class CellView(sheetView: SheetView?) {
         val textSize = paint.textSize
         paint.textSize = textSize * sheetView!!.getZoom()
 
+        // turned text (alignment textRotation): drawn on its own
+        val rotation = cell.getCellStyle()?.getRotation()?.toInt() ?: 0
+        if (rotation != 0) {
+            drawRotatedCell(canvas, cell, content, paint, rotation)
+            paint.textSize = textSize
+            return
+        }
+
         numericCellAlignRight = false
         if (cell.getCellType() == Cell.CELL_TYPE_BOOLEAN
             || (cell.getCellType() == Cell.CELL_TYPE_NUMERIC && cell.getCellNumericType() != Cell.CELL_TYPE_NUMERIC_STRING)
@@ -545,6 +560,64 @@ class CellView(sheetView: SheetView?) {
 //
 //      canvas.rotate(-45);
 //      paint.setColor(color);
+    }
+
+    /**
+     * Text turned by [rotation] (OOXML textRotation: 1-90 up, counterclockwise; 91-180 down,
+     * clockwise by rotation - 90; 255 letters stacked top to bottom), in one line, clipped to the
+     * cell. The turned text's box is placed by the cell's horizontal and vertical alignment.
+     */
+    private fun drawRotatedCell(canvas: Canvas, cell: Cell, contents: String, paint: Paint, rotation: Int) {
+        val visible = cellRect ?: return
+        // placed in the whole cell (a merged one runs over several tiles, each drawing its visible
+        // part): every tile then draws it at the same place, clipped to what it shows
+        val size = mergedCellSize ?: return
+        val rect = android.graphics.RectF(left - size.getNovisibleWidth(), top - size.getNoVisibleHeight(), 0f, 0f).apply {
+            right = this.left + size.getWidth(); bottom = this.top + size.getHeight()
+        }
+        val style = cell.getCellStyle()
+        val pad = 2 * sheetView!!.getZoom()
+        val fm = paint.fontMetrics
+        val lineH = fm.descent - fm.ascent
+        canvas.save()
+        canvas.clipRect(visible)
+        if (rotation == 255) {
+            // stacked: one letter per line, centered in the column
+            val boxH = lineH * contents.length
+            var y = when (style?.getVerticalAlign()) {
+                CellStyle.VERTICAL_TOP -> rect.top + pad
+                CellStyle.VERTICAL_CENTER -> rect.centerY() - boxH / 2
+                else -> rect.bottom - pad - boxH
+            } - fm.ascent
+            for (ch in contents) {
+                val s = ch.toString()
+                canvas.drawText(s, rect.centerX() - paint.measureText(s) / 2, y, paint)
+                y += lineH
+            }
+            canvas.restore()
+            return
+        }
+        // Android turns clockwise for positive angles; Excel's 1-90 turn the other way
+        val degrees = if (rotation <= 90) -rotation.toFloat() else (rotation - 90).toFloat()
+        val tw = paint.measureText(contents)
+        val rad = Math.toRadians(degrees.toDouble())
+        val cos = Math.abs(Math.cos(rad)).toFloat(); val sin = Math.abs(Math.sin(rad)).toFloat()
+        val boxW = cos * tw + sin * lineH
+        val boxH = sin * tw + cos * lineH
+        val cx = when (style?.getHorizontalAlign()) {
+            CellStyle.ALIGN_LEFT -> rect.left + pad + boxW / 2
+            CellStyle.ALIGN_RIGHT -> rect.right - pad - boxW / 2
+            else -> rect.centerX()
+        }
+        val cy = when (style?.getVerticalAlign()) {
+            CellStyle.VERTICAL_TOP -> rect.top + pad + boxH / 2
+            CellStyle.VERTICAL_CENTER -> rect.centerY()
+            else -> rect.bottom - pad - boxH / 2
+        }
+        canvas.translate(cx, cy)
+        canvas.rotate(degrees)
+        canvas.drawText(contents, -tw / 2, -(fm.ascent + fm.descent) / 2, paint)
+        canvas.restore()
     }
 
     /**

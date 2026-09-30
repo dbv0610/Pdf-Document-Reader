@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.ss.control
 
 import android.graphics.Rect
@@ -128,44 +135,10 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
 
     private fun checkClickedCell(event: MotionEvent): Boolean {
         val ss = spreadsheet ?: return false
-        val x = event.x
-        val y = event.y
         val sheetView = ss.getSheetView()!!
-        if (sheetView.columnHeaderHeight > y || sheetView.rowHeaderWidth > x) return false
-        val cellInfo = DrawingCell()
-        cellInfo.left = sheetView.rowHeaderWidth.toFloat()
-        cellInfo.top = sheetView.columnHeaderHeight.toFloat()
-        cellInfo.rowIndex = sheetView.minRowAndColumnInformation.minRowIndex
-        cellInfo.columnIndex = sheetView.minRowAndColumnInformation.minColumnIndex
-        val maxRows = if (sheetView.currentSheet.workbook.isBefore07Version()) Workbook.MAXROW_03 else Workbook.MAXROW_07
-        while (cellInfo.top <= y && cellInfo.rowIndex <= maxRows) {
-            val row = sheetView.currentSheet.getRow(cellInfo.rowIndex)
-            if (row != null && row.isZeroHeight()) {
-                cellInfo.rowIndex++
-                continue
-            }
-            cellInfo.height = Math.round((if (row == null) sheetView.currentSheet.defaultRowHeight.toFloat() else row.getRowPixelHeight()) * sheetView.zoom).toFloat()
-            cellInfo.visibleHeight = if (cellInfo.rowIndex == sheetView.minRowAndColumnInformation.minRowIndex && !sheetView.minRowAndColumnInformation.isRowAllVisible) {
-                Math.round(sheetView.minRowAndColumnInformation.visibleRowHeight * sheetView.zoom).toFloat()
-            } else cellInfo.height
-            cellInfo.top += cellInfo.visibleHeight
-            cellInfo.rowIndex++
-        }
-        val maxColumns = if (sheetView.currentSheet.workbook.isBefore07Version()) Workbook.MAXCOLUMN_03 else Workbook.MAXCOLUMN_07
-        while (cellInfo.left <= x && cellInfo.columnIndex <= maxColumns) {
-            if (sheetView.currentSheet.isColumnHidden(cellInfo.columnIndex)) {
-                cellInfo.columnIndex++
-                continue
-            }
-            cellInfo.width = Math.round(sheetView.currentSheet.getColumnPixelWidth(cellInfo.columnIndex) * sheetView.zoom).toFloat()
-            cellInfo.visibleWidth = if (cellInfo.columnIndex == sheetView.minRowAndColumnInformation.minColumnIndex && !sheetView.minRowAndColumnInformation.isColumnAllVisible) {
-                Math.round(sheetView.minRowAndColumnInformation.visibleColumnWidth * sheetView.zoom).toFloat()
-            } else cellInfo.width
-            cellInfo.left += cellInfo.visibleWidth
-            cellInfo.columnIndex++
-        }
+        val at = sheetView.cellAt(event.x, event.y) ?: return false
         sheetView.currentSheet.setActiveCellType(Sheet.ACTIVECELL_SINGLE)
-        sheetView.selectedCell(cellInfo.rowIndex - 1, cellInfo.columnIndex - 1)
+        sheetView.selectedCell(at[0], at[1])
         ss.getControl().actionEvent(EventConstant.APP_CONTENT_SELECTED, null)
         ss.abortDrawing()
         ss.postInvalidate()
@@ -312,6 +285,69 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
         if (ret) {
             if (timer?.isRunning == false) timer?.start() else timer?.restart()
         }
+    }
+
+    // smooth pinch: the zoom follows the finger distance continuously on a preview of the last
+    // frame; the sheet is laid out and drawn at the new zoom once, when the pinch ends
+    private var pinching = false
+    private var pinchStartDistance = 0f
+    private var pinchBaseZoom = 1f
+    private var pinchScale = 1f
+    private var pinchFocusX = 0f
+    private var pinchFocusY = 0f
+
+    private fun spread(event: MotionEvent): Float {
+        val dx = event.getX(0) - event.getX(1)
+        val dy = event.getY(0) - event.getY(1)
+        return Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+    }
+
+    override fun zoom(event: MotionEvent): Boolean {
+        val ss = spreadsheet ?: return true
+        if (!control.getMainFrame().isTouchZoom()) return true
+        val sheetView = ss.getSheetView() ?: return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                pinchStartDistance = spread(event)
+                pinchBaseZoom = sheetView.getZoom()
+                pinchScale = 1f
+                pinchFocusX = (event.getX(0) + event.getX(1)) / 2
+                pinchFocusY = (event.getY(0) + event.getY(1)) / 2
+                pinching = pinchStartDistance > 0 && ss.beginPinchPreview(pinchFocusX, pinchFocusY)
+                if (!pinching) return super.zoom(event)
+                isScroll = true
+                zoomChange = true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!pinching) return super.zoom(event)
+                val target = (pinchBaseZoom * spread(event) / pinchStartDistance)
+                    .coerceIn(minOf(ss.getFitZoom(), pinchBaseZoom), MAX_ZOOM)
+                pinchScale = target / pinchBaseZoom
+                ss.setPinchPreviewScale(pinchScale)
+            }
+            MotionEvent.ACTION_POINTER_UP -> if (pinching) {
+                pinching = false
+                commitPinch(ss, sheetView)
+            }
+        }
+        return true
+    }
+
+    /** Applies the pinch zoom, keeping the sheet point under the fingers in place. */
+    private fun commitPinch(ss: Spreadsheet, sheetView: com.wxiwei.office.ss.view.SheetView) {
+        val newZoom = pinchBaseZoom * pinchScale
+        val sheetX = sheetView.getScrollX() + (pinchFocusX - sheetView.getRowHeaderWidth()) / pinchBaseZoom
+        val sheetY = sheetView.getScrollY() + (pinchFocusY - sheetView.getColumnHeaderHeight()) / pinchBaseZoom
+        ss.endPinchPreview()
+        if (Math.abs(pinchScale - 1f) > 0.001f) {
+            sheetView.setZoom(newZoom, true)
+            sheetView.scrollTo(
+                sheetX - (pinchFocusX - sheetView.getRowHeaderWidth()) / newZoom,
+                sheetY - (pinchFocusY - sheetView.getColumnHeaderHeight()) / newZoom,
+            )
+            control.getMainFrame().changeZoom()
+        }
+        ss.postInvalidate()
     }
 
     override fun onTouch(v: View?, event: MotionEvent): Boolean {
@@ -525,3 +561,6 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
         timer = null
     }
 }
+
+/** Largest pinch zoom, as the generic handler allows. */
+private const val MAX_ZOOM = 3.0f

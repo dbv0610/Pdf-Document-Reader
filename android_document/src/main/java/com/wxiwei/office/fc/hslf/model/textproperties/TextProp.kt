@@ -1,0 +1,96 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/* ====================================================================
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+==================================================================== */
+package com.wxiwei.office.fc.hslf.model.textproperties
+
+/**
+ * Definition of a property of some text, or its paragraph. Defines
+ * how to find out if it's present (via the mask on the paragraph or
+ * character "contains" header field), how long the value of it is,
+ * and how to get and set the value.
+ * 
+ * As the exact form of these (such as mask value, size of data
+ * block etc) is different for StyleTextProps and
+ * TxMasterTextProps, the definitions of the standard
+ * TextProps is stored in the different record classes
+ */
+open class TextProp
+/**
+ * Generate the definition of a given type of text property.
+ */(
+    /**
+     * Size of the data section of the text property (2 or 4 bytes)
+     */
+    @get:JvmName("getSizeProperty")
+    var size: Int, // Number of bytes the data part uses
+    /**
+     * Mask in the paragraph or character "contains" header field
+     * that indicates that this text property is present.
+     */
+    @get:JvmName("getMaskProperty")
+    var mask: Int,
+    /**
+     * Name of the text property
+     */
+    @get:JvmName("getNameProperty")
+    var name: String?
+) : Cloneable {
+    /**
+     * Fetch the value of the text property (meaning is specific to
+     * each different kind of text property)
+     */
+    @Suppress("INAPPLICABLE_JVM_NAME")
+    @get:JvmName("getValueProperty")
+    @set:JvmName("setValueProperty")
+    open var value: Int = 0
+
+    open fun getValue(): Int = value
+    open fun setValue(value: Int) { this.value = value }
+    open fun getWriteMask(): Int = writeMask
+    open fun getMask(): Int = mask
+    open fun getName(): String? = name
+    open fun getSize(): Int = size
+
+    @Suppress("INAPPLICABLE_JVM_NAME")
+    @get:JvmName("getWriteMaskProperty")
+    open val writeMask: Int
+        get() = this.mask
+
+    /**
+     * Clone, eg when you want to actually make use of one of these.
+     */
+    public override fun clone(): Any {
+        try {
+            return super.clone()
+        } catch (e: CloneNotSupportedException) {
+            throw InternalError(e.message)
+        }
+    }
+
+    /**
+     * 
+     */
+    fun dispose() {
+        this.name = null
+    }
+}

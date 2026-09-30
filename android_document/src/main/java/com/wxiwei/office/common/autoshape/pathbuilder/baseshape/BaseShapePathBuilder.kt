@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          BaseShapePathBuilder.java
  *  
  * 编译器:            android2.2
@@ -70,7 +77,7 @@ object BaseShapePathBuilder {
         path.reset()
         paths.clear()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.Ellipse -> return getEllipsePath(shape, rect)
 
             ShapeTypes.Triangle -> return getTrianglePath(shape, rect)
@@ -171,7 +178,7 @@ object BaseShapePathBuilder {
 
     private fun getTrianglePath(shape: AutoShape, rect: Rect): Path {
         var x = rect.width() * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = rect.width() * values[0]!!
@@ -197,8 +204,8 @@ object BaseShapePathBuilder {
 
     private fun getParallelogramPath(shape: AutoShape, rect: Rect): Path {
         var x = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.width(), rect.height()) * 0.2f
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
@@ -226,8 +233,8 @@ object BaseShapePathBuilder {
 
     private fun getTrapezoidPath(shape: AutoShape, rect: Rect): Path {
         var x = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.width(), rect.height()) * 0.2f
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
@@ -290,8 +297,8 @@ object BaseShapePathBuilder {
 
     private fun getHexagonPath(shape: AutoShape, rect: Rect): Path {
         var x = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.width(), rect.height()) * 0.25f
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
@@ -339,7 +346,7 @@ object BaseShapePathBuilder {
 
     private fun getOctagonPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.width(), rect.height()) * 0.25f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
@@ -405,7 +412,7 @@ object BaseShapePathBuilder {
     private fun getPiePath(shape: AutoShape, rect: Rect): Path {
         var start = 0f
         var end = 270f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 start = values[0]!! * TODEGREE_07
@@ -431,7 +438,7 @@ object BaseShapePathBuilder {
     private fun getChordPath(shape: AutoShape, rect: Rect): Path {
         var start = 45f
         var end = 270f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 start = values[0]!! * 10 / 6
@@ -456,7 +463,7 @@ object BaseShapePathBuilder {
     private fun getTeardropPath(shape: AutoShape, rect: Rect): Path {
         var x = 0f
         var y = 0f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1 && values[0] != null) {
             x = rect.width().toFloat() / 2 * values[0]!!
             y = rect.height().toFloat() / 2 * values[0]!!
@@ -493,7 +500,7 @@ object BaseShapePathBuilder {
 
     private fun getFramePath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.height(), rect.width()) * 0.1f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.height(), rect.width()) * values[0]!!
@@ -516,7 +523,7 @@ object BaseShapePathBuilder {
     private fun getHalfFramePath(shape: AutoShape, rect: Rect): Path {
         var x1 = min(rect.height(), rect.width()) * 0.33333f
         var y1 = min(rect.height(), rect.width()) * 0.33333f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 y1 = min(rect.height(), rect.width()) * values[0]!!
@@ -543,7 +550,7 @@ object BaseShapePathBuilder {
     private fun getCornerPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.height(), rect.width()) * 0.5f
         var y = min(rect.height(), rect.width()) * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 2) {
             if (values[0] != null) {
                 y = min(rect.height(), rect.width()) * values[0]!!
@@ -567,7 +574,7 @@ object BaseShapePathBuilder {
 
     private fun getDiagStripePath(shape: AutoShape, rect: Rect): Path {
         var y = rect.height() * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 y = rect.height() * values[0]!!
@@ -586,7 +593,7 @@ object BaseShapePathBuilder {
 
     private fun getPlusPath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.height(), rect.width()) * 0.25f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.height(), rect.width()) * values[0]!!
@@ -612,7 +619,7 @@ object BaseShapePathBuilder {
 
     private fun getPlaquePath(shape: AutoShape, rect: Rect): Path {
         var x = min(rect.height(), rect.width()) * 0.16f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.height(), rect.width()) * values[0]!!
@@ -634,8 +641,8 @@ object BaseShapePathBuilder {
 
     private fun getCanPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.height(), rect.width()) * 0.175f
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
@@ -651,14 +658,14 @@ object BaseShapePathBuilder {
             }
         }
 
-        val fill = shape.getBackgroundAndFill()
+        val fill = shape.backgroundAndFill
         var bgFill = fill
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), 0.4)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, 0.4)
+
         }
 
         var extendPath = ExtendPath()
@@ -668,7 +675,7 @@ object BaseShapePathBuilder {
 
         extendPath.backgroundAndFill = bgFill
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
 
         paths.add(extendPath)
 
@@ -680,7 +687,7 @@ object BaseShapePathBuilder {
         path.arcTo(rectF, 0f, 180f)
         path.close()
 
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = fill
         extendPath.path = path
         paths.add(extendPath)
@@ -690,14 +697,14 @@ object BaseShapePathBuilder {
 
     private fun getCubePath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = min(rect.height(), rect.width()) * 0.25f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.height(), rect.width()) * values[0]!!
             }
         }
 
-        val fill = shape.getBackgroundAndFill()
+        val fill = shape.backgroundAndFill
         var extendPath = ExtendPath()
         var path = Path()
         path.addRect(
@@ -709,16 +716,16 @@ object BaseShapePathBuilder {
         )
         extendPath.backgroundAndFill = fill
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         paths.add(extendPath)
 
         var bgFill = fill
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), 0.2)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, 0.2)
+
         }
 
         extendPath = ExtendPath()
@@ -731,15 +738,15 @@ object BaseShapePathBuilder {
 
         extendPath.backgroundAndFill = bgFill
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         paths.add(extendPath)
 
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), -0.2)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, -0.2)
+
         }
 
         extendPath = ExtendPath()
@@ -750,7 +757,7 @@ object BaseShapePathBuilder {
         path.lineTo(rect.right - x, rect.bottom.toFloat())
         path.close()
 
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = bgFill
         extendPath.path = path
         paths.add(extendPath)
@@ -760,21 +767,21 @@ object BaseShapePathBuilder {
 
     private fun getBevelPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = min(rect.height(), rect.width()) * 0.125f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.height(), rect.width()) * values[0]!!
             }
         }
 
-        val fill = shape.getBackgroundAndFill()
+        val fill = shape.backgroundAndFill
         var bgFill = fill
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), 0.2)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, 0.2)
+
         }
 
         var extendPath = ExtendPath()
@@ -785,7 +792,7 @@ object BaseShapePathBuilder {
         path.lineTo(rect.left + x, rect.top + x)
         path.close()
 
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = bgFill
         extendPath.path = path
         paths.add(extendPath)
@@ -793,10 +800,10 @@ object BaseShapePathBuilder {
 
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), -0.4)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, -0.4)
+
         }
 
         extendPath = ExtendPath()
@@ -807,17 +814,17 @@ object BaseShapePathBuilder {
         path.lineTo(rect.right - x, rect.bottom - x)
         path.close()
 
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = bgFill
         extendPath.path = path
         paths.add(extendPath)
 
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), -0.2)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, -0.2)
+
         }
 
         extendPath = ExtendPath()
@@ -828,17 +835,17 @@ object BaseShapePathBuilder {
         path.lineTo(rect.left.toFloat(), rect.bottom.toFloat())
         path.close()
 
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = bgFill
         extendPath.path = path
         paths.add(extendPath)
 
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), 0.4)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, 0.4)
+
         }
 
         extendPath = ExtendPath()
@@ -849,7 +856,7 @@ object BaseShapePathBuilder {
         path.lineTo(rect.left.toFloat(), rect.bottom.toFloat())
         path.close()
 
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = bgFill
         extendPath.path = path
         paths.add(extendPath)
@@ -864,7 +871,7 @@ object BaseShapePathBuilder {
             Path.Direction.CW
         )
 
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = fill
         extendPath.path = path
         paths.add(extendPath)
@@ -875,8 +882,8 @@ object BaseShapePathBuilder {
     private fun getDonutPath(shape: AutoShape, rect: Rect): Path {
         var x = 0f
         var y = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.height(), rect.width()) * 0.25f
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
@@ -912,7 +919,7 @@ object BaseShapePathBuilder {
         val len = min(rect.width(), rect.height()).toFloat()
         var rate = 0.2f
         var x = len * 0.2f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1 && values[0] != null) {
             rate = values[0]!!
         }
@@ -958,8 +965,8 @@ object BaseShapePathBuilder {
         var start = 180f
         var end = 0f
         var x = min(rect.width(), rect.height()) * 0.25f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             if (values != null && values.size >= 3) {
                 if (values[0] != null) {
                     start = values[0]!! * 10 / 6
@@ -1027,8 +1034,8 @@ object BaseShapePathBuilder {
 
     private fun getFoldedCornerPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.width(), rect.height()) * 0.25f
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
@@ -1036,7 +1043,7 @@ object BaseShapePathBuilder {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1047,7 +1054,7 @@ object BaseShapePathBuilder {
             path.lineTo(rect.left.toFloat(), rect.bottom.toFloat())
             path.close()
 
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             extendPath.path = path
             extendPath.backgroundAndFill = fill
             paths.add(extendPath)
@@ -1056,10 +1063,10 @@ object BaseShapePathBuilder {
             var bgFill = fill
             if (fill != null) {
                 bgFill = BackgroundAndFill()
-                bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                bgFill.setForegroundColor(
-                    ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), -0.2)
-                )
+                bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                bgFill.foregroundColor =
+                    ColorUtil.instance().getColorWithTint(fill.foregroundColor, -0.2)
+
             }
 
             extendPath = ExtendPath()
@@ -1072,7 +1079,7 @@ object BaseShapePathBuilder {
             path.lineTo(rect.right - x, rect.bottom.toFloat())
             path.close()
 
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             extendPath.path = path
             extendPath.backgroundAndFill = bgFill
             paths.add(extendPath)
@@ -1097,9 +1104,9 @@ object BaseShapePathBuilder {
             path.lineTo(rect.right - x * adjust, rect.bottom.toFloat())
             path.lineTo(rect.left.toFloat(), rect.bottom.toFloat())
             path.close()
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             extendPath.path = path
             extendPath.backgroundAndFill = fill
             paths.add(extendPath)
@@ -1107,10 +1114,10 @@ object BaseShapePathBuilder {
             var bgFill = fill
             if (fill != null) {
                 bgFill = BackgroundAndFill()
-                bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                bgFill.setForegroundColor(
-                    ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), -0.2)
-                )
+                bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                bgFill.foregroundColor =
+                    ColorUtil.instance().getColorWithTint(fill.foregroundColor, -0.2)
+
             }
 
             extendPath = ExtendPath()
@@ -1123,7 +1130,7 @@ object BaseShapePathBuilder {
             path.lineTo(rect.right - x * adjust, rect.bottom.toFloat())
             path.close()
 
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             extendPath.path = path
             extendPath.backgroundAndFill = bgFill
             paths.add(extendPath)
@@ -1134,9 +1141,9 @@ object BaseShapePathBuilder {
 
     private fun getSmileyFacePath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = rect.height() * 0.04653f * 2
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
-            if (shape.isAutoShape07()) {
+            if (shape.isAutoShape07) {
                 if (values[0] != null) {
                     x = rect.height() * values[0]!! * 2
                 }
@@ -1147,7 +1154,7 @@ object BaseShapePathBuilder {
             }
         }
 
-        val fill = shape.getBackgroundAndFill()
+        val fill = shape.backgroundAndFill
 
         var extendPath = ExtendPath()
         var path = Path()
@@ -1159,7 +1166,7 @@ object BaseShapePathBuilder {
         )
         path.addOval(rectF, Path.Direction.CW)
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = fill
         paths.add(extendPath)
 
@@ -1177,7 +1184,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, 195f, 150f)
         }
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = fill
         paths.add(extendPath)
 
@@ -1185,10 +1192,10 @@ object BaseShapePathBuilder {
         var bgFill = fill
         if (fill != null) {
             bgFill = BackgroundAndFill()
-            bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-            bgFill.setForegroundColor(
-                ColorUtil.instance().getColorWithTint(fill.getForegroundColor(), -0.2)
-            )
+            bgFill.fillType = BackgroundAndFill.FILL_SOLID
+            bgFill.foregroundColor =
+                ColorUtil.instance().getColorWithTint(fill.foregroundColor, -0.2)
+
         }
 
         left = rect.exactCenterX() - rect.width().toFloat() / 5
@@ -1202,7 +1209,7 @@ object BaseShapePathBuilder {
         path.addOval(rectF, Path.Direction.CW)
 
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = bgFill
         paths.add(extendPath)
 
@@ -1215,7 +1222,7 @@ object BaseShapePathBuilder {
         path.addOval(rectF, Path.Direction.CW)
 
         extendPath.path = path
-        extendPath.setLine(shape.getLine())
+        extendPath.setLine(shape.line)
         extendPath.backgroundAndFill = bgFill
         paths.add(extendPath)
 
@@ -1223,7 +1230,7 @@ object BaseShapePathBuilder {
     }
 
     private fun getSunPath(shape: AutoShape, rect: Rect): Path {
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         var offX = 0f
         var offY = 0f
         if (values != null && values.size >= 1) {
@@ -1376,7 +1383,7 @@ object BaseShapePathBuilder {
 
     private fun getMoonPath(shape: AutoShape, rect: Rect): Path {
         var x = rect.width() * 0.5f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = rect.width() * (1 - values[0]!!)
@@ -1448,8 +1455,8 @@ object BaseShapePathBuilder {
     private fun getArcPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var start = 0f
         var end = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             if (values != null && values.size >= 2) {
                 start = values[0]!! * TODEGREE_07
                 end = values[1]!! * TODEGREE_07
@@ -1478,7 +1485,7 @@ object BaseShapePathBuilder {
             }
         }
 
-        val fill = shape.getBackgroundAndFill()
+        val fill = shape.backgroundAndFill
 
         var extendPath = ExtendPath()
         var path = Path()
@@ -1513,7 +1520,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, start, (end - start + 360) % 360)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
         }
         return paths
@@ -1521,13 +1528,13 @@ object BaseShapePathBuilder {
 
     private fun getBracketPairPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = 0f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1 && values[0] != null) {
             x = min(rect.width(), rect.height()) * values[0]!!
         } else {
             x = min(rect.width(), rect.height()) * 0.18f
         }
-        val bgFill = shape.getBackgroundAndFill()
+        val bgFill = shape.backgroundAndFill
         var extendPath: ExtendPath? = null
         var path: Path? = null
         if (bgFill != null) {
@@ -1577,7 +1584,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, 180f, 90f)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
         }
 
@@ -1586,8 +1593,8 @@ object BaseShapePathBuilder {
 
     private fun getLeftBracketPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = 0f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             if (values != null && values.size >= 1) {
                 x = min(rect.width(), rect.height()) * values[0]!!
             } else {
@@ -1603,7 +1610,7 @@ object BaseShapePathBuilder {
             }
         }
 
-        val bgFill = shape.getBackgroundAndFill()
+        val bgFill = shape.backgroundAndFill
 
         var extendPath: ExtendPath? = null
         var path: Path? = null
@@ -1651,7 +1658,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, 180f, 90f)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
         }
 
@@ -1660,9 +1667,9 @@ object BaseShapePathBuilder {
 
     private fun getRightBracketPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = 0f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
 
-        if (shape.isAutoShape07()) {
+        if (shape.isAutoShape07) {
             if (values != null && values.size >= 1 && values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
             } else {
@@ -1676,7 +1683,7 @@ object BaseShapePathBuilder {
             }
         }
 
-        val bgFill = shape.getBackgroundAndFill()
+        val bgFill = shape.backgroundAndFill
 
         var extendPath: ExtendPath? = null
         var path: Path? = null
@@ -1723,7 +1730,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, 0f, 90f)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
         }
 
@@ -1733,14 +1740,14 @@ object BaseShapePathBuilder {
 
     private fun getBracePairPath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = min(rect.width(), rect.height()) * 0.08f
-        val values = shape.getAdjustData()
+        val values = shape.adjustData
         if (values != null && values.size >= 1) {
             if (values[0] != null) {
                 x = min(rect.width(), rect.height()) * values[0]!!
             }
         }
 
-        val bgFill = shape.getBackgroundAndFill()
+        val bgFill = shape.backgroundAndFill
 
         var extendPath: ExtendPath? = null
         var path: Path? = null
@@ -1831,7 +1838,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, 180f, 90f)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
         }
 
@@ -1841,8 +1848,8 @@ object BaseShapePathBuilder {
     private fun getLeftBracePath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = 0f
         var y = rect.height() * 0.5f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.width(), rect.height()) * 0.08333f
             if (values != null && values.size >= 2) {
                 if (values[0] != null) {
@@ -1868,7 +1875,7 @@ object BaseShapePathBuilder {
             x = (rect.height() - y) / 2
         }
 
-        val bgFill = shape.getBackgroundAndFill()
+        val bgFill = shape.backgroundAndFill
 
         var extendPath: ExtendPath? = null
         var path: Path? = null
@@ -1927,7 +1934,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, 180f, 90f)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
         }
 
@@ -1937,8 +1944,8 @@ object BaseShapePathBuilder {
     private fun getRightBracePath(shape: AutoShape, rect: Rect): MutableList<ExtendPath?> {
         var x = 0f
         var y = rect.height() * 0.5f
-        val values = shape.getAdjustData()
-        if (shape.isAutoShape07()) {
+        val values = shape.adjustData
+        if (shape.isAutoShape07) {
             x = min(rect.width(), rect.height()) * 0.08333f
             if (values != null && values.size >= 2) {
                 if (values[0] != null) {
@@ -1964,7 +1971,7 @@ object BaseShapePathBuilder {
             x = (rect.height() - y) / 2
         }
 
-        val bgFill = shape.getBackgroundAndFill()
+        val bgFill = shape.backgroundAndFill
 
         var extendPath: ExtendPath? = null
         var path: Path? = null
@@ -2023,7 +2030,7 @@ object BaseShapePathBuilder {
             path.arcTo(rectF, 0f, 90f)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
         }
         return paths

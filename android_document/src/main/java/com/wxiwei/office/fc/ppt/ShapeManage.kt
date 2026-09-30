@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           ShapeManage.java
  *  
  * 编译器:             android2.2
@@ -112,7 +119,7 @@ class ShapeManage {
         var addShape = packagePart.getPartName().getName().contains("/ppt/slides/")
         addShape = addShape || (!addShape && ReaderKit.instance().isUserDrawn(sp))
         RunAttr.instance().setSlide(addShape)
-        val name = sp.getName()
+        val name = sp.name
         if (name == "sp" || name == "cxnSp") {
             // auto shape
             return processAutoShapeAndTextShape(
@@ -160,7 +167,7 @@ class ShapeManage {
             var e = sp.element("nvGrpSpPr")
             var grpShapeID = 0
             if (e != null && (e.element("cNvPr").also { e = it }) != null) {
-                grpShapeID = e!!.attributeValue("id").toInt()
+                grpShapeID = e!!.attributeValue("id")!!.toInt()
             }
 
 
@@ -186,17 +193,17 @@ class ShapeManage {
                     rect.x - childRect!!.x,
                     rect.y - childRect!!.y
                 )
-                groupShape.setShapeID(grpShapeID)
+                groupShape.shapeID = grpShapeID
 
-                groupShape.setBounds(rect)
-                groupShape.setParent(parent)
+                groupShape.bounds = rect
+                groupShape.parent = parent
                 processGrpRotation(parent, groupShape, grpSpPr)
             }
 
             val childShapeLst: MutableList<Int> = ArrayList<Int>()
             var shapeId: Int?
             val it = sp.elementIterator()
-            while (it.hasNext()) {
+            while (it!!.hasNext()) {
                 shapeId = processShape(
                     control!!,
                     zipPackage!!,
@@ -207,7 +214,7 @@ class ShapeManage {
                     defaultStyle,
                     pgSlide,
                     slideType,
-                    (it.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
+                    (it!!.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
                     groupShape,
                     zoomXY!![0] * zoomX,
                     zoomXY[1] * zoomY
@@ -229,7 +236,7 @@ class ShapeManage {
             val choice = sp.element("Fallback")
             if (choice != null) {
                 val it = choice.elementIterator()
-                while (it.hasNext()) {
+                while (it!!.hasNext()) {
                     processShape(
                         control!!,
                         zipPackage!!,
@@ -240,7 +247,7 @@ class ShapeManage {
                         defaultStyle,
                         pgSlide,
                         slideType,
-                        (it.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
+                        (it!!.next() as com.wxiwei.office.fc.dom4j.Element?)!!,
                         parent,
                         zoomX,
                         zoomY
@@ -290,8 +297,8 @@ class ShapeManage {
         if (temp == null) {
             temp = sp.element("nvCxnSpPr")
         }
-        temp = temp.element("cNvPr")
-        id = temp.attributeValue("id").toInt()
+        temp = temp!!.element("cNvPr")
+        id = temp!!.attributeValue("id")!!.toInt()
 
         var type = ReaderKit.instance().getPlaceholderType(sp)
         val idx = ReaderKit.instance().getPlaceholderIdx(sp)
@@ -360,7 +367,7 @@ class ShapeManage {
                     parent.appendShapes(shape)
                 }
 
-                shape.setPlaceHolderID(placeHolderID)
+                shape.placeHolderID = placeHolderID
                 processGrpRotation(parent, shape, sp.element("spPr"))
             }
 
@@ -370,14 +377,16 @@ class ShapeManage {
             if (temp != null && addShape) {
                 val tb = TextBox()
                 // anchor 
-                tb.setBounds(rect)
-                tb.setPlaceHolderID(placeHolderID)
-                tb.setShapeID(id)
+                tb.bounds = rect
+                tb.placeHolderID = placeHolderID
+                tb.shapeID = id
+                // the text turns with its shape (xfrm rot)
+                ReaderKit.instance().processRotation(sp.element("spPr"), tb)
                 // 建立章节
                 val secElem = SectionElement()
                 // 开始Offset
                 secElem.setStartOffset(0)
-                tb.setElement(secElem)
+                tb.element = secElem
                 // 属性
                 val attr = secElem.getAttribute()
                 // 宽度
@@ -407,9 +416,9 @@ class ShapeManage {
                     secElem, sp.element("style"), temp, type, idx
                 )
                 secElem.setEndOffset(offset.toLong())
-                if (tb.getElement() != null && tb.getElement()
-                        .getText(null) != null && tb.getElement()
-                        .getText(null)!!.length > 0 && ("\n" != tb.getElement().getText(null))
+                if (tb.element != null && tb.element!!
+                        .getText(null) != null && tb.element!!
+                        .getText(null)!!.length > 0 && ("\n" != tb.element!!.getText(null))
                 ) {
                     processGrpRotation(parent, tb, sp.element("spPr"))
 
@@ -429,7 +438,7 @@ class ShapeManage {
                 if (wrap != null) {
                     // 文本框内自动换行
                     val value = wrap.attributeValue("wrap")
-                    tb.setWrapLine(value == null || "square".equals(value, ignoreCase = true))
+                    tb.isWrapLine = value == null || "square".equals(value, ignoreCase = true)
                 }
             }
         }
@@ -465,7 +474,7 @@ class ShapeManage {
         var e = sp.element("nvPicPr")
         var shapeID = 0
         if (e != null && (e.element("cNvPr").also { e = it }) != null) {
-            shapeID = e!!.attributeValue("id").toInt()
+            shapeID = e!!.attributeValue("id")!!.toInt()
         }
 
         var blipFill = sp.element("blipFill")
@@ -550,8 +559,8 @@ class ShapeManage {
                                     PictureEffectInfoFactory.getPictureEffectInfor(blipFill)
                                 )
                                 if (picShape != null) {
-                                    picShape.setBackgroundAndFill(fill)
-                                    picShape.setLine(line)
+                                    picShape.backgroundAndFill = fill
+                                    picShape.line = line
                                 }
                             }
                         }
@@ -584,11 +593,11 @@ class ShapeManage {
         var picShape: PictureShape? = null
         if (picPart != null) {
             picShape = PictureShape()
-            picShape.setPictureIndex(control.getSysKit().getPictureManage().addPicture(picPart))
-            picShape.setBounds(rect)
+            picShape.pictureIndex = control.getSysKit().getPictureManage().addPicture(picPart)
+            picShape.bounds = rect
             processGrpRotation(parent, picShape, spPr)
-            picShape.setShapeID(shapeID)
-            picShape.setPictureEffectInfor(effectInfor)
+            picShape.shapeID = shapeID
+            picShape.pictureEffectInfor = effectInfor
             if (parent == null) {
                 pgSlide.appendShapes(picShape)
             } else {
@@ -630,7 +639,7 @@ class ShapeManage {
         if (nvGraphicFramePr != null && (nvGraphicFramePr.element("cNvPr")
                 .also { nvGraphicFramePr = it }) != null
         ) {
-            shapeId = nvGraphicFramePr!!.attributeValue("id").toInt()
+            shapeId = nvGraphicFramePr!!.attributeValue("id")!!.toInt()
         }
 
         val xfrm = sp.element("xfrm")
@@ -710,9 +719,9 @@ class ShapeManage {
                                 )
                                 if (abstrChart != null) {
                                     val shape = AChart()
-                                    shape.setAChart(abstrChart)
-                                    shape.setBounds(rect)
-                                    shape.setShapeID(shapeId)
+                                    shape.aChart = abstrChart
+                                    shape.bounds = rect
+                                    shape.shapeID = shapeId
                                     pgSlide.appendShapes(shape)
                                 }
                             }
@@ -727,8 +736,8 @@ class ShapeManage {
                                     pgMaster, tbl, rect
                                 )
                                 if (table != null) {
-                                    table.setBounds(rect)
-                                    table.setShapeID(shapeId)
+                                    table.bounds = rect
+                                    table.shapeID = shapeId
                                     pgSlide.appendShapes(table)
                                 }
                             }
@@ -752,8 +761,8 @@ class ShapeManage {
      */
     private fun processGrpSpRect(parent: GroupShape?, rect: Rectangle): Rectangle {
         if (parent != null) {
-            rect.x += parent.getOffX()
-            rect.y += parent.getOffY()
+            rect.x += parent.offX
+            rect.y += parent.offY
         }
         return rect
     }
@@ -838,7 +847,7 @@ class ShapeManage {
                 }
 
                 if (fill != null) {
-                    fill.setSlideBackgroundFill(true)
+                    fill.isSlideBackgroundFill = true
                 }
 
                 return fill
@@ -846,8 +855,8 @@ class ShapeManage {
         }
 
         val spPr = sp.element("spPr")
-        val spName = sp.getName()
-        if (fill == null && spPr.element("noFill") == null && (spName != "cxnSp")) {
+        val spName = sp.name
+        if (fill == null && spPr!!.element("noFill") == null && (spName != "cxnSp")) {
             fill = BackgroundReader.instance()
                 .processBackground(control!!, zipPackage!!, packagePart!!, pgMaster, spPr)
             if (fill == null && shapeType != ShapeTypes.Arc && shapeType != ShapeTypes.BracketPair && shapeType != ShapeTypes.LeftBracket && shapeType != ShapeTypes.RightBracket && shapeType != ShapeTypes.BracePair && shapeType != ShapeTypes.LeftBrace && shapeType != ShapeTypes.RightBrace && shapeType != ShapeTypes.ArbitraryPolygon) {
@@ -858,7 +867,7 @@ class ShapeManage {
                     pgMaster,
                     sp.element("style")
                 )
-                if (fill != null && fill.getFillType() == BackgroundAndFill.FILL_SOLID && (fill.getForegroundColor() and 0xFFFFFF) == 0) {
+                if (fill != null && fill.fillType == BackgroundAndFill.FILL_SOLID && (fill.foregroundColor and 0xFFFFFF) == 0) {
                     fill = null
                 }
             }
@@ -877,8 +886,8 @@ class ShapeManage {
             if (shapeID != null) {
                 val shapes = layoutSlide!!.getShapes()
                 for (i in shapes.indices) {
-                    if (shapeID == shapes[i]!!.getShapeID() && shapes[i] is AutoShape) {
-                        fill = (shapes[i] as AutoShape).getBackgroundAndFill()
+                    if (shapeID == shapes[i]!!.shapeID && shapes[i] is AutoShape) {
+                        fill = (shapes[i] as AutoShape).backgroundAndFill
                         break
                     }
                 }
@@ -894,8 +903,8 @@ class ShapeManage {
                 shapeID = pgMaster.getTitleBodyID(shapeIDX)
                 if (shapeID != null) {
                     for (i in shapes.indices) {
-                        if (shapeID == shapes[i]!!.getShapeID() && shapes[i] is AutoShape) {
-                            fill = (shapes[i] as AutoShape).getBackgroundAndFill()
+                        if (shapeID == shapes[i]!!.shapeID && shapes[i] is AutoShape) {
+                            fill = (shapes[i] as AutoShape).backgroundAndFill
                             break
                         }
                     }
@@ -951,7 +960,7 @@ class ShapeManage {
             var values: Array<Float?>? = null
             var border = true
             val name = ReaderKit.instance().getPlaceholderName(sp)
-            val spName = sp.getName()
+            val spName = sp.name
             if (spName == "cxnSp") {
                 border = true
                 shapeType = ShapeTypes.StraightConnector1
@@ -980,7 +989,7 @@ class ShapeManage {
                         for (i in gds.indices) {
                             val gd = gds.get(i)
                             `val` = gd.attributeValue("fmla")
-                            `val` = `val`.substring(4)
+                            `val` = `val`!!.substring(4)
                             values[i] = `val`.toFloat() / 100000
                         }
                     }
@@ -1030,12 +1039,12 @@ class ShapeManage {
                     return shape
                 }
                 val lineShape = LineShape()
-                lineShape.setShapeType(shapeType)
-                lineShape.setBounds(rect)
-                lineShape.setShapeID(id)
-                lineShape.setHidden(hidden)
-                lineShape.setAdjustData(values)
-                lineShape.setLine(line)
+                lineShape.shapeType = shapeType
+                lineShape.bounds = rect
+                lineShape.shapeID = id
+                lineShape.isHidden = hidden
+                lineShape.adjustData = values
+                lineShape.line = line
 
                 if (ln != null) {
                     var temp = ln.element("headEnd")
@@ -1067,7 +1076,7 @@ class ShapeManage {
                 val arbitraryPolygonShape = ArbitraryPolygonShape()
                 var lineFill: BackgroundAndFill? = null
                 if (line != null) {
-                    lineFill = line.getBackgroundAndFill()
+                    lineFill = line.backgroundAndFill
                 }
                 ArbitraryPolygonShapePath.processArbitraryPolygonShape(
                     arbitraryPolygonShape,
@@ -1079,26 +1088,26 @@ class ShapeManage {
                     rect
                 )
 
-                arbitraryPolygonShape.setShapeType(shapeType)
-                arbitraryPolygonShape.setShapeID(id)
+                arbitraryPolygonShape.shapeType = shapeType
+                arbitraryPolygonShape.shapeID = id
                 processGrpRotation(parent, arbitraryPolygonShape, spPr)
-                arbitraryPolygonShape.setHidden(hidden)
-                arbitraryPolygonShape.setLine(line)
+                arbitraryPolygonShape.isHidden = hidden
+                arbitraryPolygonShape.line = line
 
                 return arbitraryPolygonShape.also { shape = it }
             } else if (fill != null || line != null) {
                 val autoShape = AutoShape(shapeType)
-                autoShape.setBounds(rect)
-                autoShape.setShapeID(id)
-                autoShape.setHidden(hidden)
+                autoShape.bounds = rect
+                autoShape.shapeID = id
+                autoShape.isHidden = hidden
 
                 if (fill != null) {
-                    autoShape.setBackgroundAndFill(fill)
+                    autoShape.backgroundAndFill = fill
                 }
                 if (line != null) {
-                    autoShape.setLine(line)
+                    autoShape.line = line
                 }
-                autoShape.setAdjustData(values)
+                autoShape.adjustData = values
 
                 return autoShape.also { shape = it }
             }
@@ -1110,15 +1119,15 @@ class ShapeManage {
         try {
             if (graphicData != null) {
                 val relIds = graphicData.element("relIds")
-                val cs = relIds.attributeValue("dm")
-                val id = cs.substring("rId".length).toInt()
+                val cs = relIds!!.attributeValue("dm")
+                val id = cs!!.substring("rId".length).toInt()
                 if (cs != null) {
                     val smartArt = pgslide.getSmartArt(cs)
                     if (smartArt != null) {
-                        smartArt.setBounds(rect)
+                        smartArt.bounds = rect
                         val shapes = smartArt.getShapes()
                         for (shape in shapes) {
-                            shape.setShapeID(id)
+                            shape.shapeID = id
                         }
 
                         pgslide.appendShapes(smartArt)

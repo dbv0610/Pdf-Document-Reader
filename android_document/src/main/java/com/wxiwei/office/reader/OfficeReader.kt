@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.reader
 
 import android.app.Activity
@@ -67,6 +74,12 @@ class OfficeReader(
      * May be called off the main thread.
      */
     var onAction: ((actionID: Int, obj: Any?) -> Boolean)? = null
+
+    /**
+     * Touch gestures on the document ([IMainFrame.ON_SINGLE_TAP_CONFIRMED], [IMainFrame.ON_LONG_PRESS]...),
+     * e.g. for an editor's selection; return true to consume. Main thread.
+     */
+    var onDocumentGesture: ((type: Byte, event: android.view.MotionEvent) -> Boolean)? = null
 
     /** The underlying control, for APIs this class does not wrap; null before [open] or after release. */
     var control: MainControl? = null
@@ -195,6 +208,9 @@ class OfficeReader(
         val current = state.value
         val previous = current.pageCount
         if (count == previous && thumbnailCount == current.thumbnailCount && !reloaded) return
+        // an edit lays the pages after it out again: the count drops, then grows back with the
+        // background layout. The last count stays until that layout is done
+        if (!reloaded && count < previous && (observedView as? Word)?.isLayoutFinished() == false) return
         // Word adds pages one at a time while it lays out in the background, noticed on every
         // frame: publishing each one makes the host rebuild its page list and redraw the last
         // thumbnail over and over while the user scrolls. Growth is published at most every
@@ -220,6 +236,12 @@ class OfficeReader(
             _thumbnailInvalidated.tryEmit(previous)
         }
         _state.update { it.copy(pageCount = count, thumbnailCount = thumbnailCount) }
+    }
+
+    /** Redraws the thumbnail of [pageNumber] (1-based) after the page content was edited. */
+    fun invalidateThumbnail(pageNumber: Int) {
+        thumbnails?.invalidate(pageNumber) ?: return
+        _thumbnailInvalidated.tryEmit(pageNumber)
     }
 
     private fun canDrawPages(): Boolean = when (val view = observedView) {
@@ -327,6 +349,12 @@ class OfficeReader(
     override fun completeLayout(info: LayoutInfo) {
         _state.update { it.copy(layout = info, pageNumber = info.pageNumber) }
         syncPageCount(reloaded = true)
+    }
+
+    override fun onEventMethod(v: View?, e1: android.view.MotionEvent?, e2: android.view.MotionEvent?,
+                               xValue: Float, yValue: Float, eventMethodType: Byte): Boolean {
+        val event = e1 ?: return false
+        return onDocumentGesture?.invoke(eventMethodType, event) ?: false
     }
 
     override fun isShowTXTEncodeDlg(): Boolean = config.showTxtEncodeDialog

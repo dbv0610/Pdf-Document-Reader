@@ -11,9 +11,9 @@
         android:layout_centerInParent="true"
         android:gravity="center"
         android:orientation="vertical"
-        app:bgColor="@color/white"
-        app:cornerRadius="@dimen/_16sdp"
-        app:strokeWidth="0.6dp">
+        app:uiBackgroundColor="@color/white"
+        app:uiCornerRadius="@dimen/_16sdp"
+        app:uiStrokeWidth="0.6dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -66,15 +66,15 @@
                 android:layout_height="@dimen/_25sdp"
                 android:layout_marginHorizontal="@dimen/_26sdp"
                 android:layout_marginTop="@dimen/_9sdp"
-                app:defaultRate="0"
-                app:emptyLastStarDrawable="@drawable/img_star_outline_last"
-                app:emptyStarDrawable="@drawable/img_star_outline"
-                app:filledLastStarDrawable="@drawable/img_star_filled"
-                app:filledStarDrawable="@drawable/img_star_filled"
+                app:uiRating="0"
+                app:uiRatingEmptyLastDrawable="@drawable/img_star_outline_last"
+                app:uiRatingEmptyDrawable="@drawable/img_star_outline"
+                app:uiRatingFilledLastDrawable="@drawable/img_star_filled"
+                app:uiRatingFilledDrawable="@drawable/img_star_filled"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tvRateSuggest"
-                app:maxRating="5" />
+                app:uiRatingMax="5" />
 
             <LinearLayout
                 android:id="@+id/llFocusItem"
@@ -125,17 +125,17 @@
                     android:textAlignment="center"
                     android:textColor="@color/white"
                     android:textSize="@dimen/_12sdp"
-                    app:bgGdOrientation="left_right"
-                    app:bgGradientEnd="@color/grdEnd"
-                    app:bgGradientStart="@color/grdStart"
-                    app:bgIsGradient="true"
-                    app:cornerRadius="@dimen/_20sdp"
+                    app:uiBackgroundGradientOrientation="left_right"
+                    app:uiBackgroundGradientEnd="@color/grdEnd"
+                    app:uiBackgroundGradientStart="@color/grdStart"
+                    app:uiBackgroundGradientEnabled="true"
+                    app:uiCornerRadius="@dimen/_20sdp"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintWidth_percent="0.75"
-                    app:tvColor="@color/white" />
+                    app:uiTextColor="@color/white" />
             </androidx.constraintlayout.widget.ConstraintLayout>
         </LinearLayout>
     </com.ui.baselib.widget.layout.UiLinearLayout>

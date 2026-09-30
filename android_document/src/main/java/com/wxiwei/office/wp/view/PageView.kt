@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          PageView.java
  *
  * 编译器:            android2.2
@@ -168,48 +175,48 @@ class PageView(elem: IElement) : AbstractView() {
             val bs = getControl()!!.getSysKit().getBordersManage().getBorders(pageBorderIndex)
             val old = paint.color
             if (bs != null) {
-                val left = bs.getLeftBorder()
-                val top = bs.getTopBorder()
-                val right = bs.getRightBorder()
-                val bottom = bs.getBottomBorder()
+                val left = bs.leftBorder
+                val top = bs.topBorder
+                val right = bs.rightBorder
+                val bottom = bs.bottomBorder
                 var sX: Int
                 var sY: Int
                 var eX: Int
                 var eY: Int
                 // left
                 if (left != null) {
-                    paint.color = left.getColor()
-                    sX = (zoom * left.getSpace()).toInt() + dx
+                    paint.color = left.color
+                    sX = (zoom * left.space).toInt() + dx
                     eX = sX
-                    sY = (if (top == null) 0 else (top.getSpace() * zoom).toInt()) + dy
-                    eY = (if (bottom == null) h.toFloat() else (h - bottom.getSpace() * zoom)).toInt() + dy
+                    sY = (if (top == null) 0 else (top.space * zoom).toInt()) + dy
+                    eY = (if (bottom == null) h.toFloat() else (h - bottom.space * zoom)).toInt() + dy
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
                 // top
                 if (top != null) {
-                    paint.color = top.getColor()
-                    sY = (zoom * top.getSpace()).toInt() + dy
+                    paint.color = top.color
+                    sY = (zoom * top.space).toInt() + dy
                     eY = sY
-                    sX = (if (left == null) 0 else (left.getSpace() * zoom).toInt()) + dx - 1
-                    eX = (if (right == null) w.toFloat() else (w - right.getSpace() * zoom)).toInt() + dx + 1
+                    sX = (if (left == null) 0 else (left.space * zoom).toInt()) + dx - 1
+                    eX = (if (right == null) w.toFloat() else (w - right.space * zoom)).toInt() + dx + 1
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
                 // right
                 if (right != null) {
-                    paint.color = right.getColor()
-                    sX = (w - right.getSpace() * zoom).toInt() + dx
+                    paint.color = right.color
+                    sX = (w - right.space * zoom).toInt() + dx
                     eX = sX
-                    sY = (if (top == null) 0f else (top.getSpace() * zoom)).toInt() + dy
-                    eY = (if (bottom == null) h.toFloat() else (h - bottom.getSpace() * zoom)).toInt() + dy
+                    sY = (if (top == null) 0f else (top.space * zoom)).toInt() + dy
+                    eY = (if (bottom == null) h.toFloat() else (h - bottom.space * zoom)).toInt() + dy
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
                 // bottom
                 if (bottom != null) {
-                    paint.color = bottom.getColor()
-                    sY = (h - zoom * top!!.getSpace()).toInt() + dy
+                    paint.color = bottom.color
+                    sY = (h - zoom * top!!.space).toInt() + dy
                     eY = sY
-                    sX = (if (left == null) 0 else (left.getSpace() * zoom).toInt()) + dx - 1
-                    eX = (if (right == null) w.toFloat() else (w - right.getSpace() * zoom)).toInt() + dx + 1
+                    sX = (if (left == null) 0 else (left.space * zoom).toInt()) + dx - 1
+                    eX = (if (right == null) w.toFloat() else (w - right.space * zoom)).toInt() + dx + 1
                     canvas.drawLine(sX.toFloat(), sY.toFloat(), eX.toFloat(), eY.toFloat(), paint)
                 }
             }
@@ -262,15 +269,20 @@ class PageView(elem: IElement) : AbstractView() {
         canvas.drawRect(right, bottom, right + bm, bottom + 1, paint)
     }
 
+    private fun zOrderOf(view: LeafView): Long =
+        ((view as? ShapeView)?.getShape() ?: (view as? ObjView)?.getShape())?.zOrder ?: 0L
+
     private fun drawShape(canvas: Canvas, originX: Int, originY: Int, zoom: Float, drawBehindDocShape: Boolean) {
         val shapeViews = shapeViews
         if (shapeViews == null || shapeViews.size == 0) {
             return
         }
 
+        // stacking order of the document, not the order the anchors appear in (stable sort)
+        val ordered = shapeViews.sortedBy { zOrderOf(it) }
         if (drawBehindDocShape) {
             //behind doc
-            for (shape in shapeViews) {
+            for (shape in ordered) {
                 if (shape is ShapeView && shape.isBehindDoc()) {
                     shape.drawForWrap(canvas, originX, originY, zoom)
                 } else if (shape is ObjView && shape.isBehindDoc()) {
@@ -278,7 +290,7 @@ class PageView(elem: IElement) : AbstractView() {
                 }
             }
         } else {
-            for (shape in shapeViews) {
+            for (shape in ordered) {
                 if (shape is ShapeView && !shape.isBehindDoc()) {
                     shape.drawForWrap(canvas, originX, originY, zoom)
                 } else if (shape is ObjView && !shape.isBehindDoc()) {
@@ -327,16 +339,8 @@ class PageView(elem: IElement) : AbstractView() {
         var vY = y
         vX -= getX()
         vY -= getY()
-        var view: IView? = getChildView()
-        if (view != null && vY > view.getY()) {
-            while (view != null) {
-                if (vY >= view.getY() && vY < view.getY() + view.getHeight()) {
-                    break
-                }
-                view = view.getNextView()
-            }
-        }
-        view = if (view == null) getChildView() else view
+        // a point between two paragraphs (their spacing) or below the last one belongs to the nearest
+        val view = WPViewKit.instance().nearestChild(getChildView(), vY) { it.getHeight() }
         if (view != null) {
             return view.viewToModel(vX, vY, isBack)
         }
@@ -388,6 +392,9 @@ class PageView(elem: IElement) : AbstractView() {
     /**
      * @return Returns the hasBreakTable.
      */
+    /** True when a table breaks at the bottom of this page and goes on on the next. */
+    var endsWithBrokenTable = false
+
     fun isHasBreakTable(): Boolean {
         return breakTable
     }
@@ -406,6 +413,9 @@ class PageView(elem: IElement) : AbstractView() {
     fun setPageBorder(border: Int) {
         this.pageBorderIndex = border
     }
+
+    /** The floating shapes and pictures drawn on this page, in anchor order. */
+    fun getShapeViews(): List<LeafView> = shapeViews?.toList() ?: emptyList()
 
     fun addShapeView(view: LeafView) {
         if (shapeViews == null) {

@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.system.beans.CalloutView
 
 import kotlin.jvm.JvmName
@@ -18,7 +25,7 @@ class CalloutManager(private var control: IControl?) {
     fun drawPath(canvas: Canvas, index: Int, zoom: Float) {
         canvas.scale(zoom, zoom)
         val pathList = mPathMap!![index]
-        val paint = PaintKit.instance().paint
+        val paint = PaintKit.instance().getPaint()
         if (pathList != null) {
             for (pathInfo in pathList) {
                 paint.strokeWidth = pathInfo.width.toFloat()

@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          SheetBar.java
  *
  * 编译器:            android2.2
@@ -178,6 +185,20 @@ class SheetBar : HorizontalScrollView, View.OnClickListener {
             }
 
             scrollTo(off, 0)
+        }
+    }
+
+    /** Builds the sheet buttons again (a sheet was added or removed), [focus] selected. */
+    fun refresh(focus: Int) {
+        sheetbarFrame?.let { removeView(it) }
+        currentSheet = null
+        init()
+        setFocusSheetButton(focus)
+        // the new buttons are measured on the next layout: bring the focused one into view then
+        post {
+            val frame = sheetbarFrame ?: return@post
+            val button = (0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it is SheetButton && it.getSheetIndex() == focus } ?: return@post
+            if (button.right > scrollX + width || button.left < scrollX) scrollTo(maxOf(0, button.right - width), 0)
         }
     }
 

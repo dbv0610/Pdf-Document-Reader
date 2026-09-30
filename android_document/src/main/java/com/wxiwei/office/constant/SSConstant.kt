@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          SSConstant.java
  *
  * 编译器:            android2.2
@@ -28,6 +35,11 @@ object SSConstant {
     const val HEADER_GRIDLINE_COLOR = -0x939393
     // 网格线颜色
     const val GRIDLINE_COLOR = -0x382e27
+
+    /** Grid line color of [sheet], transparent when the sheet hides grid lines (showGridLines="0"). */
+    @JvmStatic
+    fun gridlineColor(sheet: com.wxiwei.office.ss.model.baseModel.Sheet?): Int =
+        if (sheet == null || sheet.isShowGridLines()) GRIDLINE_COLOR else android.graphics.Color.TRANSPARENT
     // 标题的字号
     const val HEADER_TEXT_FONTSZIE = 16
     //active color

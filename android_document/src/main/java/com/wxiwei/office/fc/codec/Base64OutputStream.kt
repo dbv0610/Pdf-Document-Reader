@@ -1,0 +1,95 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.wxiwei.office.fc.codec
+
+import java.io.OutputStream
+
+/**
+ * Provides Base64 encoding and decoding in a streaming fashion (unlimited size). When encoding the default lineLength
+ * is 76 characters and the default lineEnding is CRLF, but these can be overridden by using the appropriate
+ * constructor.
+ * 
+ * 
+ * The default behaviour of the Base64OutputStream is to ENCODE, whereas the default behaviour of the Base64InputStream
+ * is to DECODE. But this behaviour can be overridden by using a different constructor.
+ * 
+ * 
+ * 
+ * This class implements section <cite>6.8. Base64 Content-Transfer-Encoding</cite> from RFC 2045 <cite>Multipurpose
+ * Internet Mail Extensions (MIME) Part One: Format of Internet Message Bodies</cite> by Freed and Borenstein.
+ * 
+ * 
+ * 
+ * Since this class operates directly on byte streams, and not character streams, it is hard-coded to only encode/decode
+ * character encodings which are compatible with the lower 127 ASCII chart (ISO-8859-1, Windows-1252, UTF-8, etc).
+ * 
+ * 
+ * @author Apache Software Foundation
+ * @version $Id: Base64OutputStream.java 1064424 2011-01-28 02:02:46Z sebb $
+ * @see [RFC 2045](http://www.ietf.org/rfc/rfc2045.txt)
+ * 
+ * @since 1.4
+ */
+class Base64OutputStream : BaseNCodecOutputStream {
+    /**
+     * Creates a Base64OutputStream such that all data written is either Base64-encoded or Base64-decoded to the
+     * original provided OutputStream.
+     * 
+     * @param out
+     * OutputStream to wrap.
+     * @param doEncode
+     * true if we should encode all data written to us, false if we should decode.
+     */
+    /**
+     * Creates a Base64OutputStream such that all data written is Base64-encoded to the original provided OutputStream.
+     * 
+     * @param out
+     * OutputStream to wrap.
+     */
+    @JvmOverloads
+    constructor(out: OutputStream?, doEncode: Boolean = true) : super(out, Base64(false), doEncode)
+
+    /**
+     * Creates a Base64OutputStream such that all data written is either Base64-encoded or Base64-decoded to the
+     * original provided OutputStream.
+     * 
+     * @param out
+     * OutputStream to wrap.
+     * @param doEncode
+     * true if we should encode all data written to us, false if we should decode.
+     * @param lineLength
+     * If doEncode is true, each line of encoded data will contain lineLength characters (rounded down to
+     * nearest multiple of 4). If lineLength <=0, the encoded data is not divided into lines. If doEncode is
+     * false, lineLength is ignored.
+     * @param lineSeparator
+     * If doEncode is true, each line of encoded data will be terminated with this byte sequence (e.g. \r\n).
+     * If lineLength <= 0, the lineSeparator is not used. If doEncode is false lineSeparator is ignored.
+     */
+    constructor(
+        out: OutputStream?,
+        doEncode: Boolean,
+        lineLength: Int,
+        lineSeparator: ByteArray?
+    ) : super(out, Base64(lineLength, lineSeparator), doEncode)
+}

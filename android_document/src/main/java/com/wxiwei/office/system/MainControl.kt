@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.system
 
 import android.app.Activity
@@ -51,6 +58,11 @@ open class MainControl(frameValue: IMainFrame?) : AbstractControl() {
 
     init {
         sysKit = SysKit(this)
+        try {
+            com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().setAssets(frameValue!!.getActivity().applicationContext.assets)
+        } catch (e: RuntimeException) {
+            // no activity yet: bundled fonts stay off, system fonts are used
+        }
         handler = Handler(Looper.getMainLooper()) { message ->
             if (isCancel) return@Handler true
             when (message.what) {
@@ -149,7 +161,7 @@ open class MainControl(frameValue: IMainFrame?) : AbstractControl() {
                 OpenTrace.e("view has zero size class=${view.javaClass.name} size=${view.width}x${view.height}")
             }
         }
-        PictureKit.instance().setDrawPictrue(true)
+        PictureKit.instance().isDrawPictrue = true
         // TODO(coroutine): preserve delayed hardware-layer and initialization work on the main dispatcher.
         handler.post {
             OpenTrace.mark("createApplication.initEvent.begin", start)

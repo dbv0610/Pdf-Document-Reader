@@ -6,9 +6,8 @@ import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
-import androidx.core.graphics.toColorInt
 import androidx.core.view.ViewCompat
-import com.ui.baselib.utils.isValidHexColor
+import com.ui.baselib.utils.parseHexColors
 import kotlin.math.min
 
 /**
@@ -161,9 +160,25 @@ class UiLayoutHelper(private val view: View) {
     private var strokePathCacheH = Float.NaN
     private var strokePathCacheInset = Float.NaN
     private var strokePathCacheRadii: FloatArray? = null
+    private val outlinePath = Path()
+
+    /** Matches the drawn shape, so elevation shadows follow per-corner radii too. */
     val roundOutlineProvider = object : ViewOutlineProvider() {
         override fun getOutline(view: View, outline: Outline) {
-            outline.setRoundRect(0, 0, view.width, view.height, cornerRadius)
+            if (!hasIndividualCorners() || view.width <= 0 || view.height <= 0) {
+                outline.setRoundRect(0, 0, view.width, view.height, cornerRadius)
+                return
+            }
+            val w = view.width.toFloat()
+            val h = view.height.toFloat()
+            outlinePath.reset()
+            outlinePath.addRoundRect(0f, 0f, w, h, getCornerRadii(w, h), Path.Direction.CW)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                outline.setPath(outlinePath)
+            } else {
+                @Suppress("DEPRECATION")
+                outline.setConvexPath(outlinePath)
+            }
         }
     }
 
@@ -211,8 +226,7 @@ class UiLayoutHelper(private val view: View) {
           gradientCenterXAttr: Int = -1,
           gradientCenterYAttr: Int = -1,
           gradientRadiusAttr: Int = -1,
-          gradientColorsAttr: Int = -1,
-          bgColorsAttr: Int = -1
+          gradientColorsAttr: Int = -1
     ) {
         val isGradientExplicit = ta.hasValue(isGradientAttr)
         isGradient = ta.getBoolean(isGradientAttr, false)
@@ -242,28 +256,14 @@ class UiLayoutHelper(private val view: View) {
             }
             if (!isGradientExplicit) isGradient = true
         }
-        // Priority 2: Read from bgGradientColors string (e.g., "#FF0000 #00FF00 #0000FF")
+        // A color list ("#F00 #0F0" or @array/) overrides start/center/end.
         if (gradientColorsAttr != -1) {
-            ta.getString(gradientColorsAttr)?.trim()?.split(COLOR_SPLIT_REGEX)
-                ?.mapNotNull { if (it.isValidHexColor()) it.toColorInt() else null }
-                ?.toIntArray()
+            ta.getColorList(gradientColorsAttr)
                 ?.takeIf { it.size >= 2 }
                 ?.let {
                     bgColors = it
                     if (!isGradientExplicit) isGradient = true
                 }
-        }
-        // Priority 3 (highest): Read from bgColors integer-array reference
-        if (bgColorsAttr != -1) {
-            val resId = ta.getResourceId(bgColorsAttr, 0)
-            if (resId != 0) {
-                view.resources.getIntArray(resId)
-                    .takeIf { it.size >= 2 }
-                    ?.let {
-                        bgColors = it
-                        if (!isGradientExplicit) isGradient = true
-                    }
-            }
         }
     }
 
@@ -277,7 +277,6 @@ class UiLayoutHelper(private val view: View) {
           orientationAttr: Int,
           optionAttr: Int,
           capAttr: Int = -1,
-          stColorsAttr: Int = -1,
           widthsAttr: Int = -1,
           gradientStartAttr: Int = -1,
           gradientCenterAttr: Int = -1,
@@ -309,19 +308,10 @@ class UiLayoutHelper(private val view: View) {
                 }
             }
         }
-        // Priority 2: Read from strokeGradient string (e.g., "#FF0000 #00FF00 #0000FF")
-        ta.getString(gradientAttr)?.trim()?.split(COLOR_SPLIT_REGEX)
-            ?.mapNotNull { if (it.isValidHexColor()) it.toColorInt() else null }
-            ?.toIntArray()
+        // A color list ("#F00 #0F0" or @array/) overrides start/center/end.
+        ta.getColorList(gradientAttr)
             ?.takeIf { it.size >= 2 }
             ?.let { stColors = it }
-        // Priority 3 (highest): Read from stColors integer-array reference
-        if (stColorsAttr != -1) {
-            val resId = ta.getResourceId(stColorsAttr, 0)
-            if (resId != 0) {
-                stColors = view.resources.getIntArray(resId)
-            }
-        }
     }
 
     private fun Int.toStrokeCap(): Paint.Cap = when (this) {
@@ -335,7 +325,7 @@ class UiLayoutHelper(private val view: View) {
      * Applies a compact "top left bottom right" per-side stroke width string (matching the
      * order of the [strokeWidths] fluent setter). One token sets all four sides uniformly.
      * Each token is a raw dimension: "2dp"/"2dip" (density-scaled), "2sp" (font-scaled),
-     * "2px" (as-is), or a bare number (treated as dp) — e.g. `app:strokeWidths="2dp 0 0 4dp"`.
+     * "2px" (as-is), or a bare number (treated as dp) — e.g. `app:uiStrokeWidths="2dp 0 0 4dp"`.
      * Unlike `@dimen/_Nsdp` attrs, these are plain literals with no resource-reference support.
      */
     private fun applyStrokeWidthsString(raw: String) {
@@ -368,15 +358,9 @@ class UiLayoutHelper(private val view: View) {
     fun readShadowAttrs(
           ta: TypedArray,
           colorAttr: Int,
-          radiusAttr: Int,
-          dxAttr: Int,
-          dyAttr: Int,
           elevationAttr: Int
     ) {
         compatShadowColor = ta.getColor(colorAttr, compatShadowColor)
-        shadowRadiusPx = ta.getDimension(radiusAttr, shadowRadiusPx)
-        shadowDxPx = ta.getDimension(dxAttr, shadowDxPx)
-        shadowDyPx = ta.getDimension(dyAttr, shadowDyPx)
         val elevPx = ta.getDimension(elevationAttr, dp(compatElevationDp))
         compatElevationDp = elevPx / view.resources.displayMetrics.density
     }
@@ -646,6 +630,32 @@ class UiLayoutHelper(private val view: View) {
     fun hasIndividualCorners(): Boolean =
         cornerTopLeft > 0f || cornerTopRight > 0f || cornerBottomLeft > 0f || cornerBottomRight > 0f
 
+    fun hasCorners(): Boolean = cornerRadius > 0f || hasIndividualCorners()
+
+    /**
+     * Runs [block] clipped to the rounded corners. A path clip is costly on every frame, so a
+     * square view (the common case) skips it.
+     */
+    inline fun drawClipped(canvas: Canvas, block: () -> Unit) {
+        if (!hasCorners()) {
+            block()
+            return
+        }
+        val save = canvas.save()
+        canvas.clipPath(getClipPath())
+        try {
+            block()
+        } finally {
+            canvas.restoreToCount(save)
+        }
+    }
+
+    private fun hasBackground(): Boolean {
+        val gradientColors = bgColors
+        return (isGradient && gradientColors != null && gradientColors.size >= 2) ||
+            Color.alpha(bgColor) != 0
+    }
+
     fun getCornerRadii(w: Float, h: Float): FloatArray {
         cornerRadiiCache.array?.let {
             if (cornerRadiiCache.matches(w, h, 0f, cornerTopLeft, cornerTopRight, cornerBottomLeft, cornerBottomRight, cornerRadius)) {
@@ -695,6 +705,7 @@ class UiLayoutHelper(private val view: View) {
     }
 
     fun drawBackground(canvas: Canvas, w: Float, h: Float) {
+        if (!hasBackground()) return
         val radii = getCornerRadii(w, h)
         val gradientColors = bgColors
         if (isGradient && gradientColors != null && gradientColors.size >= 2) {
@@ -783,11 +794,7 @@ class UiLayoutHelper(private val view: View) {
         strokePaint.strokeJoin = Paint.Join.ROUND
         strokePaint.strokeCap = this.strokeCap
         val hasValidDashEffect = isDashed && dashSpace > 0f
-        strokePaint.pathEffect = if (hasValidDashEffect) {
-            DashPathEffect(floatArrayOf(dashSpace, dashSpace), 0f)
-        } else {
-            null
-        }
+        strokePaint.pathEffect = if (hasValidDashEffect) obtainDashEffect() else null
         val gradientColors = stColors
         if (gradientColors != null && gradientColors.size >= 2) {
             // Paint.color also changes Paint.alpha. Preserve the gradient colors' own alpha
@@ -826,6 +833,17 @@ class UiLayoutHelper(private val view: View) {
             drawVariableStroke(
                 canvas, w, h, topWidth, leftWidth, bottomWidth, rightWidth
             )
+        }
+    }
+
+    private var dashEffectCache: DashPathEffect? = null
+    private var dashEffectCacheSpace = Float.NaN
+
+    private fun obtainDashEffect(): DashPathEffect {
+        dashEffectCache?.let { if (dashEffectCacheSpace == dashSpace) return it }
+        return DashPathEffect(floatArrayOf(dashSpace, dashSpace), 0f).also {
+            dashEffectCache = it
+            dashEffectCacheSpace = dashSpace
         }
     }
 
@@ -1122,6 +1140,7 @@ class UiLayoutHelper(private val view: View) {
         cornerTopRight = 0f
         cornerBottomLeft = 0f
         cornerBottomRight = 0f
+        updateClipPath(view.width, view.height)
         view.invalidateOutline()
         view.invalidate()
         return this
@@ -1134,6 +1153,7 @@ class UiLayoutHelper(private val view: View) {
         cornerTopRight = tr
         cornerBottomRight = br
         cornerBottomLeft = bl
+        updateClipPath(view.width, view.height)
         view.invalidateOutline()
         view.invalidate()
         return this
@@ -1220,4 +1240,17 @@ class UiLayoutHelper(private val view: View) {
         view.requestLayout()
         return this
     }
+}
+
+/**
+ * Reads a color list given either as a string ("#F00 #0F0 00F") or as an @array/ reference
+ * (for attrs with format="string|reference"). Null when the attr isn't set.
+ */
+internal fun TypedArray.getColorList(index: Int): IntArray? {
+    if (!hasValue(index)) return null
+    val resId = getResourceId(index, 0)
+    if (resId != 0 && resources.getResourceTypeName(resId) == "array") {
+        return resources.getIntArray(resId)
+    }
+    return getString(index)?.parseHexColors()
 }

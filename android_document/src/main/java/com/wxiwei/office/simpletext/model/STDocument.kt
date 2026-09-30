@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          STDocument.java
  *
  * 编译器:            android2.2
@@ -204,7 +211,8 @@ open class STDocument : IDocument {
             leaf = getLeaf(start)
             t = leaf!!.getText(null)
             eIndex = (if (end >= leaf.getEndOffset()) t!!.length.toLong() else end - leaf.getStartOffset()).toInt()
-            str = t!!.substring(0, eIndex)
+            // append (the conversion kept only the last run's text)
+            str += t!!.substring(0, eIndex)
             start = leaf.getEndOffset()
         }
         return str

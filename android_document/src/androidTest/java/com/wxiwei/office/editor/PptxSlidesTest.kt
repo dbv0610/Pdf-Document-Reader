@@ -1,0 +1,73 @@
+/*
+ * Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * Proprietary and confidential. Unauthorized copying, modification or distribution of this
+ * file, via any medium, is strictly prohibited without the written permission of dongb2002.
+ */
+package com.wxiwei.office.editor
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.wxiwei.office.editor.pptx.PptxEditor
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** Duplicate, move and delete slides; the saved deck opens with the right order. */
+@RunWith(AndroidJUnit4::class)
+class PptxSlidesTest {
+    private fun title(editor: PptxEditor, index: Int) = editor.listShapes(index).map { it.text }.firstOrNull { it.isNotBlank() } ?: ""
+
+    @Test
+    fun duplicateMoveDelete() {
+        val source = OpenDocument.copySample("sample.pptx", "slides_source.pptx")
+        val saved = OpenDocument.output("slides_saved.pptx")
+        val editor = PptxEditor(source)
+        assertEquals(10, editor.slideCount())
+        val slide2 = title(editor, 1)
+        val slide10 = title(editor, 9)
+        assertEquals(2, editor.duplicateSlide(1))
+        assertEquals(11, editor.slideCount())
+        assertEquals(slide2, title(editor, 2))
+        assertTrue(editor.lastError?.toString(), editor.moveSlide(10, 0))
+        assertEquals(slide10, title(editor, 0))
+        assertTrue(editor.lastError?.toString(), editor.deleteSlide(5))
+        assertEquals(10, editor.slideCount())
+        val result = editor.save(saved)
+        assertTrue(result.toString(), result is EditResult.Ok)
+
+        val reread = PptxEditor(saved)
+        assertEquals(10, reread.slideCount())
+        assertEquals(slide10, title(reread, 0))
+        assertEquals(slide2, title(reread, 2))
+        assertEquals(slide2, title(reread, 3))
+        OpenDocument.open(saved, { it.pageCount >= 10 }) { reader ->
+            assertEquals(10, reader.state.value.pageCount)
+        }
+    }
+
+    @Test
+    fun addBlankSlide() {
+        val source = OpenDocument.copySample("ppt2.pptx", "slides_blank_source.pptx")
+        val saved = OpenDocument.output("slides_blank_saved.pptx")
+        val editor = PptxEditor(source)
+        val count = editor.slideCount()
+        val first = title(editor, 0)
+        assertEquals(1, editor.addBlankSlide(0))
+        assertEquals(0, editor.addBlankSlide(-1))
+        assertEquals(count + 2, editor.slideCount())
+        assertTrue("new slides are empty", editor.listShapes(0).isEmpty() && editor.listShapes(2).isEmpty())
+        assertEquals(first, title(editor, 1))
+        // a box on the new slide
+        assertTrue(editor.addTextBox(2, com.wxiwei.office.editor.pptx.Rect(914400, 914400, 4572000, 914400), "Slide mới", 28f) > 0)
+        val result = editor.save(saved)
+        assertTrue(result.toString(), result is EditResult.Ok)
+        val reread = PptxEditor(saved)
+        assertEquals(count + 2, reread.slideCount())
+        assertEquals("Slide mới", title(reread, 2))
+        OpenDocument.open(saved, { it.pageCount >= count + 2 }) { reader ->
+            assertEquals(count + 2, reader.state.value.pageCount)
+        }
+    }
+}
+

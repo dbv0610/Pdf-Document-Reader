@@ -1,0 +1,48 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.wxiwei.office.fc.codec
+
+/**
+ * Defines common encoding methods for byte array encoders.
+ * 
+ * @author Apache Software Foundation
+ * @version $Id: BinaryEncoder.java 1075406 2011-02-28 16:18:26Z ggregory $
+ */
+interface BinaryEncoder : Encoder {
+    /**
+     * Encodes a byte array and return the encoded data
+     * as a byte array.
+     * 
+     * @param source Data to be encoded
+     * 
+     * @return A byte array containing the encoded data
+     * 
+     * @throws EncoderException thrown if the Encoder
+     * encounters a failure condition during the
+     * encoding process.
+     */
+    @Throws(EncoderException::class)
+    fun encode(source: ByteArray?): ByteArray?
+}
+

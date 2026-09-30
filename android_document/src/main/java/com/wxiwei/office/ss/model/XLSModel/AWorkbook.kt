@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          AWorkbook.java
  *
  * 编译器:            android2.2
@@ -123,24 +130,24 @@ open class AWorkbook : Workbook, com.wxiwei.office.fc.ss.usermodel.Workbook {
         //  it happens to be spelled.
         val stream = directory.createDocumentInputStream(workbookName)
 
-        var records: MutableList<Record>? = RecordFactory.createRecords(stream, iAbortListener)
-        val workbook = InternalWorkbook.createWorkbook(records, iAbortListener)
+        var records: MutableList<Record?>? = RecordFactory.createRecords(stream, iAbortListener)
+        val workbook = InternalWorkbook.createWorkbook(records as MutableList<Record>, iAbortListener)
         this.workbook = workbook
 
-        val recOffset = workbook.getNumRecords()
+        val recOffset = workbook.numRecords
 
         // shared string
-        val size = workbook.getSSTUniqueStringSize()
+        val size = workbook.sSTUniqueStringSize
         for (i in 0 until size) {
             addSharedString(i, workbook.getSSTString(i))
         }
 
         convertLabelRecords(records!!, recOffset)
 
-        isUsing1904DateWindowing = workbook.isUsing1904DateWindowing()
+        isUsing1904DateWindowing = workbook.isUsing1904DateWindowing
 
         //color
-        val palette = workbook.getCustomPalette()
+        val palette = workbook.customPalette
         var index = PaletteRecord.FIRST_COLOR_INDEX.toInt()
         addColor(index++, ColorUtil.rgb(0, 0, 0))
         var color = palette.getColor(index)
@@ -158,7 +165,7 @@ open class AWorkbook : Workbook, com.wxiwei.office.fc.ss.usermodel.Workbook {
             val internalSheet = InternalSheet.createSheet(rs, iAbortListener)
             val sheet = ASheet(this, internalSheet)
             sheet.setSheetName(workbook.getSheetName(sheetIndex))
-            if (internalSheet.isChartSheet()) {
+            if (internalSheet.isChartSheet) {
                 sheet.setSheetType(Sheet.TYPE_CHARTSHEET)
             }
             sheets!![sheetIndex++] = sheet
@@ -177,7 +184,7 @@ open class AWorkbook : Workbook, com.wxiwei.office.fc.ss.usermodel.Workbook {
         records = null
 
         names = ArrayList(INITIAL_CAPACITY)
-        for (i in 0 until workbook.getNumNames()) {
+        for (i in 0 until workbook.numNames) {
             val nameRecord = workbook.getNameRecord(i)
             val name = HSSFName(
                 this, nameRecord,
@@ -272,7 +279,7 @@ open class AWorkbook : Workbook, com.wxiwei.office.fc.ss.usermodel.Workbook {
         processFont(workbook)
 
         var styleIndex: Short = 0
-        val cellStyleCnt = workbook.getNumExFormats().toShort()
+        val cellStyleCnt = workbook.numExFormats.toShort()
         var format: ExtendedFormatRecord?
         while (styleIndex < cellStyleCnt) {
             format = workbook.getExFormatAt(styleIndex.toInt())
@@ -363,7 +370,7 @@ open class AWorkbook : Workbook, com.wxiwei.office.fc.ss.usermodel.Workbook {
      * process font fontIndex
      */
     private fun processFont(workbook: InternalWorkbook) {
-        var numFont = workbook.getNumberOfFontRecords()
+        var numFont = workbook.numberOfFontRecords
         if (numFont <= 4) {
             numFont -= 1
         }

@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           BulletNumberManage.java
  *  
  * 编译器:             android2.2
@@ -112,8 +119,7 @@ class BulletNumberManage {
                 return getText(lvl, convertedNumberFormat(temp.attributeValue("type")), startAt)
             } else if ((pPr.element("buBlip").also { temp = it }) != null) {
                 //bullet is picture, replace it by dot(用实心圆点代替)
-                if (temp!!.element("blip") != null && temp.element("blip")
-                        .attributeValue("embed") != null
+                if (temp!!.element("blip") != null && temp.element("blip")!!.attributeValue("embed") != null
                 ) {
                     var c = 'l'
                     c = converterNumberChar(c.code)

@@ -8,8 +8,8 @@
     android:background="@color/black"
     tools:context=".ui.home.document.office.SlideShowActivity">
 
-    <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/viewPager2"
+    <FrameLayout
+        android:id="@+id/stageHost"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
@@ -25,12 +25,13 @@
             android:layout_margin="@dimen/_12sdp"
             android:padding="@dimen/_3sdp"
             android:src="@drawable/ic_arrow_back"
-            app:bgColor="#80000000"
-            app:cornerRadius="@dimen/_200sdp"
+            app:uiBackgroundColor="#80000000"
+            app:uiCornerRadius="@dimen/_200sdp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <LinearLayout
+            android:id="@+id/bottomBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#80000000"
@@ -63,8 +64,8 @@
                 android:padding="@dimen/_3sdp"
                 android:rotation="180"
                 android:src="@drawable/ic_arrow_right"
-                app:bgColor="#80000000"
-                app:cornerRadius="@dimen/_200sdp"
+                app:uiBackgroundColor="#80000000"
+                app:uiCornerRadius="@dimen/_200sdp"
                 app:tint="@color/white" />
 
             <com.ui.baselib.widget.view.UiImageView
@@ -74,8 +75,8 @@
                 android:layout_margin="@dimen/_12sdp"
                 android:padding="@dimen/_3sdp"
                 android:src="@drawable/ic_arrow_right"
-                app:bgColor="#80000000"
-                app:cornerRadius="@dimen/_200sdp"
+                app:uiBackgroundColor="#80000000"
+                app:uiCornerRadius="@dimen/_200sdp"
                 app:tint="@color/white" />
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>

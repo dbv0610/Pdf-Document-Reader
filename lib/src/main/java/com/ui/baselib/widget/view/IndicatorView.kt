@@ -46,39 +46,39 @@ class IndicatorView(context: Context, attrs: AttributeSet) : View(context, attrs
             getContext().theme.obtainStyledAttributes(attrs, R.styleable.IndicatorView, 0, 0)
         try {
             indicatorCount =
-                typedArray.getInteger(R.styleable.IndicatorView_max_count, indicatorCount)
+                typedArray.getInteger(R.styleable.IndicatorView_uiIndicatorCount, indicatorCount)
             indicatorActive =
-                typedArray.getInteger(R.styleable.IndicatorView_active_count, indicatorActive)
+                typedArray.getInteger(R.styleable.IndicatorView_uiIndicatorSelected, indicatorActive)
             indicatorSpacing =
-                typedArray.getDimension(R.styleable.IndicatorView_spacing, indicatorSpacing)
+                typedArray.getDimension(R.styleable.IndicatorView_uiIndicatorSpacing, indicatorSpacing)
             indicatorRadius =
-                typedArray.getDimension(R.styleable.IndicatorView_radius, indicatorRadius)
+                typedArray.getDimension(R.styleable.IndicatorView_uiIndicatorRadius, indicatorRadius)
             indicatorScale =
-                typedArray.getInteger(R.styleable.IndicatorView_scale_value, indicatorScale)
+                typedArray.getInteger(R.styleable.IndicatorView_uiIndicatorStep, indicatorScale)
             paintDefault.color = typedArray.getColor(
-                R.styleable.IndicatorView_default_color,
+                R.styleable.IndicatorView_uiIndicatorColor,
                 ContextCompat.getColor(getContext(), R.color.color_indicator_default)
             )
             activeColor = typedArray.getColor(
-                R.styleable.IndicatorView_active_color,
+                R.styleable.IndicatorView_uiIndicatorSelectedColor,
                 activeColor
             )
             paintActive.color = activeColor
-            isGradient = typedArray.getBoolean(R.styleable.IndicatorView_indicator_gradient, false)
+            isGradient = typedArray.getBoolean(R.styleable.IndicatorView_uiIndicatorGradientEnabled, false)
             gradientStartColor = typedArray.getColor(
-                R.styleable.IndicatorView_indicator_gradient_start,
+                R.styleable.IndicatorView_uiIndicatorGradientStart,
                 gradientStartColor
             )
             gradientEndColor = typedArray.getColor(
-                R.styleable.IndicatorView_indicator_gradient_end,
+                R.styleable.IndicatorView_uiIndicatorGradientEnd,
                 gradientEndColor
             )
             gradientOrientation = typedArray.getInt(
-                R.styleable.IndicatorView_indicator_gradient_orientation,
+                R.styleable.IndicatorView_uiIndicatorGradientOrientation,
                 ORIENTATION_LEFT_RIGHT
             )
             indicatorActiveWidthRatio = typedArray.getFloat(
-                R.styleable.IndicatorView_active_width_ratio,
+                R.styleable.IndicatorView_uiIndicatorSelectedWidthRatio,
                 indicatorActiveWidthRatio
             )
         } finally {
@@ -192,6 +192,32 @@ class IndicatorView(context: Context, attrs: AttributeSet) : View(context, attrs
     }
 
     @SuppressLint("DrawAllocation")
+    // The active dot's gradient only changes with its position/colors, not every frame.
+    private var activeShader: Shader? = null
+    private val activeShaderRect = RectF()
+    private var activeShaderStart = 0
+    private var activeShaderEnd = 0
+    private var activeShaderWidth = Float.NaN
+    private var activeShaderOrientation = -1
+
+    private fun obtainActiveShader(rect: RectF): Shader {
+        activeShader?.let {
+            if (activeShaderRect == rect && activeShaderStart == gradientStartColor &&
+                activeShaderEnd == gradientEndColor && activeShaderWidth == indicatorWidth &&
+                activeShaderOrientation == gradientOrientation
+            ) return it
+        }
+        val (x0, y0, x1, y1) = getGradientCoordinates(rect.centerX(), rect.centerY(), indicatorWidth / 2)
+        return LinearGradient(x0, y0, x1, y1, gradientStartColor, gradientEndColor, Shader.TileMode.CLAMP).also {
+            activeShader = it
+            activeShaderRect.set(rect)
+            activeShaderStart = gradientStartColor
+            activeShaderEnd = gradientEndColor
+            activeShaderWidth = indicatorWidth
+            activeShaderOrientation = gradientOrientation
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
@@ -204,18 +230,7 @@ class IndicatorView(context: Context, attrs: AttributeSet) : View(context, attrs
                 val isActive = i == activeIndex
                 val paint = if (isActive) {
                     if (isGradient) {
-                        val centerX = rect.centerX()
-                        val centerY = rect.centerY()
-                        val radius = indicatorWidth / 2
-                        val (x0, y0, x1, y1) = getGradientCoordinates(centerX, centerY, radius)
-                        paintActive.apply {
-                            shader = LinearGradient(
-                                x0, y0, x1, y1,
-                                gradientStartColor,
-                                gradientEndColor,
-                                Shader.TileMode.CLAMP
-                            )
-                        }
+                        paintActive.apply { shader = obtainActiveShader(rect) }
                     } else {
                         paintActive.apply {
                             shader = null

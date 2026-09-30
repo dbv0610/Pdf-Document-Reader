@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          	ShapeView.java
  *
  * 编译器:            android2.2
@@ -47,6 +54,8 @@ class ShapeView : LeafView {
     // 字符属性
     private var wpShape: WPAutoShape? = null
 
+    fun getShape(): WPAutoShape? = wpShape
+
     //
     private val rect = Rect()
 
@@ -75,34 +84,32 @@ class ShapeView : LeafView {
         val wpShape = wpShape!!
 
         isInlineFlag = docAttr!!.rootType.toInt() == WPViewConstant.NORMAL_ROOT.toInt()
-                || (wpShape.getWrap().toInt() != WPAutoShape.WRAP_TOP.toInt() && wpShape.getWrap().toInt() != WPAutoShape.WRAP_BOTTOM.toInt())
+                || (wpShape.wrap.toInt() != com.wxiwei.office.common.shape.WPAbstractShape.WRAP_TOP.toInt() && wpShape.wrap.toInt() != com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM.toInt())
 
-        if (wpShape.isWatermarkShape()) {
+        // Floating shapes of headers/footers stay floating (drawn on every page by PageView);
+        // laying them out inline made a page-sized header background push the body off the page.
+        if (wpShape.isWatermarkShape) {
             isInlineFlag = false
-        } else if (WPViewKit.instance().getArea(start + 1) == WPModelConstant.HEADER
-            || WPViewKit.instance().getArea(start + 1) == WPModelConstant.FOOTER
-        ) {
-            isInlineFlag = true
         }
 
         var width = 0
-        val r = wpShape.getBounds()
+        val r = requireNotNull(wpShape.bounds)
         if (isInlineFlag) {
             width = r.width
             setSize(width, r.height)
         } else {
-            if (wpShape.isWatermarkShape()) {
+            if (wpShape.isWatermarkShape) {
                 val watermark = wpShape as WatermarkShape
 
                 paint = Paint()
                 val paint = paint!!
                 paint.isAntiAlias = true
-                val str = watermark.getWatermartString()
+                val str = watermark.watermartString
                 if (str != null && str.length > 0) {
                     val len = str.length
                     val span = pageAttr!!.pageWidth - pageAttr.leftMargin - pageAttr.rightMargin
 
-                    if (watermark.isAutoFontSize()) {
+                    if (watermark.isAutoFontSize) {
                         var fontSize = span / len
                         paint.textSize = fontSize.toFloat()
                         paint.getTextBounds(str, 0, len, rect)
@@ -123,14 +130,14 @@ class ShapeView : LeafView {
                             }
                         }
 
-                        watermark.setFontSize(preFontSize)
+                        watermark.fontSize = preFontSize
 
                         paint.textSize = preFontSize.toFloat()
                     } else {
-                        paint.textSize = watermark.getFontSize().toFloat()
+                        paint.textSize = watermark.fontSize.toFloat()
                     }
 
-                    paint.color = watermark.getFontColor()
+                    paint.color = watermark.fontColor
                     val alpha = Math.round(255 * watermark.getOpacity())
                     paint.alpha = alpha
 
@@ -148,9 +155,16 @@ class ShapeView : LeafView {
         if (!keepOne && width > w) {
             breakType = WPViewConstant.BREAK_LIMIT.toInt()
         } else {
-            layoutTextbox(wpShape, wpShape.getGroupShape())
+            layoutTextbox(wpShape, wpShape.groupShape)
         }
         return breakType
+    }
+
+    /** The laid-out text of text box [index] when this shape is that text box (not in a group), else null. */
+    fun textRoot(index: Int): WPSTRoot? {
+        val shape = wpShape ?: return null
+        if (shape.groupShape != null || shape.elementIndex != index) return null
+        return roots?.get(index)
     }
 
     private fun layoutTextbox(wpShape: WPAutoShape?, wpGroup: WPGroupShape?) {
@@ -158,23 +172,23 @@ class ShapeView : LeafView {
             val shapes = wpGroup.getShapes()
             if (shapes != null) {
                 for (shape in shapes) {
-                    if (shape.getType().toInt() == AbstractShape.SHAPE_GROUP.toInt()) {
+                    if (shape.type.toInt() == AbstractShape.SHAPE_GROUP.toInt()) {
                         layoutTextbox(null, shape as WPGroupShape)
                     } else if (shape is WPAutoShape) {
-                        layoutTextbox(shape, shape.getGroupShape())
+                        layoutTextbox(shape, shape.groupShape)
                     }
                 }
             }
-        } else if (wpShape!!.getElementIndex() >= 0) {
-            val stRoot = WPSTRoot(getContainer()!!, getDocument()!!, wpShape.getElementIndex())
-            stRoot.setWrapLine(wpShape.isTextWrapLine())
+        } else if (wpShape!!.elementIndex >= 0) {
+            val stRoot = WPSTRoot(getContainer()!!, getDocument()!!, wpShape.elementIndex)
+            stRoot.setWrapLine(wpShape.isTextWrapLine)
             stRoot.doLayout()
             stRoot.setParentView(this)
-            roots!!.put(wpShape.getElementIndex(), stRoot)
+            roots!!.put(wpShape.elementIndex, stRoot)
 
-            if (!wpShape.isTextWrapLine()) {
+            if (!wpShape.isTextWrapLine) {
                 //not text wrap line, adjust textbox width
-                wpShape.getBounds().width = stRoot.getAdjustTextboxWidth()
+                wpShape.bounds!!.width = stRoot.getAdjustTextboxWidth()
             }
         }
     }
@@ -183,7 +197,7 @@ class ShapeView : LeafView {
      * 得到指定结束位置字符宽度
      */
     override fun getTextWidth(): Float {
-        return (if (isInlineFlag) wpShape!!.getBounds().width else 0).toFloat()
+        return (if (isInlineFlag) wpShape!!.bounds!!.width else 0).toFloat()
     }
 
     @Synchronized
@@ -192,23 +206,23 @@ class ShapeView : LeafView {
             val wpShape = wpShape!!
             val dX = (x * zoom).toInt() + originX
             val dY = (y * zoom).toInt() + originY
-            val r = wpShape.getBounds()
+            val r = requireNotNull(wpShape.bounds)
             rect.set(dX, dY, (dX + r.width * zoom).toInt(), (dY + r.height * zoom).toInt())
-            if (wpShape.getGroupShape() != null) {
-                drawGroupShape(canvas, wpShape.getGroupShape(), rect, zoom)
-            } else if (wpShape.getType().toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()) {
+            if (wpShape.groupShape != null) {
+                drawGroupShape(canvas, wpShape.groupShape, rect, zoom)
+            } else if (wpShape.type.toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()) {
                 AutoShapeKit.instance().drawAutoShape(canvas, getControl(), getPageNumber(), wpShape, rect, zoom)
-            } else if (wpShape.getType().toInt() == AbstractShape.SHAPE_CHART.toInt()) {
-                val chart = (wpShape as WPChartShape).getAChart()
-                chart.setZoomRate(zoom)
-                chart.draw(canvas, getControl(), rect.left, rect.top, rect.width(), rect.height(), PaintKit.instance().getPaint())
+            } else if (wpShape.type.toInt() == AbstractShape.SHAPE_CHART.toInt()) {
+                val chart = (wpShape as WPChartShape).aChart
+                chart?.setZoomRate(zoom)
+                chart?.draw(canvas, getControl(), rect.left, rect.top, rect.width(), rect.height(), PaintKit.instance().getPaint())
             }
 
-            if (roots!!.size > 0 && wpShape.getElementIndex() >= 0) {
-                val root = roots!!.get(wpShape.getElementIndex())
+            if (roots!!.size > 0 && wpShape.elementIndex >= 0) {
+                val root = roots!!.get(wpShape.elementIndex)
                 if (root != null) {
                     canvas.save()
-                    canvas.rotate(wpShape.getRotation(), rect.exactCenterX(), rect.exactCenterY())
+                    canvas.rotate(wpShape.rotation, rect.exactCenterX(), rect.exactCenterY())
                     root.draw(canvas, dX, dY, zoom)
                     canvas.restore()
                 }
@@ -222,19 +236,19 @@ class ShapeView : LeafView {
             val wpShape = wpShape!!
             val dX = (x * zoom).toInt() + originX
             val dY = (y * zoom).toInt() + originY
-            val r = wpShape.getBounds()
-            if (wpShape.isWatermarkShape()) {
+            val r = requireNotNull(wpShape.bounds)
+            if (wpShape.isWatermarkShape) {
                 // center in horizontal and vertical, and relative to margin
-                val str = (wpShape as WatermarkShape).getWatermartString()
+                val str = (wpShape as WatermarkShape).watermartString
                 if (str != null && str.length > 0) {
                     canvas.save()
 
                     val paint = paint!!
                     val pageAttr = pageAttr!!
                     val oldSize = paint.textSize
-                    paint.textSize = wpShape.getFontSize() * zoom
+                    paint.textSize = wpShape.fontSize * zoom
 
-                    val angle = wpShape.getRotation()
+                    val angle = wpShape.rotation
 
                     val mainBodyWidth = pageAttr.pageWidth - pageAttr.leftMargin - pageAttr.rightMargin
                     val mainBodyHeight = pageAttr.pageHeight - pageAttr.topMargin - pageAttr.bottomMargin
@@ -254,23 +268,23 @@ class ShapeView : LeafView {
                 }
             } else {
                 rect.set(dX, dY, (dX + r.width * zoom).toInt(), (dY + r.height * zoom).toInt())
-                if (wpShape.getGroupShape() != null) {
+                if (wpShape.groupShape != null) {
                     //maybe samrt art background, so need to be drawed
                     AutoShapeKit.instance().drawAutoShape(canvas, getControl(), getPageNumber(), wpShape, rect, zoom)
-                    drawGroupShape(canvas, wpShape.getGroupShape(), rect, zoom)
-                } else if (wpShape.getType().toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()) {
+                    drawGroupShape(canvas, wpShape.groupShape, rect, zoom)
+                } else if (wpShape.type.toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()) {
                     AutoShapeKit.instance().drawAutoShape(canvas, getControl(), getPageNumber(), wpShape, rect, zoom)
-                } else if (wpShape.getType().toInt() == AbstractShape.SHAPE_CHART.toInt()) {
-                    val chart = (wpShape as WPChartShape).getAChart()
-                    chart.setZoomRate(zoom)
-                    chart.draw(canvas, getControl(), rect.left, rect.top, rect.width(), rect.height(), PaintKit.instance().getPaint())
+                } else if (wpShape.type.toInt() == AbstractShape.SHAPE_CHART.toInt()) {
+                    val chart = (wpShape as WPChartShape).aChart
+                    chart?.setZoomRate(zoom)
+                    chart?.draw(canvas, getControl(), rect.left, rect.top, rect.width(), rect.height(), PaintKit.instance().getPaint())
                 }
             }
-            if (roots!!.size > 0 && wpShape.getElementIndex() >= 0) {
-                val root = roots!!.get(wpShape.getElementIndex())
+            if (roots!!.size > 0 && wpShape.elementIndex >= 0) {
+                val root = roots!!.get(wpShape.elementIndex)
                 if (root != null) {
                     canvas.save()
-                    canvas.rotate(wpShape.getRotation(), rect.exactCenterX(), rect.exactCenterY())
+                    canvas.rotate(wpShape.rotation, rect.exactCenterX(), rect.exactCenterY())
                     root.draw(canvas, dX, dY, zoom)
                     canvas.restore()
                 }
@@ -288,11 +302,11 @@ class ShapeView : LeafView {
                 var r: Rectangle
                 for (shapeItem in shapes) {
                     var shape: IShape? = shapeItem
-                    if (shape!!.getType().toInt() == AbstractShape.SHAPE_GROUP.toInt()) {
+                    if (shape!!.type.toInt() == AbstractShape.SHAPE_GROUP.toInt()) {
                         drawGroupShape(canvas, shape as GroupShape, rect, zoom)
-                    } else if (shape.getType().toInt() == AbstractShape.SHAPE_PICTURE.toInt()) {
+                    } else if (shape.type.toInt() == AbstractShape.SHAPE_PICTURE.toInt()) {
                         gsRect.setEmpty()
-                        r = shape.getBounds()
+                        r = shape.bounds ?: continue
                         gsRect.left = rect.left + (r.x * zoom).toInt()
                         gsRect.top = rect.top + (r.y * zoom).toInt()
                         gsRect.right = (gsRect.left + r.width * zoom).toInt()
@@ -306,20 +320,20 @@ class ShapeView : LeafView {
                                 shape as PictureShape, rect, zoom)
 
                             PictureKit.instance().drawPicture(canvas, getControl(), getPageNumber(), shape.getPicture(getControl()),
-                                gsRect.left.toFloat(), gsRect.top.toFloat(), zoom, shape.getBounds().width * zoom, shape.getBounds().height * zoom,
-                                shape.getPictureEffectInfor())
+                                gsRect.left.toFloat(), gsRect.top.toFloat(), zoom, shape.bounds!!.width * zoom, shape.bounds!!.height * zoom,
+                                shape.pictureEffectInfor)
                         }
-                    } else if (shape.getType().toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()) {
+                    } else if (shape.type.toInt() == AbstractShape.SHAPE_AUTOSHAPE.toInt()) {
                         gsRect.setEmpty()
-                        r = shape.getBounds()
+                        r = shape.bounds ?: continue
                         gsRect.left = rect.left + (r.x * zoom).toInt()
                         gsRect.top = rect.top + (r.y * zoom).toInt()
                         gsRect.right = (gsRect.left + r.width * zoom).toInt()
                         gsRect.bottom = (gsRect.top + r.height * zoom).toInt()
                         AutoShapeKit.instance().drawAutoShape(canvas, getControl(), getPageNumber(), shape as AutoShape, gsRect, zoom)
                         val txShape = shape as WPAutoShape
-                        if (txShape.getElementIndex() >= 0) {
-                            val root = roots!!.get(txShape.getElementIndex())
+                        if (txShape.elementIndex >= 0) {
+                            val root = roots!!.get(txShape.elementIndex)
                             if (root != null) {
                                 root.draw(canvas, gsRect.left, gsRect.top, zoom)
                             }
@@ -347,15 +361,15 @@ class ShapeView : LeafView {
      * 得到基线
      */
     override fun getBaseline(): Int {
-        return if (isInlineFlag) wpShape!!.getBounds().getHeight().toInt() else 0
+        return if (isInlineFlag) wpShape!!.bounds!!.getHeight().toInt() else 0
     }
 
     fun isBehindDoc(): Boolean {
         val wpShape = wpShape!!
-        return if (wpShape.getGroupShape() != null) {
-            wpShape.getGroupShape().getWrapType().toInt() == WPAutoShape.WRAP_BOTTOM.toInt()
+        return if (wpShape.groupShape != null) {
+            wpShape.groupShape!!.wrapType.toInt() == com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM.toInt()
         } else {
-            wpShape.getWrap().toInt() == WPAutoShape.WRAP_BOTTOM.toInt()
+            wpShape.wrap.toInt() == com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM.toInt()
         }
     }
 

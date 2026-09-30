@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          ExcelView.java
  *
  * 编译器:            android2.2
@@ -93,6 +100,11 @@ class ExcelView(context: Context, filepath: String?, book: Workbook?, control: I
         } else {
             control!!.getMainFrame().doActionEvent(EventConstant.SS_CHANGE_SHEET, sheetIndex)
         }
+    }
+
+    /** The sheet tabs again, after a sheet was added or removed; [focus] is shown. */
+    fun refreshSheetBar(focus: Int) {
+        if (isDefaultSheetBar) bar?.refresh(focus)
     }
 
     /**

@@ -9,8 +9,8 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="@dimen/_16sdp"
-        app:bgColor="@color/white"
-        app:cornerRadius="@dimen/_18sdp">
+        app:uiBackgroundColor="@color/white"
+        app:uiCornerRadius="@dimen/_18sdp">
 
         <TextView
             android:id="@+id/tvTitle"
@@ -44,12 +44,12 @@
             android:paddingStart="@dimen/_12sdp"
             android:paddingEnd="@dimen/_36sdp"
             android:textSize="@dimen/_12sdp"
-            app:bgColor="@color/white"
-            app:cornerRadius="@dimen/_8sdp"
-            app:edtColor="@color/text_primary"
-            app:edtColorHint="#A0A7B0"
-            app:stColor="#D1D5DB"
-            app:strokeWidth="@dimen/_1sdp" />
+            app:uiBackgroundColor="@color/white"
+            app:uiCornerRadius="@dimen/_8sdp"
+            app:uiTextColor="@color/text_primary"
+            app:uiTextColorHint="#A0A7B0"
+            app:uiStrokeColor="#D1D5DB"
+            app:uiStrokeWidth="@dimen/_1sdp" />
 
             <ImageView
                 android:id="@+id/icClear"
@@ -74,7 +74,7 @@
             android:paddingVertical="@dimen/_12sdp"
             android:text="@string/file_action_save"
             android:textSize="@dimen/_13sdp"
-            app:bgGdOrientation="top_bottom" />
+            app:uiBackgroundGradientOrientation="top_bottom" />
 
         <com.ui.baselib.widget.view.UiTextView
             android:id="@+id/btnCancel"
@@ -87,8 +87,8 @@
             android:textAlignment="center"
             android:textColor="@color/primary"
             android:textSize="@dimen/_13sdp"
-            app:cornerRadius="@dimen/_100sdp"
-            app:stColor="@color/primary"
-            app:strokeWidth="@dimen/_1sdp" />
+            app:uiCornerRadius="@dimen/_100sdp"
+            app:uiStrokeColor="@color/primary"
+            app:uiStrokeWidth="@dimen/_1sdp" />
     </com.ui.baselib.widget.layout.UiLinearLayout>
 </FrameLayout>

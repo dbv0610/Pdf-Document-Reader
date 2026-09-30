@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          CellBorder.java
  *
  * 编译器:            android2.2
@@ -43,6 +50,12 @@ class CellBorder {
     }
 
     fun getBottomBorder(): BorderStyle? = bottom
+
+    /** A copy with its own sides: styles share one CellBorder per borderId of the file. */
+    fun copy(): CellBorder = CellBorder().also { c ->
+        fun dup(b: BorderStyle?) = b?.let { BorderStyle(it.getStyle(), it.getColor()) }
+        c.left = dup(left); c.top = dup(top); c.right = dup(right); c.bottom = dup(bottom)
+    }
 
     /**
      *

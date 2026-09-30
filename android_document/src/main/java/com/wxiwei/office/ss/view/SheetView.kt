@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          SheetView.java
  *
  * 编译器:            android2.2
@@ -92,6 +99,15 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
     private var extentSignature = Long.MIN_VALUE
     private var extentWidth = 0f
     private var extentHeight = 0f
+    // what updateDataExtent has scanned of extentSheet, to go on from there
+    private var extentLastRowNum = -1
+    private var extentReading = false
+    private var extentShapes = 0
+    private var scannedRow = -1
+    private var dataLastCol = 0 // exclusive
+    private var dataLastRow = -1
+    private var heightRow = -1 // rowsHeight holds the heights of rows 0..heightRow
+    private var rowsHeight = 0f
     // empty columns/rows allowed past the data; grows while the user keeps pushing at the edge
     private var extraColumns = EXTRA_EMPTY
     private var extraRows = EXTRA_EMPTY
@@ -284,9 +300,10 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
      * The caller supplies a canvas clipped in local sheet pixels (including headers).
      * The monitor is released after this single region; no page bitmap is allocated.
      */
-    fun drawRegion(sheet: Sheet, left: Int, top: Int, zoomValue: Float, canvas: Canvas) {
+    /** Draws [sheet] from ([left], [top]) (sheet pixels at zoom 1) at [zoomValue]; without [headers] the cells start at the canvas origin. */
+    fun drawRegion(sheet: Sheet, left: Int, top: Int, zoomValue: Float, canvas: Canvas, headers: Boolean = true) {
         synchronized(this) {
-            val b = PictureKit.instance().isDrawPictrue()
+            val b = PictureKit.instance().isDrawPictrue
             val oldScrollX = sheet.getScrollX()
             val oldScrollY = sheet.getScrollY()
             val oldZoom = sheet.getZoom()
@@ -294,7 +311,7 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             val oldClipRect = clipRect
             val canvasSave = canvas.save()
             try {
-                PictureKit.instance().setDrawPictrue(true)
+                PictureKit.instance().isDrawPictrue = true
                 this.sheet = sheet
                 scrollX = left.toFloat()
                 scrollY = top.toFloat()
@@ -303,7 +320,7 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
                 // Force a fresh position: the incremental UI cache uses a different
                 // partial-row convention. Full update preserves the clipped first row.
                 updateScroller(sheet, left, top, true)
-                drawThumbnail(canvas)
+                drawThumbnail(canvas, headers)
             } finally {
                 sheet.setScroll(oldScrollX, oldScrollY)
                 sheet.setZoom(oldZoom)
@@ -315,17 +332,19 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
                     setZoom(oldSheet.getZoom(), true)
                     updateScroller(oldSheet, Math.round(scrollX), Math.round(scrollY), true)
                 } finally {
-                    PictureKit.instance().setDrawPictrue(b)
+                    PictureKit.instance().isDrawPictrue = b
                     canvas.restoreToCount(canvasSave)
                 }
             }
         }
     }
 
-    private fun drawThumbnail(canvas: Canvas) {
+    private fun drawThumbnail(canvas: Canvas, headers: Boolean = true) {
         val rowHeader = this.rowHeader!!
         val columnHeader = this.columnHeader!!
         spreadsheet!!.startDrawing()
+        // the headers fall outside the canvas: the cells start at its origin
+        if (!headers) canvas.translate(-rowHeader.getRowHeaderWidth().toFloat(), -columnHeader.getColumnHeaderHeight().toFloat())
 
         clipRect = canvas.clipBounds
         val clipRect = this.clipRect!!
@@ -343,8 +362,10 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
         }
 
         //draw rowheader and columnheader
-        rowHeader.draw(canvas, rightPos, zoom)
-        columnHeader.draw(canvas, bottomPos, zoom)
+        if (headers) {
+            rowHeader.draw(canvas, rightPos, zoom)
+            columnHeader.draw(canvas, bottomPos, zoom)
+        }
 
         val rowWidth = rowHeader.getRowHeaderWidth().toFloat()
         val columnHeight = columnHeader.getColumnHeaderHeight().toFloat()
@@ -357,10 +378,133 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
         //table format
         tableFormatView!!.draw(canvas)
 
+        if (headers) drawAutoFilterButtons(canvas)
+
         //draw shape(textbox, pict, chart)
         shapeView!!.draw(canvas)
 
         canvas.restore()
+    }
+
+    /**
+     * The drop-down button in each header cell of an AutoFilter range, like Excel; a column that
+     * is being filtered gets a blue button.
+     */
+    private fun drawAutoFilterButtons(canvas: Canvas) {
+        val sheet = this.sheet ?: return
+        val filters = sheet.getAutoFilters()
+        if (filters.isEmpty()) return
+        val clip = canvas.clipBounds
+        val paint = PaintKit.instance().getPaint()
+        val oldColor = paint.color
+        val oldStyle = paint.style
+        val path = android.graphics.Path()
+        for (filter in filters) {
+            val row = filter.range.getFirstRow()
+            for (col in filter.range.getFirstColumn()..filter.range.getLastColumn()) {
+                if (sheet.isColumnHidden(col)) continue
+                val cell = ModelUtil.instance().getCellAnchor(this, row, col)
+                if (cell.right < clip.left || cell.left > clip.right || cell.bottom < clip.top || cell.top > clip.bottom) continue
+                val size = minOf(cell.height() - 2, cell.width() - 2, 17 * zoom)
+                if (size < 6) continue
+                val r = android.graphics.RectF(cell.right - size - 1, cell.bottom - size - 1, cell.right - 1, cell.bottom - 1)
+                val filtered = col in filter.filtered
+                paint.style = android.graphics.Paint.Style.FILL
+                paint.color = if (filtered) 0xFFDDEBF7.toInt() else 0xFFF2F2F2.toInt()
+                canvas.drawRect(r, paint)
+                paint.style = android.graphics.Paint.Style.STROKE
+                paint.color = 0xFF8C8C8C.toInt()
+                canvas.drawRect(r, paint)
+                // arrow
+                paint.style = android.graphics.Paint.Style.FILL
+                paint.color = if (filtered) 0xFF2F5597.toInt() else 0xFF404040.toInt()
+                val cx = r.centerX()
+                val cy = r.centerY()
+                val w = size * 0.28f
+                path.reset()
+                path.moveTo(cx - w, cy - w / 2)
+                path.lineTo(cx + w, cy - w / 2)
+                path.lineTo(cx, cy + w / 2)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+        }
+        paint.color = oldColor
+        paint.style = oldStyle
+    }
+
+    /**
+     * Draws the frozen rows (at scroll y 0), frozen columns (at scroll x 0) and their corner over
+     * the scrolled area. The scrolled area shows sheet position scroll + screen offset everywhere,
+     * so the part hidden under a band is exactly what Excel scrolls away behind the frozen rows.
+     */
+    private fun drawFrozenPanes(canvas: Canvas, rightPos: Int, bottomPos: Int) {
+        val sheet = this.sheet ?: return
+        val pane = sheet.getFrozenPane() ?: return
+        val rows = pane.getHorizontalSplitTopRow().toInt()
+        val cols = pane.getVerticalSplitLeftColumn().toInt()
+        var frozenH = 0f
+        for (r in 0 until rows) {
+            val row = sheet.getRow(r)
+            frozenH += when {
+                row == null -> sheet.getDefaultRowHeight().toFloat()
+                row.isZeroHeight() -> 0f
+                else -> row.getRowPixelHeight()
+            }
+        }
+        var frozenW = 0f
+        for (c in 0 until cols) {
+            if (!sheet.isColumnHidden(c)) frozenW += sheet.getColumnPixelWidth(c)
+        }
+        val left = getRowHeaderWidth().toFloat()
+        val top = getColumnHeaderHeight().toFloat()
+        val bandBottom = top + frozenH * zoom
+        val bandRight = left + frozenW * zoom
+        // nothing frozen is visible unless the sheet is scrolled past it
+        val sx = scrollX
+        val sy = scrollY
+        if (frozenH > 0 && sy > 0) {
+            drawPaneBand(canvas, sx, 0f, 0f, top, rightPos.toFloat(), minOf(bandBottom, bottomPos.toFloat()))
+        }
+        if (frozenW > 0 && sx > 0) {
+            drawPaneBand(canvas, 0f, sy, left, 0f, minOf(bandRight, rightPos.toFloat()), bottomPos.toFloat())
+        }
+        if (frozenH > 0 && frozenW > 0 && (sx > 0 || sy > 0)) {
+            drawPaneBand(canvas, 0f, 0f, left, top, minOf(bandRight, rightPos.toFloat()), minOf(bandBottom, bottomPos.toFloat()))
+        }
+        // Excel's thin line under/right of the frozen panes
+        val paint = PaintKit.instance().getPaint()
+        val oldColor = paint.color
+        paint.color = SSConstant.HEADER_GRIDLINE_COLOR
+        if (frozenH > 0) canvas.drawRect(left, bandBottom - 1, rightPos.toFloat(), bandBottom, paint)
+        if (frozenW > 0) canvas.drawRect(bandRight - 1, top, bandRight, bottomPos.toFloat(), paint)
+        paint.color = oldColor
+    }
+
+    /** Draws headers and cells as if scrolled to ([x], [y]), clipped to the given screen rect. */
+    private fun drawPaneBand(canvas: Canvas, x: Float, y: Float, l: Float, t: Float, r: Float, b: Float) {
+        if (r <= l || b <= t) return
+        val sheet = this.sheet!!
+        val oldX = scrollX
+        val oldY = scrollY
+        val oldClip = clipRect
+        val save = canvas.save()
+        try {
+            canvas.clipRect(l, t, r, b)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            scrollX = x
+            scrollY = y
+            updateScroller(sheet, Math.round(x), Math.round(y), true)
+            drawThumbnail(canvas)
+            // the selected cell shows in the frozen panes too
+            drawActiveCellBorder(canvas)
+        } finally {
+            canvas.restoreToCount(save)
+            scrollX = oldX
+            scrollY = oldY
+            clipRect = oldClip
+            updateScroller(sheet, Math.round(oldX), Math.round(oldY), true)
+        }
     }
 
     fun getMaxScrollY(): Int {
@@ -402,6 +546,54 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
         }
     }
 
+    /**
+     * The used part of [sheet] for printing: the right edges of its columns and the bottom edges
+     * of its rows (sheet pixels at zoom 1), up to the last cell that shows something or shape.
+     * Empty when nothing is used.
+     */
+    fun printEdges(sheet: Sheet): Pair<FloatArray, FloatArray> {
+        var lastCol = -1
+        var lastRow = -1
+        for (r in sheet.getFirstRowNum()..sheet.getLastRowNum()) {
+            val row = sheet.getRow(r) ?: continue
+            for (cell in row.cellCollection()) {
+                if (!isVisibleCell(cell)) continue
+                lastCol = maxOf(lastCol, cell.getColNumber())
+                lastRow = r
+            }
+        }
+        var shapesRight = 0f
+        var shapesBottom = 0f
+        for (shape in sheet.getShapes()) {
+            val b = shape.bounds ?: continue
+            shapesRight = maxOf(shapesRight, (b.x + b.width).toFloat())
+            shapesBottom = maxOf(shapesBottom, (b.y + b.height).toFloat())
+        }
+        val xs = ArrayList<Float>()
+        var x = 0f
+        var c = 0
+        while ((c <= lastCol || x < shapesRight) && c < MAXCOLUMN_07) {
+            if (!sheet.isColumnHidden(c)) x += sheet.getColumnPixelWidth(c)
+            xs += x
+            c++
+        }
+        val ys = ArrayList<Float>()
+        var y = 0f
+        var r = 0
+        while ((r <= lastRow || y < shapesBottom) && r < MAXROW_07) {
+            val row = sheet.getRow(r)
+            y += when {
+                row == null -> sheet.getDefaultRowHeight().toFloat()
+                row.isZeroHeight() -> 0f
+                else -> row.getRowPixelHeight()
+            }
+            ys += y
+            r++
+        }
+        if (xs.isEmpty() || ys.isEmpty()) return FloatArray(0) to FloatArray(0)
+        return xs.toFloatArray() to ys.toFloatArray()
+    }
+
     /** Sheet units of the data area (used cells and shapes) plus [EXTRA_EMPTY] rows and columns. */
     private fun updateDataExtent(sheet: Sheet) {
         if (sheet !== extentSheet) {
@@ -415,43 +607,67 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             signature = signature * 31 + v
         }
         if (sheet === extentSheet && signature == extentSignature) return
+        val lastRowNum = sheet.getLastRowNum()
+        // What was scanned stays right while the sheet is still being read (rows only arrive at
+        // the end, and editing waits for the end) or when only the selection or the empty margin
+        // changed; anything else (an edit that adds or removes rows, shapes) rescans from the top.
+        // Scanning a sheet of a million cells on every touch while it loads froze scrolling.
+        val grows = sheet === extentSheet && lastRowNum >= extentLastRowNum &&
+            (extentReading || (lastRowNum == extentLastRowNum && sheet.getShapeCount() == extentShapes))
+        if (!grows) {
+            scannedRow = sheet.getFirstRowNum() - 1
+            dataLastCol = 0
+            dataLastRow = -1
+            heightRow = -1
+            rowsHeight = 0f
+        }
         extentSheet = sheet
         extentSignature = signature
-        var lastCol = 0 // exclusive
-        var lastRow = -1
+        extentLastRowNum = lastRowNum
+        extentReading = !sheet.isAccomplished()
+        extentShapes = sheet.getShapeCount()
         // only cells that show something: Row.getLastCol also counts blank cells that merely carry a
         // style, which stretches the scroll range far into empty columns
-        for (r in sheet.getFirstRowNum()..sheet.getLastRowNum()) {
+        for (r in maxOf(scannedRow + 1, sheet.getFirstRowNum())..lastRowNum) {
             val row = sheet.getRow(r) ?: continue
             for (cell in row.cellCollection()) {
                 if (!isVisibleCell(cell)) continue
-                lastCol = maxOf(lastCol, cell.getColNumber() + 1)
-                lastRow = r
+                dataLastCol = maxOf(dataLastCol, cell.getColNumber() + 1)
+                dataLastRow = r
             }
         }
+        scannedRow = maxOf(scannedRow, lastRowNum)
         // the selected cell is always reachable, even outside the data
-        lastCol = maxOf(lastCol, sheet.getActiveCellColumn() + 1)
-        lastRow = maxOf(lastRow, sheet.getActiveCellRow())
+        val lastCol = maxOf(dataLastCol, sheet.getActiveCellColumn() + 1) // exclusive
+        val lastRow = maxOf(dataLastRow, sheet.getActiveCellRow())
         var width = 0f
         for (c in 0 until lastCol + extraColumns) {
             if (!sheet.isColumnHidden(c)) width += sheet.getColumnPixelWidth(c)
         }
-        var height = 0f
-        for (r in 0..lastRow + extraRows) {
-            val row = sheet.getRow(r)
-            height += when {
-                row == null -> sheet.getDefaultRowHeight().toFloat()
-                row.isZeroHeight() -> 0f
-                else -> row.getRowPixelHeight()
-            }
-        }
+        // rows up to the last one read keep their height: add only the new ones to the sum
+        val target = lastRow + extraRows
+        val known = minOf(target, lastRowNum)
+        if (known < heightRow) { heightRow = -1; rowsHeight = 0f }
+        for (r in heightRow + 1..known) rowsHeight += rowHeightOf(sheet, r)
+        heightRow = maxOf(heightRow, known)
+        var height = rowsHeight
+        for (r in known + 1..target) height += rowHeightOf(sheet, r)
         for (shape in sheet.getShapes()) {
-            val b = shape.getBounds() ?: continue
+            val b = shape.bounds ?: continue
             width = maxOf(width, (b.x + b.width).toFloat())
             height = maxOf(height, (b.y + b.height).toFloat())
         }
         extentWidth = width
         extentHeight = height
+    }
+
+    private fun rowHeightOf(sheet: Sheet, r: Int): Float {
+        val row = sheet.getRow(r)
+        return when {
+            row == null -> sheet.getDefaultRowHeight().toFloat()
+            row.isZeroHeight() -> 0f
+            else -> row.getRowPixelHeight()
+        }
     }
 
     /**
@@ -585,6 +801,8 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
                 tableElapsed = android.os.SystemClock.uptimeMillis() - tableStarted
             }
 
+            drawAutoFilterButtons(canvas)
+
             //draw active cell border
             drawActiveCellBorder(canvas)
 
@@ -593,6 +811,7 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
                 //draw shape(textbox, pict, chart)
                 val shapeStarted = android.os.SystemClock.uptimeMillis()
                 shapeView!!.draw(canvas)
+                drawSelectedShape(canvas)
                 val shapeElapsed = android.os.SystemClock.uptimeMillis() - shapeStarted
                 if (rowsElapsed >= 8 || tableElapsed >= 8 || shapeElapsed >= 8) {
                     OpenTrace.d(
@@ -605,6 +824,10 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
             //draw moving header line when changing header height or width
             drawMovingHeaderLine(canvas)
             canvas.restore()
+
+            // frozen rows/columns stay in place over the scrolled cells and floating shapes, with
+            // their own row numbers and column letters (outside the cell clip, which leaves out the headers)
+            drawFrozenPanes(canvas, rightPos, bottomPos)
         }
         if (tilesPending) spreadsheet?.postInvalidateOnAnimation()
         val elapsed = android.os.SystemClock.uptimeMillis() - drawStarted
@@ -626,12 +849,105 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
      */
     private fun drawActiveCellBorder(canvas: Canvas) {
         val sheet = this.sheet!!
+        sheet.getSelectionRange()?.let { return drawSelectionRange(canvas, it) }
         val area = ModelUtil.instance().getCellAnchor(
             this,
             sheet.getActiveCellRow(), sheet.getActiveCellColumn()
         )
 
         cellView!!.drawActiveCellBorder(canvas, area, sheet.getActiveCellType())
+    }
+
+    /** A selected range (edit mode): tinted, framed, with a handle at its bottom-right corner to drag. */
+    private fun drawSelectionRange(canvas: Canvas, range: CellRangeAddress) {
+        val r = RectF(ModelUtil.instance().getCellRangeAddressAnchor(this, range))
+        canvas.save()
+        canvas.clipRect(getRowHeaderWidth().toFloat(), getColumnHeaderHeight().toFloat(), canvas.clipBounds.right.toFloat(), canvas.clipBounds.bottom.toFloat())
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = SELECTION_TINT
+        canvas.drawRect(r, paint)
+        paint.color = SELECTION_COLOR
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        canvas.drawRect(r, paint)
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(r.right, r.bottom, SELECTION_HANDLE_RADIUS, paint)
+        paint.color = Color.WHITE
+        canvas.drawCircle(r.right, r.bottom, SELECTION_HANDLE_RADIUS * 0.5f, paint)
+        canvas.restore()
+    }
+
+    /** Where the handle of the selected range (or of the active cell) is, in view pixels. */
+    fun selectionHandle(): android.graphics.PointF {
+        val sheet = this.sheet!!
+        val range = sheet.getSelectionRange()
+        val r = if (range != null) ModelUtil.instance().getCellRangeAddressAnchor(this, range)
+            else ModelUtil.instance().getCellAnchor(this, sheet.getActiveCellRow(), sheet.getActiveCellColumn())
+        return android.graphics.PointF(r.right, r.bottom)
+    }
+
+    /** A picture selected in edit mode (framed, a handle at each corner), or null. */
+    var selectedShape: com.wxiwei.office.common.shape.IShape? = null
+
+    /** Where [shape] is drawn, in view pixels; null when it has no place. */
+    fun shapeRect(shape: com.wxiwei.office.common.shape.IShape): RectF? {
+        val b = shape.bounds ?: return null
+        val left = getRowHeaderWidth() + (b.x - scrollX) * zoom
+        val top = getColumnHeaderHeight() + (b.y - scrollY) * zoom
+        return RectF(left, top, left + b.width * zoom, top + b.height * zoom)
+    }
+
+    /** The topmost shape of the shown sheet under a point of the view that [accept] takes, or null. */
+    fun shapeAt(x: Float, y: Float, accept: (com.wxiwei.office.common.shape.IShape) -> Boolean): com.wxiwei.office.common.shape.IShape? {
+        if (getColumnHeaderHeight() > y || getRowHeaderWidth() > x) return null
+        return sheet?.getShapes()?.lastOrNull { accept(it) && shapeRect(it)?.contains(x, y) == true }
+    }
+
+    private fun drawSelectedShape(canvas: Canvas) {
+        val shape = selectedShape ?: return
+        if (sheet?.getShapes()?.contains(shape) != true) return
+        val r = shapeRect(shape) ?: return
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = SELECTION_COLOR
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        canvas.drawRect(r, paint)
+        for (x in floatArrayOf(r.left, r.right)) for (y in floatArrayOf(r.top, r.bottom)) {
+            paint.style = Paint.Style.FILL
+            paint.color = SELECTION_COLOR
+            canvas.drawCircle(x, y, SELECTION_HANDLE_RADIUS, paint)
+            paint.color = Color.WHITE
+            canvas.drawCircle(x, y, SELECTION_HANDLE_RADIUS * 0.5f, paint)
+        }
+    }
+
+    /** The cell under a point of the view (row, column), or null on the headers. */
+    fun cellAt(x: Float, y: Float): IntArray? {
+        if (getColumnHeaderHeight() > y || getRowHeaderWidth() > x) return null
+        val sheet = this.sheet!!
+        val info = getMinRowAndColumnInformation()!!
+        val zoom = getZoom()
+        val old = sheet.getWorkbook()!!.isBefore07Version()
+        val maxRows = if (old) com.wxiwei.office.ss.model.baseModel.Workbook.MAXROW_03 else com.wxiwei.office.ss.model.baseModel.Workbook.MAXROW_07
+        val maxColumns = if (old) com.wxiwei.office.ss.model.baseModel.Workbook.MAXCOLUMN_03 else com.wxiwei.office.ss.model.baseModel.Workbook.MAXCOLUMN_07
+        var top = getColumnHeaderHeight().toFloat()
+        var rowIndex = info.getMinRowIndex()
+        while (top <= y && rowIndex <= maxRows) {
+            val row = sheet.getRow(rowIndex)
+            if (row != null && row.isZeroHeight()) { rowIndex++; continue }
+            val height = Math.round((row?.getRowPixelHeight() ?: sheet.getDefaultRowHeight().toFloat()) * zoom).toFloat()
+            top += if (rowIndex == info.getMinRowIndex() && !info.isRowAllVisible()) Math.round(info.getVisibleRowHeight() * zoom).toFloat() else height
+            rowIndex++
+        }
+        var left = getRowHeaderWidth().toFloat()
+        var columnIndex = info.getMinColumnIndex()
+        while (left <= x && columnIndex <= maxColumns) {
+            if (sheet.isColumnHidden(columnIndex)) { columnIndex++; continue }
+            val width = Math.round(sheet.getColumnPixelWidth(columnIndex) * zoom).toFloat()
+            left += if (columnIndex == info.getMinColumnIndex() && !info.isColumnAllVisible()) Math.round(info.getVisibleColumnWidth() * zoom).toFloat() else width
+            columnIndex++
+        }
+        return intArrayOf(rowIndex - 1, columnIndex - 1)
     }
 
     /**
@@ -1688,6 +2004,10 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
     }
 
     companion object {
+        private const val SELECTION_COLOR = 0xFF1A73E8.toInt()
+        private const val SELECTION_TINT = 0x331A73E8
+        const val SELECTION_HANDLE_RADIUS = 14f
+
         // empty rows/columns kept after the last data cell so the grid does not end abruptly
         private const val EXTRA_EMPTY = 2
         private const val GROW_STEP = 5

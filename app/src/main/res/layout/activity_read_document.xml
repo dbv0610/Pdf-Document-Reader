@@ -60,6 +60,15 @@
                     tools:ignore="RtlSymmetry" />
 
                 <ImageView
+                    android:id="@+id/icEditApp"
+                    android:layout_width="@dimen/_22sdp"
+                    android:layout_height="@dimen/_22sdp"
+                    android:contentDescription="@string/edit_document"
+                    android:padding="@dimen/_2sdp"
+                    android:src="@drawable/ic_app_edit"
+                    android:visibility="gone" />
+
+                <ImageView
                     android:id="@+id/icSearchApp"
                     android:layout_width="@dimen/_22sdp"
                     android:layout_height="@dimen/_22sdp"
@@ -114,9 +123,9 @@
                 android:orientation="horizontal"
                 android:paddingHorizontal="@dimen/_12sdp"
                 android:paddingVertical="@dimen/_8sdp"
-                app:cornerRadius="@dimen/_8sdp"
-                app:stColor="@color/color_d0d0d0"
-                app:strokeWidth="@dimen/_1sdp">
+                app:uiCornerRadius="@dimen/_8sdp"
+                app:uiStrokeColor="@color/color_d0d0d0"
+                app:uiStrokeWidth="@dimen/_1sdp">
 
                 <ImageView
                     android:id="@+id/icSearchData"
@@ -161,6 +170,7 @@
             android:id="@+id/officeViewer"
             android:layout_width="0dp"
             android:layout_height="0dp"
+            app:odv_wordPageSpacing="16dp"
             android:layout_marginTop="@dimen/_6sdp"
             android:background="@color/background_secondary"
             app:odv_pageBackground="@color/reader_viewer_bg"
@@ -168,6 +178,15 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <FrameLayout
+            android:id="@+id/editPanel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
 
         <com.ui.baselib.widget.view.UiTextView
             android:id="@+id/txtNumberPage"
@@ -180,7 +199,7 @@
             android:text="0/0"
             android:textColor="@color/white"
             android:textSize="@dimen/_10sdp"
-            app:bgColor="#80000000"
+            app:uiBackgroundColor="#80000000"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             tools:ignore="HardcodedText" />

@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.xls.Reader
 
 import android.util.Log
@@ -26,7 +33,9 @@ class SheetReader private constructor() {
         private val reader = SheetReader()
         private const val STREAMING_THRESHOLD = 1500
         private const val INITIAL_ROW_BATCH = 240
-        private const val CONTINUATION_ROW_BATCH = 480
+        // After the first screen, bigger batches: each pause between batches costs ~50 ms (the
+        // reader yields so the view can draw), which made up half the load time of a 150k-row sheet.
+        private const val CONTINUATION_ROW_BATCH = 2000
         @JvmStatic fun instance(): SheetReader = reader
     }
 
@@ -77,7 +86,8 @@ class SheetReader private constructor() {
             scan@ while (true) {
                 when (parser.next()) {
                     XmlPullParser.END_DOCUMENT -> break@scan
-                    XmlPullParser.START_TAG -> if (parser.name == "dimension") {
+                    // <dimension> comes before <sheetData>: without one, do not read the whole sheet looking for it
+                    XmlPullParser.START_TAG -> if (parser.name == "sheetData") break@scan else if (parser.name == "dimension") {
                         val ref = parser.attr("ref") ?: break@scan
                         val parts = ref.replace("$", "").split(":")
                         val first = cellAddress(parts.first()) ?: break@scan
@@ -122,16 +132,20 @@ class SheetReader private constructor() {
         val parser = streamParser ?: return true
         val input = streamInput ?: return true
         var row: Row? = null
-        var cellRef: String? = null
+        var inCell = false
+        var cellRow = 0
+        var cellCol = 0
+        var nextCol = 0 // a <c> without r="" is the one after the cell before it
         var cellType: String? = null
         var cellStyle = 0
-        var cellText: StringBuilder? = null
+        val cellText = StringBuilder()
         var formulaText: StringBuilder? = null
         var formulaSi: String? = null
         var captureFormula = false
         var captureValue = false
         var rowHasMetadata = false
         var rowsRead = 0
+        var sheetAutoFilter: Sheet.AutoFilter? = null
 
         try {
             while (true) {
@@ -142,6 +156,22 @@ class SheetReader private constructor() {
                         return true
                     }
                     XmlPullParser.START_TAG -> when (parser.name) {
+                        "sheetView" -> {
+                            if (parser.attr("showGridLines").let { it == "0" || it == "false" }) target.setShowGridLines(false)
+                        }
+                        // sheet-level AutoFilter (tables carry their own, read by TableReader)
+                        "autoFilter" -> {
+                            val range = parser.attr("ref")?.split(":")?.takeIf { it.size == 2 }?.let {
+                                CellRangeAddress(
+                                    ReferenceUtil.instance().getRowIndex(it[0]), ReferenceUtil.instance().getColumnIndex(it[0]),
+                                    ReferenceUtil.instance().getRowIndex(it[1]), ReferenceUtil.instance().getColumnIndex(it[1])
+                                )
+                            }
+                            sheetAutoFilter = range?.let { Sheet.AutoFilter(it).also { f -> target.addAutoFilter(f) } }
+                        }
+                        "filterColumn" -> sheetAutoFilter?.let { f ->
+                            parser.attr("colId")?.toIntOrNull()?.let { f.filtered.add(f.range.getFirstColumn() + it) }
+                        }
                         "sheetFormatPr" -> {
                             parser.attr("defaultRowHeight")?.let {
                                 defaultRowHeight = (it.toDouble() * MainConstant.POINT_TO_PIXEL).toInt()
@@ -166,10 +196,13 @@ class SheetReader private constructor() {
                             val pane = PaneInformation()
                             parser.attr("xSplit")?.toIntOrNull()?.let { pane.setVerticalSplitLeftColumn(it.toShort()) }
                             parser.attr("ySplit")?.toIntOrNull()?.let { pane.setHorizontalSplitTopRow(it.toShort()) }
+                            // only frozen panes stay put; a plain split scrolls like the rest
+                            pane.setFreePane(parser.attr("state").let { it == "frozen" || it == "frozenSplit" })
                             target.setPaneInformation(pane)
                         }
                         "row" -> {
                             val rowIndex = parser.attr("r")?.toIntOrNull()?.minus(1) ?: 0
+                            nextCol = 0
                             row = Row(parser.attr("spans")?.let { getEndBySpans(it) } ?: 0)
                             row!!.setRowNumber(rowIndex)
                             row!!.setSheet(target)
@@ -183,32 +216,36 @@ class SheetReader private constructor() {
                             rowHasMetadata = parser.attr("ht") != null || hidden || parser.attr("s") != null
                         }
                         "c" -> {
-                            cellRef = parser.attr("r")
+                            val ref = parser.attr("r")
+                            val refCol = if (ref != null) refColumn(ref) else -1
+                            val refRow = if (ref != null) refRow(ref) else -1
+                            cellCol = if (refCol >= 0) refCol else nextCol
+                            cellRow = if (refRow >= 0) refRow else row?.getRowNumber() ?: 0
+                            nextCol = cellCol + 1
+                            inCell = true
                             cellType = parser.attr("t")
-                            val col = ReferenceUtil.instance().getColumnIndex(cellRef ?: "A1")
-                            cellStyle = parser.attr("s")?.toIntOrNull() ?: target.getColumnStyle(col)
-                            cellText = StringBuilder()
+                            cellStyle = parser.attr("s")?.toIntOrNull() ?: target.getColumnStyle(cellCol)
+                            cellText.setLength(0)
                             formulaText = null
                             formulaSi = null
                         }
                         "f" -> { formulaText = StringBuilder(); formulaSi = parser.attr("si"); captureFormula = true }
-                        "v", "t" -> if (cellText != null) captureValue = true
+                        "v", "t" -> if (inCell) captureValue = true
                         "mergeCell" -> parser.attr("ref")?.let { addMergeRange(target, it) }
                     }
                     XmlPullParser.TEXT, XmlPullParser.CDSECT -> if (captureValue) {
-                        cellText?.append(parser.text)
+                        cellText.append(parser.text)
                     } else if (captureFormula) { formulaText?.append(parser.text) }
                     XmlPullParser.END_TAG -> when (parser.name) {
                         "f" -> captureFormula = false
                         "v", "t" -> captureValue = false
                         "c" -> {
-                            val ref = cellRef
-                            val text = cellText?.toString()
-                            if (row != null && ref != null && text != null) {
+                            if (row != null && inCell) {
+                                val text = cellText.toString()
                                 val cell = Cell(cellTypeToModelType(cellType))
                                 cell.setSheet(target)
-                                cell.setRowNumber(ReferenceUtil.instance().getRowIndex(ref))
-                                cell.setColNumber(ReferenceUtil.instance().getColumnIndex(ref))
+                                cell.setRowNumber(cellRow)
+                                cell.setColNumber(cellCol)
                                 cell.setCellStyle(cellStyle)
                                 val workbook = target.getWorkbook()!!
                                 if (text.isEmpty()) {
@@ -229,9 +266,8 @@ class SheetReader private constructor() {
                                 cell.formula = formulaText?.let { resolveFormula(target, cell, it.toString(), formulaSi) }
                                 row!!.addCell(cell)
                             }
-                            cellRef = null
+                            inCell = false
                             cellType = null
-                            cellText = null
                             captureValue = false
                         }
                         "row" -> {
@@ -304,6 +340,29 @@ class SheetReader private constructor() {
 
     private fun XmlPullParser.attr(name: String): String? = getAttributeValue(null, name)
 
+    /** Column (0 based) of a cell reference such as "BC12", read in place; -1 when it has none. */
+    private fun refColumn(ref: String): Int {
+        var column = 0
+        var i = 0
+        while (i < ref.length) {
+            val c = ref[i].uppercaseChar()
+            if (c !in 'A'..'Z') break
+            column = column * 26 + (c - 'A' + 1)
+            i++
+        }
+        return column - 1
+    }
+
+    /** Row (0 based) of a cell reference such as "BC12", read in place; -1 when it has none. */
+    private fun refRow(ref: String): Int {
+        var row = 0
+        var digits = false
+        for (c in ref) {
+            if (c in '0'..'9') { row = row * 10 + (c - '0'); digits = true } else if (digits) break
+        }
+        return if (digits) row - 1 else -1
+    }
+
     private fun stringToInt(number: String): Int {
         try { return number.toInt() } catch (e: NumberFormatException) { Log.e("HungHoai", "stringToInt: $number") }
         try { return number.toFloat().toInt() } catch (e: NumberFormatException) { Log.e("HungHoai", "stringToInt: $number") }
@@ -321,28 +380,29 @@ class SheetReader private constructor() {
     private fun getSheetHyperlink(sheet: Sheet, targets: Map<String, String>, hyperlinks: Element?) {
         if (hyperlinks == null) return
         val iterator = hyperlinks.elementIterator()
-        while (iterator.hasNext()) {
-            val element = iterator.next() as Element
-            val row = sheet.getRow(ReferenceUtil.instance().getRowIndex(element.attributeValue("ref")))
-            val cell = row?.getCell(ReferenceUtil.instance().getColumnIndex(element.attributeValue("ref"))) ?: continue
+        while (iterator!!.hasNext()) {
+            val element = iterator!!.next() as Element
+            val ref = element.attributeValue("ref") ?: continue
+            val row = sheet.getRow(ReferenceUtil.instance().getRowIndex(ref))
+            val cell = row?.getCell(ReferenceUtil.instance().getColumnIndex(ref)) ?: continue
             val hyperlink = Hyperlink()
             val target = targets[element.attributeValue("id")]
             val address: String?
             if (target == null) {
-                hyperlink.setLinkType(Hyperlink.LINK_DOCUMENT)
+                hyperlink.linkType = Hyperlink.LINK_DOCUMENT
                 address = element.attributeValue("location")
             } else {
-                hyperlink.setLinkType(if (target.contains("mailto")) Hyperlink.LINK_EMAIL else if (target.contains("http")) Hyperlink.LINK_URL else Hyperlink.LINK_FILE)
+                hyperlink.linkType = if (target.contains("mailto")) Hyperlink.LINK_EMAIL else if (target.contains("http")) Hyperlink.LINK_URL else Hyperlink.LINK_FILE
                 address = target
             }
-            hyperlink.setAddress(address)
+            hyperlink.address = address
             cell.setHyperLink(hyperlink)
         }
     }
 
     private fun setColumnProperty(col: Element) {
-        val min = col.attributeValue("min").toInt() - 1
-        val max = col.attributeValue("max").toInt() - 1
+        val min = col.attributeValue("min")!!.toInt() - 1
+        val max = col.attributeValue("max")!!.toInt() - 1
         val width = col.attributeValue("width")?.toDouble()?.let { it * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL } ?: 0.0
         // Missing hidden means visible.  `null != 0` was evaluating to true,
         // which hid every column in normal XLSX files.
@@ -352,7 +412,8 @@ class SheetReader private constructor() {
     }
 
     private fun getSheetMergerdCells(mergedCell: Element) {
-        val range = getCellRangeAddress(mergedCell.attributeValue("ref"))
+        val ref = mergedCell.attributeValue("ref") ?: return
+        val range = getCellRangeAddress(ref)
         if (range.getLastRow() - range.getFirstRow() == Workbook.MAXROW_07 - 1 || range.getLastColumn() - range.getFirstColumn() == Workbook.MAXCOLUMN_07 - 1) return
         val currentSheet = sheet!!
         val index = currentSheet.addMergeRange(range) - 1
@@ -435,24 +496,27 @@ class SheetReader private constructor() {
     }
 
     private inner class XLSXSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {}
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {}
+        override fun onEnd(elementPath: ElementPath?) {
             if (iReader?.isAborted() == true) throw AbortReaderError("abort Reader")
-            val elem = elementPath.current
-            when (elem.name) {
+            val elem = elementPath?.current
+            when (elem!!.name) {
+                "sheetView" -> {
+                    if (elem.attributeValue("showGridLines").let { it == "0" || it == "false" }) sheet!!.setShowGridLines(false)
+                }
                 "sheetFormatPr" -> {
-                    elem.attributeValue("defaultRowHeight")?.let { defaultRowHeight = (it.toDouble() * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultRowHeight(defaultRowHeight) }
-                    elem.attributeValue("defaultColWidth")?.let { defaultColWidth = (it.toDouble() * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultColWidth(defaultColWidth) }
+                    elem!!.attributeValue("defaultRowHeight")?.let { defaultRowHeight = (it.toDouble() * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultRowHeight(defaultRowHeight) }
+                    elem!!.attributeValue("defaultColWidth")?.let { defaultColWidth = (it.toDouble() * SSConstant.COLUMN_CHAR_WIDTH * MainConstant.POINT_TO_PIXEL).toInt(); sheet!!.setDefaultColWidth(defaultColWidth) }
                 }
                 "col" -> setColumnProperty(elem)
                 "row" -> {
-                    val rowIndex = elem.attributeValue("r").toInt() - 1
+                    val rowIndex = elem!!.attributeValue("r")!!.toInt() - 1
                     val currentSheet = sheet!!
                     val old = currentSheet.getRow(rowIndex)
                     if (old == null) currentSheet.addRow(createRow(elem, defaultRowHeight)) else modifyRow(old, elem, defaultRowHeight)
                 }
                 "c" -> {
-                    val ref = elem.attributeValue("r")
+                    val ref = elem!!.attributeValue("r") ?: return
                     val rowIndex = ReferenceUtil.instance().getRowIndex(ref)
                     val colIndex = ReferenceUtil.instance().getColumnIndex(ref)
                     val currentSheet = sheet!!
@@ -464,7 +528,7 @@ class SheetReader private constructor() {
                 }
                 "mergeCell" -> getSheetMergerdCells(elem)
             }
-            elem.detach()
+            elem!!.detach()
         }
     }
 
@@ -476,7 +540,7 @@ class SheetReader private constructor() {
 
     private fun createRow(rowElement: Element, defaultRowHeight: Int): Row? {
         if (!isValidateRow(rowElement)) return null
-        val rowIndex = rowElement.attributeValue("r").toInt() - 1
+        val rowIndex = rowElement.attributeValue("r")!!.toInt() - 1
         val height = rowElement.attributeValue("ht")?.let { it.toFloat() * MainConstant.POINT_TO_PIXEL } ?: defaultRowHeight.toFloat()
         // The attribute is optional; only an explicit hidden="1" hides a row.
         val hidden = rowElement.attributeValue("hidden")?.toIntOrNull() == 1
@@ -506,12 +570,12 @@ class SheetReader private constructor() {
     }
 
     private inner class XLSXSearchSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {}
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {}
+        override fun onEnd(elementPath: ElementPath?) {
             if (iReader?.isAborted() == true) throw AbortReaderError("abort Reader")
-            val elem = elementPath.current
-            if (elem.name == "c" && CellReader.instance().searchContent(elem, key ?: "")) searched = true
-            elem.detach()
+            val elem = elementPath?.current
+            if (elem!!.name == "c" && CellReader.instance().searchContent(elem, key ?: "")) searched = true
+            elem!!.detach()
             if (searched) throw StopReaderError("stop")
         }
     }
@@ -530,7 +594,7 @@ class SheetReader private constructor() {
     private val sharedFormulas = java.util.WeakHashMap<Sheet, MutableMap<String, Master>>()
     fun resolveFormula(sheet: Sheet, cell: Cell, element: Element?): String? {
         if (element == null) return null
-        return resolveFormula(sheet, cell, element.text, element.attributeValue("si"))
+        return resolveFormula(sheet, cell, element.text ?: "", element.attributeValue("si"))
     }
     private fun resolveFormula(sheet: Sheet, cell: Cell, text: String, si: String?): String {
         if (si == null) return text

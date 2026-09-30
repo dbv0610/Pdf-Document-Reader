@@ -84,57 +84,57 @@ class CustomSwitch @JvmOverloads constructor(
         context.theme.obtainStyledAttributes(attrs, R.styleable.CustomSwitch, 0, 0).apply {
             try {
                 // Track colors
-                trackColorOff = getColor(R.styleable.CustomSwitch_trackColorOff, trackColorOff)
-                trackColorOn = getColor(R.styleable.CustomSwitch_trackColorOn, trackColorOn)
+                trackColorOff = getColor(R.styleable.CustomSwitch_uiSwitchTrackColorOff, trackColorOff)
+                trackColorOn = getColor(R.styleable.CustomSwitch_uiSwitchTrackColorOn, trackColorOn)
 
                 // Thumb colors
-                thumbColorOff = getColor(R.styleable.CustomSwitch_thumbColorOff, thumbColorOff)
-                thumbColorOn = getColor(R.styleable.CustomSwitch_thumbColorOn, thumbColorOn)
+                thumbColorOff = getColor(R.styleable.CustomSwitch_uiSwitchThumbColorOff, thumbColorOff)
+                thumbColorOn = getColor(R.styleable.CustomSwitch_uiSwitchThumbColorOn, thumbColorOn)
 
                 // State
-                isChecked = getBoolean(R.styleable.CustomSwitch_checked, false)
+                isChecked = getBoolean(R.styleable.CustomSwitch_uiSwitchChecked, false)
 
                 // Track stroke
                 trackStrokeWidth =
-                    getDimension(R.styleable.CustomSwitch_trackStrokeWidth, trackStrokeWidth)
+                    getDimension(R.styleable.CustomSwitch_uiSwitchTrackStrokeWidth, trackStrokeWidth)
                 trackStrokeColorOff =
-                    getColor(R.styleable.CustomSwitch_trackStrokeColorOff, trackColorOff)
+                    getColor(R.styleable.CustomSwitch_uiSwitchTrackStrokeColorOff, trackColorOff)
                 trackStrokeColorOn =
-                    getColor(R.styleable.CustomSwitch_trackStrokeColorOn, trackColorOn)
+                    getColor(R.styleable.CustomSwitch_uiSwitchTrackStrokeColorOn, trackColorOn)
 
                 // Thumb stroke
                 thumbStrokeWidth =
-                    getDimension(R.styleable.CustomSwitch_thumbStrokeWidth, thumbStrokeWidth)
+                    getDimension(R.styleable.CustomSwitch_uiSwitchThumbStrokeWidth, thumbStrokeWidth)
                 thumbStrokeColorOff =
-                    getColor(R.styleable.CustomSwitch_thumbStrokeColorOff, thumbStrokeColorOff)
+                    getColor(R.styleable.CustomSwitch_uiSwitchThumbStrokeColorOff, thumbStrokeColorOff)
                 thumbStrokeColorOn =
-                    getColor(R.styleable.CustomSwitch_thumbStrokeColorOn, thumbStrokeColorOn)
+                    getColor(R.styleable.CustomSwitch_uiSwitchThumbStrokeColorOn, thumbStrokeColorOn)
 
                 // Sizes
                 customThumbRadius =
-                    getDimension(R.styleable.CustomSwitch_thumbRadius, customThumbRadius)
+                    getDimension(R.styleable.CustomSwitch_uiSwitchThumbRadius, customThumbRadius)
                 customThumbPadding =
-                    getDimension(R.styleable.CustomSwitch_thumbPadding, customThumbPadding)
+                    getDimension(R.styleable.CustomSwitch_uiSwitchThumbPadding, customThumbPadding)
                 customSwitchWidth =
-                    getDimension(R.styleable.CustomSwitch_switchWidth, customSwitchWidth)
+                    getDimension(R.styleable.CustomSwitch_uiSwitchWidth, customSwitchWidth)
                 customSwitchHeight =
-                    getDimension(R.styleable.CustomSwitch_switchHeight, customSwitchHeight)
+                    getDimension(R.styleable.CustomSwitch_uiSwitchHeight, customSwitchHeight)
 
                 // Thumb shadow
                 thumbElevation =
-                    getDimension(R.styleable.CustomSwitch_thumbElevation, thumbElevation)
+                    getDimension(R.styleable.CustomSwitch_uiSwitchThumbElevation, thumbElevation)
                 thumbShadowColor =
-                    getColor(R.styleable.CustomSwitch_thumbShadowColor, thumbShadowColor)
+                    getColor(R.styleable.CustomSwitch_uiSwitchThumbShadowColor, thumbShadowColor)
 
                 // Animation
                 animDuration = getInt(
-                    R.styleable.CustomSwitch_animationDuration,
+                    R.styleable.CustomSwitch_uiSwitchAnimationDuration,
                     animDuration.toInt()
                 ).toLong()
 
                 // Corner radius
                 customTrackCornerRadius = getDimension(
-                    R.styleable.CustomSwitch_swTrackCornerRadius,
+                    R.styleable.CustomSwitch_uiSwitchTrackCornerRadius,
                     customTrackCornerRadius
                 )
             }

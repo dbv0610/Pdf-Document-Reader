@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           WedgeCallout.java
  *  
  * 编译器:             android2.2
@@ -56,7 +63,7 @@ class WedgeCalloutDrawing {
         paths.clear()
         path.reset()
 
-        when (shape.getShapeType()) {
+        when (shape.shapeType) {
             ShapeTypes.WedgeRectCallout -> return getWedgeRectCalloutPath(shape, rect)
 
             ShapeTypes.WedgeRoundRectCallout -> return getWedgeRoundRectCalloutPath(shape, rect)
@@ -65,19 +72,19 @@ class WedgeCalloutDrawing {
 
             ShapeTypes.CloudCallout -> return getCloudCalloutPath(shape, rect)
 
-            ShapeTypes.BorderCallout1 -> if (shape.isAutoShape07()) {
+            ShapeTypes.BorderCallout1 -> if (shape.isAutoShape07) {
                 return getBorderCallout1Path(shape, rect)
             } else {
                 return get03BorderCallout2Path(shape, rect)
             }
 
-            ShapeTypes.BorderCallout2 -> if (shape.isAutoShape07()) {
+            ShapeTypes.BorderCallout2 -> if (shape.isAutoShape07) {
                 return getBorderCallout2Path(shape, rect)
             } else {
                 return get03BorderCallout2Path(shape, rect)
             }
 
-            ShapeTypes.BorderCallout3 -> if (shape.isAutoShape07()) {
+            ShapeTypes.BorderCallout3 -> if (shape.isAutoShape07) {
                 return getBorderCallout3Path(shape, rect)
             } else {
                 return get03BorderCallout3Path(shape, rect)
@@ -85,19 +92,19 @@ class WedgeCalloutDrawing {
 
             ShapeTypes.BorderCallout4 -> return get03BorderCallout4Path(shape, rect)
 
-            ShapeTypes.AccentCallout1 -> if (shape.isAutoShape07()) {
+            ShapeTypes.AccentCallout1 -> if (shape.isAutoShape07) {
                 return getAccentCallout1Path(shape, rect)
             } else {
                 return get03AccentCallout1Path(shape, rect)
             }
 
-            ShapeTypes.AccentCallout2 -> if (shape.isAutoShape07()) {
+            ShapeTypes.AccentCallout2 -> if (shape.isAutoShape07) {
                 return getAccentCallout2Path(shape, rect)
             } else {
                 return get03AccentCallout2Path(shape, rect)
             }
 
-            ShapeTypes.AccentCallout3 -> if (shape.isAutoShape07()) {
+            ShapeTypes.AccentCallout3 -> if (shape.isAutoShape07) {
                 return getAccentCallout3Path(shape, rect)
             } else {
                 return get03AccentCallout3(shape, rect)
@@ -105,19 +112,19 @@ class WedgeCalloutDrawing {
 
             ShapeTypes.AccentCallout4 -> return get03AccentCallout4(shape, rect)
 
-            ShapeTypes.Callout1 -> if (shape.isAutoShape07()) {
+            ShapeTypes.Callout1 -> if (shape.isAutoShape07) {
                 return getCallout1(shape, rect)
             } else {
                 return get03AccentCallout1Path(shape, rect)
             }
 
-            ShapeTypes.Callout2 -> if (shape.isAutoShape07()) {
+            ShapeTypes.Callout2 -> if (shape.isAutoShape07) {
                 return getCallout2(shape, rect)
             } else {
                 return get03Callout2(shape, rect)
             }
 
-            ShapeTypes.Callout3 -> if (shape.isAutoShape07()) {
+            ShapeTypes.Callout3 -> if (shape.isAutoShape07) {
                 return getCallout3(shape, rect)
             } else {
                 return get03Callout3(shape, rect)
@@ -125,19 +132,19 @@ class WedgeCalloutDrawing {
 
             ShapeTypes.Callout4 -> return get03Callout4(shape, rect)
 
-            ShapeTypes.AccentBorderCallout1 -> if (shape.isAutoShape07()) {
+            ShapeTypes.AccentBorderCallout1 -> if (shape.isAutoShape07) {
                 return getAccentBorderCallout1(shape, rect)
             } else {
                 return get03BorderCallout2Path(shape, rect)
             }
 
-            ShapeTypes.AccentBorderCallout2 -> if (shape.isAutoShape07()) {
+            ShapeTypes.AccentBorderCallout2 -> if (shape.isAutoShape07) {
                 return getAccentBorderCallout2(shape, rect)
             } else {
                 return get03AccentBorderCallout2(shape, rect)
             }
 
-            ShapeTypes.AccentBorderCallout3 -> if (shape.isAutoShape07()) {
+            ShapeTypes.AccentBorderCallout3 -> if (shape.isAutoShape07) {
                 return getAccentBorderCallout3(shape, rect)
             } else {
                 return get03AccentBorderCallout3(shape, rect)
@@ -176,8 +183,8 @@ class WedgeCalloutDrawing {
             var x = -rect.width() * 0.2f
             var y = rect.height() * 0.6f
             var z = rect.width().toFloat() / 12
-            val values = shape.getAdjustData()
-            if (shape.isAutoShape07()) {
+            val values = shape.adjustData
+            if (shape.isAutoShape07) {
                 if (values != null && values.size >= 2) {
                     if (values[0] != null) {
                         x = rect.width() * values[0]!!
@@ -280,8 +287,8 @@ class WedgeCalloutDrawing {
             var y = rect.height() * 0.6f
             var z = rect.width().toFloat() / 12
             var r = min(rect.width(), rect.height()) * 0.16667f
-            val values = shape.getAdjustData()
-            if (shape.isAutoShape07()) {
+            val values = shape.adjustData
+            if (shape.isAutoShape07) {
                 if (values != null && values.size >= 3) {
                     if (values[0] != null) {
                         x = rect.width() * values[0]!!
@@ -481,8 +488,8 @@ class WedgeCalloutDrawing {
         private fun getWedgeEllipseCalloutPath(shape: AutoShape, rect: Rect): Path {
             var x = -rect.width() * 0.2f
             var y = rect.height() * 0.6f
-            val values = shape.getAdjustData()
-            if (shape.isAutoShape07()) {
+            val values = shape.adjustData
+            if (shape.isAutoShape07) {
                 if (values != null && values.size >= 2) {
                     if (values[0] != null) {
                         x = rect.width() * values[0]!!
@@ -590,10 +597,10 @@ class WedgeCalloutDrawing {
 
             path.offset(rect.left.toFloat(), rect.top.toFloat())
 
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             var adj1 = 0
             var adj2 = 0
-            if (shape.isAutoShape07()) {
+            if (shape.isAutoShape07) {
                 if (values != null && values.size >= 2) {
                     if (values[0] != null) {
                         adj1 = Math.round(rect.width() * values[0]!!)
@@ -687,7 +694,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 1.125f
             var x2 = rect.left + rect.width() * (-0.38333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 4) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -731,7 +738,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.16667f)
             var y3 = rect.top + rect.height() * 1.125f
             var x3 = rect.left + rect.width() * (-0.46667f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 6) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -753,7 +760,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -766,7 +773,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -775,7 +782,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x2, y2)
             path.lineTo(x3, y3)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -796,7 +803,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * (-0.16667f)
             var y4 = rect.top + rect.height() * 1.12963f
             var x4 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 8) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -824,7 +831,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -837,7 +844,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -848,7 +855,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x4, y4)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -865,7 +872,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 1.125f
             var x2 = rect.left + rect.width() * (-0.38333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 4) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -880,7 +887,7 @@ class WedgeCalloutDrawing {
                     x2 = rect.left + rect.width() * values[3]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -903,7 +910,7 @@ class WedgeCalloutDrawing {
             path.moveTo(x1, y1)
             path.lineTo(x2, y2)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -922,7 +929,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.16667f)
             var y3 = rect.top + rect.height() * 1.125f
             var x3 = rect.left + rect.width() * (-0.46667f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 6) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -943,7 +950,7 @@ class WedgeCalloutDrawing {
                     x3 = rect.left + rect.width() * values[5]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -969,7 +976,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x3, y3)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -990,7 +997,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * (-0.16667f)
             var y4 = rect.top + rect.height() * 1.12963f
             var x4 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 8) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -1017,7 +1024,7 @@ class WedgeCalloutDrawing {
                     x4 = rect.left + rect.width() * values[7]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1043,7 +1050,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x4, y4)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1060,7 +1067,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 1.125f
             var x2 = rect.left + rect.width() * (-0.38333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 4) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -1076,7 +1083,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
             var extendPath = ExtendPath()
             var path = Path()
             path.addRect(
@@ -1096,7 +1103,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x2, y2)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1115,7 +1122,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.16667f)
             var y3 = rect.top + rect.height() * 1.125f
             var x3 = rect.left + rect.width() * (-0.46667f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 6) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -1136,7 +1143,7 @@ class WedgeCalloutDrawing {
                     x3 = rect.left + rect.width() * values[5]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1159,7 +1166,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x3, y3)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1180,7 +1187,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * (-0.16667f)
             var y4 = rect.top + rect.height() * 1.12963f
             var x4 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 8) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -1207,7 +1214,7 @@ class WedgeCalloutDrawing {
                     x4 = rect.left + rect.width() * values[7]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1230,7 +1237,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x4, y4)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1247,7 +1254,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 1.125f
             var x2 = rect.left + rect.width() * (-0.38333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 4) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -1297,7 +1304,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.16667f)
             var y3 = rect.top + rect.height() * 1.125f
             var x3 = rect.left + rect.width() * (-0.46667f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 6) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -1319,7 +1326,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1333,7 +1340,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -1346,7 +1353,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x3, y3)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1370,7 +1377,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * (-0.16667f)
             var y4 = rect.top + rect.height() * 1.12963f
             var x4 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 8) {
                 if (values[0] != null) {
                     y1 = rect.top + rect.height() * values[0]!!
@@ -1398,7 +1405,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1411,7 +1418,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -1425,7 +1432,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x4, y4)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1445,7 +1452,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 0.1875f
             var x2 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1461,7 +1468,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1474,7 +1481,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -1482,7 +1489,7 @@ class WedgeCalloutDrawing {
             path.moveTo(x1, y1)
             path.lineTo(x2, y2)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1504,7 +1511,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.08333f)
             var y3 = rect.top + rect.height() * 0.1875f
             var x3 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1526,7 +1533,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1539,7 +1546,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -1549,7 +1556,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x3, y3)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1573,7 +1580,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * 1.08333f
             var y4 = rect.top + rect.height() * 0.1875f
             var x4 = rect.left + rect.width() * 1.08333f
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1601,7 +1608,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1614,7 +1621,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -1625,7 +1632,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x4, y4)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1646,7 +1653,7 @@ class WedgeCalloutDrawing {
             var y2 = rect.top + rect.height() * 0.1875f
 
             var x2 = rect.left + rect.width() * (-0.38333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 4) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1661,7 +1668,7 @@ class WedgeCalloutDrawing {
                     y2 = rect.top + rect.height() * values[3]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1680,7 +1687,7 @@ class WedgeCalloutDrawing {
             path = Path()
             path.moveTo(x1, y1)
             path.lineTo(x2, y2)
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             extendPath.path = path
             paths.add(extendPath)
 
@@ -1701,7 +1708,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 0.1875f
             var x2 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1716,7 +1723,7 @@ class WedgeCalloutDrawing {
                     y2 = rect.top + rect.height() * values[3]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1740,7 +1747,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x2, y2)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1759,7 +1766,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.08333f)
             var y3 = rect.top + rect.height() * 0.1875f
             var x3 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1780,7 +1787,7 @@ class WedgeCalloutDrawing {
                     y3 = rect.top + rect.height() * values[5]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1807,7 +1814,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x3, y3)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1828,7 +1835,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * 1.08333f
             var y4 = rect.top + rect.height() * 0.1875f
             var x4 = rect.left + rect.width() * 1.08333f
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1855,7 +1862,7 @@ class WedgeCalloutDrawing {
                     y4 = rect.top + rect.height() * values[7]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1883,7 +1890,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x4, y4)
 
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1900,7 +1907,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 0.1875f
             var x2 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1915,7 +1922,7 @@ class WedgeCalloutDrawing {
                     y2 = rect.top + rect.height() * values[3]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1936,7 +1943,7 @@ class WedgeCalloutDrawing {
             path.moveTo(x1, y1)
             path.lineTo(x2, y2)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -1955,7 +1962,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.08333f)
             var y3 = rect.top + rect.height() * 0.1875f
             var x3 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -1976,7 +1983,7 @@ class WedgeCalloutDrawing {
                     y3 = rect.top + rect.height() * values[5]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -1998,7 +2005,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x2, y2)
             path.lineTo(x3, y3)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -2019,7 +2026,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * 1.08333f
             var y4 = rect.top + rect.height() * 0.1875f
             var x4 = rect.left + rect.width() * 1.08333f
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -2046,7 +2053,7 @@ class WedgeCalloutDrawing {
                     y4 = rect.top + rect.height() * values[7]!!
                 }
             }
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -2069,7 +2076,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x3, y3)
             path.lineTo(x4, y4)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -2089,7 +2096,7 @@ class WedgeCalloutDrawing {
             var x1 = rect.left + rect.width() * (-0.08333f)
             var y2 = rect.top + rect.height() * 0.1875f
             var x2 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -2105,7 +2112,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -2118,7 +2125,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -2129,7 +2136,7 @@ class WedgeCalloutDrawing {
             path.moveTo(x1, y1)
             path.lineTo(x2, y2)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -2151,7 +2158,7 @@ class WedgeCalloutDrawing {
             var x2 = rect.left + rect.width() * (-0.08333f)
             var y3 = rect.top + rect.height() * 0.1875f
             var x3 = rect.left + rect.width() * (-0.08333f)
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -2173,7 +2180,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -2186,7 +2193,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -2199,7 +2206,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x2, y2)
             path.lineTo(x3, y3)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths
@@ -2223,7 +2230,7 @@ class WedgeCalloutDrawing {
             var x3 = rect.left + rect.width() * 1.08333f
             var y4 = rect.top + rect.height() * 0.1875f
             var x4 = rect.left + rect.width() * 1.08333f
-            val values = shape.getAdjustData()
+            val values = shape.adjustData
             if (values != null && values.size >= 1) {
                 if (values[0] != null) {
                     x1 = rect.left + rect.width() * values[0]!!
@@ -2251,7 +2258,7 @@ class WedgeCalloutDrawing {
                 }
             }
 
-            val fill = shape.getBackgroundAndFill()
+            val fill = shape.backgroundAndFill
 
             var extendPath = ExtendPath()
             var path = Path()
@@ -2264,7 +2271,7 @@ class WedgeCalloutDrawing {
             )
             extendPath.backgroundAndFill = fill
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             extendPath = ExtendPath()
@@ -2277,7 +2284,7 @@ class WedgeCalloutDrawing {
             path.lineTo(x3, y3)
             path.lineTo(x4, y4)
             extendPath.path = path
-            extendPath.setLine(shape.getLine())
+            extendPath.setLine(shape.line)
             paths.add(extendPath)
 
             return paths

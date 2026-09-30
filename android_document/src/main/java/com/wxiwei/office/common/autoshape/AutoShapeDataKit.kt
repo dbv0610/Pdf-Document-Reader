@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           AutoShapeDataKit.java
  *  
  * 编译器:             android2.2
@@ -69,12 +76,12 @@ object AutoShapeDataKit {
         var color = -1
         if (solidFillElement.element("srgbClr") != null) {
             clr = solidFillElement.element("srgbClr")
-            color = clr.attributeValue("val").toLong(16).toInt()
+            color = clr!!.attributeValue("val")!!.toLong(16).toInt()
             color = (0xFF shl 24) or color
         } else if ((solidFillElement.element("scrgbClr").also { clr = it }) != null) {
-            val r = clr!!.attributeValue("r").toInt() * 255 / 100
-            val g = clr.attributeValue("g").toInt() * 255 / 100
-            val b = clr.attributeValue("b").toInt() * 255 / 100
+            val r = clr!!.attributeValue("r")!!.toInt() * 255 / 100
+            val g = clr.attributeValue("g")!!.toInt() * 255 / 100
+            val b = clr.attributeValue("b")!!.toInt() * 255 / 100
             return rgb(r, g, b)
         } else if (solidFillElement.element("schemeClr") != null
             || solidFillElement.element("prstClr") != null
@@ -84,7 +91,7 @@ object AutoShapeDataKit {
                 if (clr == null) {
                     clr = solidFillElement.element("prstClr")
                 }
-                `val` = clr.attributeValue("val")
+                `val` = clr!!.attributeValue("val")
                 if ("black" == `val`) {
                     color = Color.BLACK
                 } else if ("red" == `val`) {
@@ -100,30 +107,30 @@ object AutoShapeDataKit {
                 if (color == -1) {
                     color = schemeColor.get(`val`)!!
                 }
-                if (clr.element("tint") != null) {
+                if (clr!!.element("tint") != null) {
                     color = ColorUtil.instance().getColorWithTint(
                         color,
-                        clr.element("tint").attributeValue("val").toInt() / 100000.0
+                        clr!!.element("tint")!!.attributeValue("val")!!.toInt() / 100000.0
                     )
-                } else if (clr.element("lumOff") != null) {
+                } else if (clr!!.element("lumOff") != null) {
                     color = ColorUtil.instance().getColorWithTint(
                         color,
-                        clr.element("lumOff").attributeValue("val").toInt() / 100000.0
+                        clr!!.element("lumOff")!!.attributeValue("val")!!.toInt() / 100000.0
                     )
-                } else if (clr.element("lumMod") != null) {
+                } else if (clr!!.element("lumMod") != null) {
                     color = ColorUtil.instance().getColorWithTint(
                         color,
-                        clr.element("lumMod").attributeValue("val").toInt() / 100000.0 - 1
+                        clr!!.element("lumMod")!!.attributeValue("val")!!.toInt() / 100000.0 - 1
                     )
-                } else if (clr.element("shade") != null) {
+                } else if (clr!!.element("shade") != null) {
                     color = ColorUtil.instance().getColorWithTint(
                         color,
-                        -clr.element("shade").attributeValue("val").toInt() / 200000.0
+                        -clr!!.element("shade")!!.attributeValue("val")!!.toInt() / 200000.0
                     )
                 }
 
-                if (clr.element("alpha") != null) {
-                    `val` = clr.element("alpha").attributeValue("val")
+                if (clr!!.element("alpha") != null) {
+                    `val` = clr!!.element("alpha")!!.attributeValue("val")
                     if (`val` != null) {
                         val alpha = (`val`.toInt() / 100000f * 255).toInt()
                         color = (0xFFFFFF and color) or (alpha shl 24)
@@ -133,7 +140,7 @@ object AutoShapeDataKit {
         } else if (solidFillElement.element("sysClr") != null) {
             clr = solidFillElement.element("sysClr")
             //get system color
-            color = clr.attributeValue("lastClr").toInt(16)
+            color = clr!!.attributeValue("lastClr")!!.toInt(16)
             color = (0xFF shl 24) or color
         }
         return color
@@ -159,8 +166,8 @@ object AutoShapeDataKit {
                 val bgFill = BackgroundAndFill()
                 var fill = bgPr.element("solidFill")
                 if (fill != null) {
-                    bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                    bgFill.setForegroundColor(getColor(schemeColor, fill))
+                    bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                    bgFill.foregroundColor = getColor(schemeColor, fill)
                     return bgFill
                 } else if ((bgPr.element("blipFill").also { fill = it }) != null) {
                     val blip = fill!!.element("blip")
@@ -173,7 +180,7 @@ object AutoShapeDataKit {
                                 if (picPart != null) {
                                     val tile = fill.element("tile")
                                     if (tile == null) {
-                                        bgFill.setFillType(BackgroundAndFill.FILL_PICTURE)
+                                        bgFill.fillType = BackgroundAndFill.FILL_PICTURE
                                         val stretch = fill.element("stretch")
                                         if (stretch != null) {
                                             val fillRect = stretch.element("fillRect")
@@ -183,40 +190,38 @@ object AutoShapeDataKit {
                                                 var str = fillRect.attributeValue("l")
                                                 if (str != null) {
                                                     validate = true
-                                                    stretchInfo.setLeftOffset(str.toFloat() / 100000)
+                                                    stretchInfo.leftOffset = str.toFloat() / 100000
                                                 }
 
                                                 str = fillRect.attributeValue("r")
                                                 if (str != null) {
                                                     validate = true
-                                                    stretchInfo.setRightOffset(str.toFloat() / 100000)
+                                                    stretchInfo.rightOffset = str.toFloat() / 100000
                                                 }
 
                                                 str = fillRect.attributeValue("t")
                                                 if (str != null) {
                                                     validate = true
-                                                    stretchInfo.setTopOffset(str.toFloat() / 100000)
+                                                    stretchInfo.topOffset = str.toFloat() / 100000
                                                 }
 
                                                 str = fillRect.attributeValue("b")
                                                 if (str != null) {
                                                     validate = true
-                                                    stretchInfo.setBottomOffset(str.toFloat() / 100000)
+                                                    stretchInfo.bottomOffset = str.toFloat() / 100000
                                                 }
 
                                                 if (validate) {
-                                                    bgFill.setStretch(stretchInfo)
+                                                    bgFill.stretch = stretchInfo
                                                 }
                                             }
                                         }
-                                        bgFill.setPictureIndex(
-                                            control!!.getSysKit().getPictureManage()
-                                                .addPicture(picPart)
-                                        )
+                                        bgFill.pictureIndex = control!!.getSysKit().getPictureManage()
+                                            .addPicture(picPart)
                                     } else {
                                         val index = control!!.getSysKit().getPictureManage()
                                             .addPicture(picPart)
-                                        bgFill.setFillType(BackgroundAndFill.FILL_SHADE_TILE)
+                                        bgFill.fillType = BackgroundAndFill.FILL_SHADE_TILE
                                         val tileShader = ShaderKit.readTile(
                                             control!!.getSysKit().getPictureManage()
                                                 .getPicture(index), tile
@@ -225,11 +230,11 @@ object AutoShapeDataKit {
                                         if (alphaModFix != null) {
                                             val amt = alphaModFix.attributeValue("amt")
                                             if (amt != null) {
-                                                tileShader.setAlpha(Math.round(amt.toInt() / 100000f * 255))
+                                                tileShader.alpha = Math.round(amt.toInt() / 100000f * 255)
                                             }
                                         }
 
-                                        bgFill.setShader(tileShader)
+                                        bgFill.shader = tileShader
                                     }
                                     return bgFill
                                 }
@@ -239,19 +244,19 @@ object AutoShapeDataKit {
                 } else if ((bgPr.element("gradFill").also { fill = it }) != null) {
                     val gsLst = fill!!.element("gsLst")
                     run {
-                        bgFill.setFillType(ShaderKit.getGradientType(fill))
-                        bgFill.setShader(ShaderKit.readGradient(schemeColor, fill))
+                        bgFill.fillType = ShaderKit.getGradientType(fill)
+                        bgFill.shader = ShaderKit.readGradient(schemeColor, fill)
                         return bgFill
                     }
                 } else if ((bgPr.element("fillRef").also { fill = it }) != null) {
-                    bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                    bgFill.setForegroundColor(AutoShapeDataKit.getColor(schemeColor, fill!!))
+                    bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                    bgFill.foregroundColor = AutoShapeDataKit.getColor(schemeColor, fill!!)
                     return bgFill
                 } else if ((bgPr.element("pattFill").also { fill = it }) != null) {
                     val bgClr = fill!!.element("bgClr")
                     run {
-                        bgFill.setFillType(BackgroundAndFill.FILL_SOLID)
-                        bgFill.setForegroundColor(AutoShapeDataKit.getColor(schemeColor, bgClr))
+                        bgFill.fillType = BackgroundAndFill.FILL_SOLID
+                        bgFill.foregroundColor = AutoShapeDataKit.getColor(schemeColor, bgClr!!)
                         return bgFill
                     }
                 }
@@ -308,7 +313,7 @@ object AutoShapeDataKit {
             var border = true
 
             val name = ReaderKit.instance().getPlaceholderName(sp)
-            val spName = sp.getName()
+            val spName = sp.name
             if (spName == "cxnSp") {
                 border = true
                 shapeType = ShapeTypes.Line
@@ -339,7 +344,7 @@ object AutoShapeDataKit {
                         for (i in gds.indices) {
                             val gd = gds.get(i)
                             `val` = gd.attributeValue("fmla")
-                            `val` = `val`.substring(4)
+                            `val` = `val`!!.substring(4)
                             values[i] = `val`.toFloat() / 100000
                         }
                     }
@@ -390,10 +395,10 @@ object AutoShapeDataKit {
                 } else {
                     lineShape = LineShape()
                 }
-                lineShape.setShapeType(shapeType)
-                lineShape.setBounds(rect)
-                lineShape.setAdjustData(values)
-                lineShape.setLine(line)
+                lineShape.shapeType = shapeType
+                lineShape.bounds = rect
+                lineShape.adjustData = values
+                lineShape.line = line
 
                 if (ln != null) {
                     var temp = ln.element("headEnd")
@@ -431,7 +436,7 @@ object AutoShapeDataKit {
 
                 var lineFill: BackgroundAndFill? = null
                 if (line != null) {
-                    lineFill = line.getBackgroundAndFill()
+                    lineFill = line.backgroundAndFill
                 }
                 ArbitraryPolygonShapePath.processArbitraryPolygonShape(
                     arbitraryPolygonShape,
@@ -443,27 +448,27 @@ object AutoShapeDataKit {
                     rect
                 )
 
-                arbitraryPolygonShape.setShapeType(shapeType)
-                arbitraryPolygonShape.setLine(line)
+                arbitraryPolygonShape.shapeType = shapeType
+                arbitraryPolygonShape.line = line
                 ReaderKit.instance().processRotation(spPr, arbitraryPolygonShape)
                 return arbitraryPolygonShape
             } else if (hasTextbox || fill != null || border) {
                 var autoShape: AutoShape? = null
                 if (type == MainConstant.APPLICATION_TYPE_WP.toInt()) {
                     autoShape = WPAutoShape()
-                    autoShape.setShapeType(shapeType)
+                    autoShape.shapeType = shapeType
                 } else {
                     autoShape = AutoShape(shapeType)
                 }
-                autoShape.setBounds(rect)
+                autoShape.bounds = rect
 
                 if (fill != null) {
-                    autoShape.setBackgroundAndFill(fill)
+                    autoShape.backgroundAndFill = fill
                 }
                 if (line != null) {
-                    autoShape.setLine(line)
+                    autoShape.line = line
                 }
-                autoShape.setAdjustData(values)
+                autoShape.adjustData = values
                 ReaderKit.instance().processRotation(spPr, autoShape)
 
                 return autoShape
@@ -488,7 +493,7 @@ object AutoShapeDataKit {
                     bgPr, schemeColor
                 )
 
-            shape.setBackgroundAndFill(fill)
+            shape.backgroundAndFill = fill
             val line = LineKit.createLine(
                 control,
                 zipPackage,
@@ -496,7 +501,7 @@ object AutoShapeDataKit {
                 bgPr.element("ln"),
                 schemeColor
             )
-            shape.setLine(line)
+            shape.line = line
         }
     }
 }

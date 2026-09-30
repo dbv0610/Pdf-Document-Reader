@@ -21,10 +21,10 @@ import android.view.MotionEvent
 import androidx.appcompat.widget.AppCompatEditText
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
-import androidx.core.graphics.toColorInt
 import androidx.core.graphics.withSave
 import com.ui.baselib.R
 import kotlin.math.max
+import com.ui.baselib.widget.layout.getColorList
 
 class UiEditText @JvmOverloads constructor(
       context: Context,
@@ -103,63 +103,55 @@ class UiEditText @JvmOverloads constructor(
     init {
         context.obtainStyledAttributes(attrs, R.styleable.UiEditText).apply {
             try {
-                cornerRadius = getDimension(R.styleable.UiEditText_cornerRadius, 0f)
+                cornerRadius = getDimension(R.styleable.UiEditText_uiCornerRadius, 0f)
 
-                isGradient = getBoolean(R.styleable.UiEditText_bgIsGradient, false)
+                isGradient = getBoolean(R.styleable.UiEditText_uiBackgroundGradientEnabled, false)
                 bgGradientStart =
-                    getColor(R.styleable.UiEditText_bgGradientStart, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiBackgroundGradientStart, Color.TRANSPARENT)
                 bgGradientCenter =
-                    getColor(R.styleable.UiEditText_bgGradientCenter, Color.TRANSPARENT)
-                bgGradientEnd = getColor(R.styleable.UiEditText_bgGradientEnd, Color.TRANSPARENT)
-                bgColor = getColor(R.styleable.UiEditText_bgColor, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiBackgroundGradientCenter, Color.TRANSPARENT)
+                bgGradientEnd = getColor(R.styleable.UiEditText_uiBackgroundGradientEnd, Color.TRANSPARENT)
+                bgColor = getColor(R.styleable.UiEditText_uiBackgroundColor, Color.TRANSPARENT)
                 bgGradientOrientation =
-                    getInt(R.styleable.UiEditText_bgGdOrientation, 0).toGradientOrientation()
-                bgGradientType = getInt(R.styleable.UiEditText_bgGradientType, 0).toBgGradientType()
-                bgGradientCenterX = getFloat(R.styleable.UiEditText_bgGradientCenterX, 0.5f)
-                bgGradientCenterY = getFloat(R.styleable.UiEditText_bgGradientCenterY, 0.5f)
-                bgGradientRadius = getDimension(R.styleable.UiEditText_bgGradientRadius, 0f)
-                // Read bgColors from string
-                val bgGdColorsStr = getString(R.styleable.UiEditText_bgGradientColors)
-                bgColors = bgGdColorsStr?.split(" ")
-                    ?.mapNotNull { if (it.isValidHexColor()) it.toColorInt() else null }
-                    ?.toIntArray()
-                // Read bgColors from integer-array reference (higher priority)
-                val bgColorsResId = getResourceId(R.styleable.UiEditText_bgColors, 0)
-                if (bgColorsResId != 0) {
-                    bgColors = resources.getIntArray(bgColorsResId)
-                }
+                    getInt(R.styleable.UiEditText_uiBackgroundGradientOrientation, 0).toGradientOrientation()
+                bgGradientType = getInt(R.styleable.UiEditText_uiBackgroundGradientType, 0).toBgGradientType()
+                bgGradientCenterX = getFloat(R.styleable.UiEditText_uiBackgroundGradientCenterX, 0.5f)
+                bgGradientCenterY = getFloat(R.styleable.UiEditText_uiBackgroundGradientCenterY, 0.5f)
+                bgGradientRadius = getDimension(R.styleable.UiEditText_uiBackgroundGradientRadius, 0f)
+                // "#F00 #0F0" or an @array/ of colors
+                bgColors = getColorList(R.styleable.UiEditText_uiBackgroundGradientColors)
 
-                focusBgColor = getColor(R.styleable.UiEditText_focusBgColor, bgColor)
-                isFocusGradient = getBoolean(R.styleable.UiEditText_focusBgIsGradient, false)
+                focusBgColor = getColor(R.styleable.UiEditText_uiFocusedBackgroundColor, bgColor)
+                isFocusGradient = getBoolean(R.styleable.UiEditText_uiFocusedBackgroundGradientEnabled, false)
                 focusBgGradientStart =
-                    getColor(R.styleable.UiEditText_focusBgGradientStart, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiFocusedBackgroundGradientStart, Color.TRANSPARENT)
                 focusBgGradientCenter =
-                    getColor(R.styleable.UiEditText_focusBgGradientCenter, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiFocusedBackgroundGradientCenter, Color.TRANSPARENT)
                 focusBgGradientEnd =
-                    getColor(R.styleable.UiEditText_focusBgGradientEnd, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiFocusedBackgroundGradientEnd, Color.TRANSPARENT)
                 focusBgGradientOrientation = bgGradientOrientation
                 focusBgGradientType = getInt(
-                    R.styleable.UiEditText_focusBgGradientType,
+                    R.styleable.UiEditText_uiFocusedBackgroundGradientType,
                     bgGradientType.ordinal
                 ).toBgGradientType()
                 focusBgGradientCenterX =
-                    getFloat(R.styleable.UiEditText_focusBgGradientCenterX, bgGradientCenterX)
+                    getFloat(R.styleable.UiEditText_uiFocusedBackgroundGradientCenterX, bgGradientCenterX)
                 focusBgGradientCenterY =
-                    getFloat(R.styleable.UiEditText_focusBgGradientCenterY, bgGradientCenterY)
+                    getFloat(R.styleable.UiEditText_uiFocusedBackgroundGradientCenterY, bgGradientCenterY)
                 focusBgGradientRadius =
-                    getDimension(R.styleable.UiEditText_focusBgGradientRadius, bgGradientRadius)
+                    getDimension(R.styleable.UiEditText_uiFocusedBackgroundGradientRadius, bgGradientRadius)
 
-                stWidth = getDimension(R.styleable.UiEditText_strokeWidth, 0f)
-                stColor = getColor(R.styleable.UiEditText_stColor, Color.TRANSPARENT)
-                isDashed = getBoolean(R.styleable.UiEditText_strokeDistance, false)
-                dashSpace = getDimension(R.styleable.UiEditText_distanceSpace, 10f)
+                stWidth = getDimension(R.styleable.UiEditText_uiStrokeWidth, 0f)
+                stColor = getColor(R.styleable.UiEditText_uiStrokeColor, Color.TRANSPARENT)
+                isDashed = getBoolean(R.styleable.UiEditText_uiStrokeDashed, false)
+                dashSpace = getDimension(R.styleable.UiEditText_uiStrokeDashGap, 10f)
                 // Priority 1: Read from strokeGradientStart/Center/End color attrs
                 val stGradientStart =
-                    getColor(R.styleable.UiEditText_strokeGradientStart, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiStrokeGradientStart, Color.TRANSPARENT)
                 val stGradientCenter =
-                    getColor(R.styleable.UiEditText_strokeGradientCenter, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiStrokeGradientCenter, Color.TRANSPARENT)
                 val stGradientEnd =
-                    getColor(R.styleable.UiEditText_strokeGradientEnd, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiStrokeGradientEnd, Color.TRANSPARENT)
                 if (stGradientStart != Color.TRANSPARENT || stGradientEnd != Color.TRANSPARENT) {
                     strokeGradient = if (stGradientCenter != Color.TRANSPARENT) {
                         intArrayOf(stGradientStart, stGradientCenter, stGradientEnd)
@@ -167,54 +159,43 @@ class UiEditText @JvmOverloads constructor(
                         intArrayOf(stGradientStart, stGradientEnd)
                     }
                 }
-                // Priority 2: Read from strokeGradient string (overrides color attrs above)
-                val strokeGdColors = getString(R.styleable.UiEditText_strokeGradient)
-                strokeGdColors?.split(" ")
-                    ?.mapNotNull { if (it.isValidHexColor()) Color.parseColor(it) else null }
-                    ?.toIntArray()
+                // A color list ("#F00 #0F0" or @array/) overrides the start/center/end attrs above
+                getColorList(R.styleable.UiEditText_uiStrokeGradientColors)
                     ?.let { strokeGradient = it }
-                // Read stColors from integer-array reference (higher priority)
-                val stColorsResId = getResourceId(R.styleable.UiEditText_stColors, 0)
-                if (stColorsResId != 0) {
-                    stColors = resources.getIntArray(stColorsResId)
-                }
 
                 strokeGradientOrientation =
-                    getInt(R.styleable.UiEditText_strokeGdOrientation, 6).toStrokeOrientation()
+                    getInt(R.styleable.UiEditText_uiStrokeGradientOrientation, 6).toStrokeOrientation()
 
-                focusStWidth = getDimension(R.styleable.UiEditText_focusStrokeWidth, stWidth)
-                focusStColor = getColor(R.styleable.UiEditText_focusStColor, stColor)
+                focusStWidth = getDimension(R.styleable.UiEditText_uiFocusedStrokeWidth, stWidth)
+                focusStColor = getColor(R.styleable.UiEditText_uiFocusedStrokeColor, stColor)
                 focusStrokeGradientOrientation = strokeGradientOrientation
-                isFocusDashed = getBoolean(R.styleable.UiEditText_focusStrokeDistance, isDashed)
-                focusDashSpace = getDimension(R.styleable.UiEditText_focusDistanceSpace, dashSpace)
-                val focusStrokeGdColors = getString(R.styleable.UiEditText_focusStrokeGradient)
-                focusStrokeGradient = focusStrokeGdColors?.split(" ")
-                    ?.mapNotNull { if (it.isValidHexColor()) it.toColorInt() else null }
-                    ?.toIntArray()
+                isFocusDashed = getBoolean(R.styleable.UiEditText_uiFocusedStrokeDashed, isDashed)
+                focusDashSpace = getDimension(R.styleable.UiEditText_uiFocusedStrokeDashGap, dashSpace)
+                focusStrokeGradient = getColorList(R.styleable.UiEditText_uiFocusedStrokeGradientColors)
 
-                tColor = getColor(R.styleable.UiEditText_edtColor, currentTextColor)
-                tColorHint = getColor(R.styleable.UiEditText_edtColorHint, currentHintTextColor)
+                tColor = getColor(R.styleable.UiEditText_uiTextColor, currentTextColor)
+                tColorHint = getColor(R.styleable.UiEditText_uiTextColorHint, currentHintTextColor)
 
-                lineOption = LineOption.fromValue(getInt(R.styleable.UiEditText_lineOption, 0))
-                textGradient = getBoolean(R.styleable.UiEditText_textGradient, false)
+                lineOption = LineOption.fromValue(getInt(R.styleable.UiEditText_uiTextDecoration, 0))
+                textGradient = getBoolean(R.styleable.UiEditText_uiTextGradientEnabled, false)
                 textGradientStart =
-                    getColor(R.styleable.UiEditText_textGradientStart, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiTextGradientStart, Color.TRANSPARENT)
                 textGradientEnd =
-                    getColor(R.styleable.UiEditText_textGradientEnd, Color.TRANSPARENT)
+                    getColor(R.styleable.UiEditText_uiTextGradientEnd, Color.TRANSPARENT)
                 textGradientOrientation =
-                    getInt(R.styleable.UiEditText_textGdOrientation, 6).toTextOrientation()
+                    getInt(R.styleable.UiEditText_uiTextGradientOrientation, 6).toTextOrientation()
 
                 // Drawable attributes
-                drawableEmpty = getDrawable(R.styleable.UiEditText_drawableEmpty)
-                drawableNotEmpty = getDrawable(R.styleable.UiEditText_drawableNotEmpty)
-                drawableAlign = getInt(R.styleable.UiEditText_drawableAlign, 1).toDrawableAlign()
-                drawableSize = getDimensionPixelSize(R.styleable.UiEditText_drawableSize, 0)
-                drawablePadding = getDimensionPixelSize(R.styleable.UiEditText_drawablePadding, 0)
-                drawableTint = getColor(R.styleable.UiEditText_drawableTint, Color.TRANSPARENT)
-                drawableEmptyTint = getColor(R.styleable.UiEditText_drawableEmptyTint, drawableTint)
-                drawableNotEmptyTint = getColor(R.styleable.UiEditText_drawableNotEmptyTint, drawableTint)
-                drawableEmptyVisible = getBoolean(R.styleable.UiEditText_drawableEmptyVisible, true)
-                drawableNotEmptyVisible = getBoolean(R.styleable.UiEditText_drawableNotEmptyVisible, true)
+                drawableEmpty = getDrawable(R.styleable.UiEditText_uiDrawableEmpty)
+                drawableNotEmpty = getDrawable(R.styleable.UiEditText_uiDrawableNotEmpty)
+                drawableAlign = getInt(R.styleable.UiEditText_uiDrawablePosition, 1).toDrawableAlign()
+                drawableSize = getDimensionPixelSize(R.styleable.UiEditText_uiDrawableSize, 0)
+                drawablePadding = getDimensionPixelSize(R.styleable.UiEditText_uiDrawablePadding, 0)
+                drawableTint = getColor(R.styleable.UiEditText_uiDrawableTint, Color.TRANSPARENT)
+                drawableEmptyTint = getColor(R.styleable.UiEditText_uiDrawableEmptyTint, drawableTint)
+                drawableNotEmptyTint = getColor(R.styleable.UiEditText_uiDrawableNotEmptyTint, drawableTint)
+                drawableEmptyVisible = getBoolean(R.styleable.UiEditText_uiDrawableEmptyVisible, true)
+                drawableNotEmptyVisible = getBoolean(R.styleable.UiEditText_uiDrawableNotEmptyVisible, true)
             }
             finally {
                 recycle()
@@ -607,10 +588,6 @@ class UiEditText @JvmOverloads constructor(
     }
 
     private data class Quad(val x0: Float, val y0: Float, val x1: Float, val y1: Float)
-
-    private fun String.isValidHexColor(): Boolean {
-        return this.matches(HEX_COLOR_REGEX)
-    }
 
     fun cornerRadius(radius: Float) = apply {
         cornerRadius = radius
@@ -1086,8 +1063,4 @@ class UiEditText @JvmOverloads constructor(
      * Check if text is not empty
      */
     fun isNotEmpty(): Boolean = !text.isNullOrEmpty()
-
-    companion object {
-        private val HEX_COLOR_REGEX = Regex("^#?[0-9a-fA-F]{6,8}$")
-    }
 }

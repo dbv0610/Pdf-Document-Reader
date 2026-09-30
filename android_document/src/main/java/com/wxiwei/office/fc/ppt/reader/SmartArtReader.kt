@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          SmartArtReader.java
  *  
  * 编译器:            android2.2
@@ -80,21 +87,21 @@ class SmartArtReader {
         var `in` = dataPart.getInputStream()
         val dataDoc = saxreader.read(`in`)
         `in`.close()
-        var root = dataDoc.getRootElement()
+        var root = dataDoc!!.rootElement
 
         val fill: BackgroundAndFill? = BackgroundReader.Companion.instance()
-            .processBackground(control!!, zipPackage, dataPart, pgMaster, root.element("bg"))
+            .processBackground(control!!, zipPackage, dataPart, pgMaster, root!!.element("bg"))
 
         val line = LineKit.createLine(
             control,
             zipPackage,
             dataPart,
             pgMaster,
-            root.element("whole").element("ln")
+            root!!.element("whole")!!.element("ln")
         )
         var drawingPart: PackagePart? = null
         var e: Element? = null
-        if ((root.element("extLst").also { e = it }) != null && (e!!.element("ext")
+        if ((root!!.element("extLst").also { e = it }) != null && (e!!.element("ext")
                 .also { e = it }) != null && (e!!.element("dataModelExt").also { e = it }) != null
         ) {
             val relId = e!!.attributeValue("relId")
@@ -114,15 +121,15 @@ class SmartArtReader {
         `in`.close()
 
         val smartArt = SmartArt()
-        smartArt.setBackgroundAndFill(fill)
-        smartArt.setLine(line)
+        smartArt.backgroundAndFill = fill
+        smartArt.line = line
 
-        root = smartArtDoc.getRootElement()
-        val spTree = root.element("spTree")
+        root = smartArtDoc!!.rootElement
+        val spTree = root!!.element("spTree")
         if (spTree != null) {
             val it = spTree.elementIterator("sp")
-            while (it.hasNext()) {
-                val sp = it.next() as Element
+            while (it!!.hasNext()) {
+                val sp = it!!.next() as Element
                 var shape: IShape? = null
 
                 shape = processAutoShape(
@@ -130,7 +137,7 @@ class SmartArtReader {
                     pgLayout, pgSlide, sp
                 )
                 if (shape != null) {
-                    shape.setParent(smartArt)
+                    shape.parent = smartArt
                     smartArt.appendShapes(shape)
                 }
 
@@ -174,8 +181,8 @@ class SmartArtReader {
         }
 
         val spPr = sp.element("spPr")
-        val spName = sp.getName()
-        if (fill == null && spPr.element("noFill") == null && (spName != "cxnSp")) {
+        val spName = sp.name
+        if (fill == null && spPr!!.element("noFill") == null && (spName != "cxnSp")) {
             fill = BackgroundReader.Companion.instance()
                 .processBackground(control!!, zipPackage!!, smartArtPart!!, pgMaster, spPr)
             if (fill == null && shapeType != ShapeTypes.Arc && shapeType != ShapeTypes.BracketPair && shapeType != ShapeTypes.LeftBracket && shapeType != ShapeTypes.RightBracket && shapeType != ShapeTypes.BracePair && shapeType != ShapeTypes.LeftBrace && shapeType != ShapeTypes.RightBrace && shapeType != ShapeTypes.ArbitraryPolygon) {
@@ -227,7 +234,7 @@ class SmartArtReader {
             var values: Array<Float?>? = null
             var border = true
             val name = ReaderKit.instance().getPlaceholderName(sp)
-            val spName = sp.getName()
+            val spName = sp.name
             if (spName == "cxnSp") {
                 border = true
                 shapeType = ShapeTypes.Line
@@ -256,7 +263,7 @@ class SmartArtReader {
                         for (i in gds.indices) {
                             val gd = gds.get(i)
                             `val` = gd.attributeValue("fmla")
-                            `val` = `val`.substring(4)
+                            `val` = `val`!!.substring(4)
                             values[i] = `val`.toFloat() / 100000
                         }
                     }
@@ -295,10 +302,10 @@ class SmartArtReader {
             // lineShape or autoShape
             if (shapeType == ShapeTypes.Line || shapeType == ShapeTypes.StraightConnector1 || shapeType == ShapeTypes.BentConnector3 || shapeType == ShapeTypes.CurvedConnector3) {
                 val lineShape = LineShape()
-                lineShape.setShapeType(shapeType)
-                lineShape.setBounds(rect)
-                lineShape.setAdjustData(values)
-                lineShape.setLine(line)
+                lineShape.shapeType = shapeType
+                lineShape.bounds = rect
+                lineShape.adjustData = values
+                lineShape.line = line
 
                 if (ln != null) {
                     var temp = ln.element("headEnd")
@@ -331,7 +338,7 @@ class SmartArtReader {
                 val arbitraryPolygonShape = ArbitraryPolygonShape()
                 var lineFill: BackgroundAndFill? = null
                 if (line != null) {
-                    lineFill = line.getBackgroundAndFill()
+                    lineFill = line.backgroundAndFill
                 }
                 ArbitraryPolygonShapePath.processArbitraryPolygonShape(
                     arbitraryPolygonShape,
@@ -343,21 +350,21 @@ class SmartArtReader {
                     rect
                 )
 
-                arbitraryPolygonShape.setShapeType(shapeType)
+                arbitraryPolygonShape.shapeType = shapeType
                 processGrpRotation(arbitraryPolygonShape, spPr)
-                arbitraryPolygonShape.setLine(line)
+                arbitraryPolygonShape.line = line
 
                 return arbitraryPolygonShape
             } else if (fill != null || line != null) {
                 val autoShape = AutoShape(shapeType)
-                autoShape.setBounds(rect)
+                autoShape.bounds = rect
                 if (fill != null) {
-                    autoShape.setBackgroundAndFill(fill)
+                    autoShape.backgroundAndFill = fill
                 }
                 if (line != null) {
-                    autoShape.setLine(line)
+                    autoShape.line = line
                 }
-                autoShape.setAdjustData(values)
+                autoShape.adjustData = values
                 processGrpRotation(autoShape, spPr)
                 return autoShape
             }
@@ -381,14 +388,14 @@ class SmartArtReader {
         if (txBody != null) {
             val tb = TextBox()
             // anchor 
-            tb.setBounds(rect)
+            tb.bounds = rect
 
 
             // 建立章节
             val secElem = SectionElement()
             // 开始Offset
             secElem.setStartOffset(0)
-            tb.setElement(secElem)
+            tb.element = secElem
             // 属性
             val attr = secElem.getAttribute()
             // 宽度
@@ -418,8 +425,8 @@ class SmartArtReader {
             )
 
             secElem.setEndOffset(offset.toLong())
-            if (tb.getElement() != null && tb.getElement().getText(null) != null && tb.getElement()
-                    .getText(null)!!.length > 0 && ("\n" != tb.getElement().getText(null))
+            if (tb.element != null && tb.element!!.getText(null) != null && tb.element!!
+                    .getText(null)!!.length > 0 && ("\n" != tb.element!!.getText(null))
             ) {
                 ReaderKit.instance().processRotation(tb, sp.element("txXfrm"))
             }
@@ -430,7 +437,7 @@ class SmartArtReader {
             if (wrap != null) {
                 // 文本框内自动换行
                 val value = wrap.attributeValue("wrap")
-                tb.setWrapLine(value == null || "square".equals(value, ignoreCase = true))
+                tb.isWrapLine = value == null || "square".equals(value, ignoreCase = true)
             }
 
             return tb

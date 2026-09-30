@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          ElementCollectionImpl.java
  *
  * 编译器:            android2.2
@@ -44,12 +51,18 @@ open class ElementCollectionImpl(capacity: Int) : IElementCollection {
             ensureCapacity()
         }
         var i = size
-        while (i >= index) {
+        while (i > index) {
             elems!![i] = elems!![i - 1]
             i--
         }
         elems!![index] = element
         size++
+    }
+
+    /** Puts the elements back in order of their start offsets (after offsets were moved around). */
+    fun sortByOffset() {
+        val arr = elems ?: return
+        java.util.Arrays.sort(arr, 0, size, compareBy<IElement?> { it?.getStartOffset() ?: Long.MAX_VALUE })
     }
 
     /**
@@ -62,6 +75,24 @@ open class ElementCollectionImpl(capacity: Int) : IElementCollection {
         }
         // Java 中 removeElement(int) 会拓宽调用 removeElement(long)
         removeElement(index.toLong())
+    }
+
+    /** Removes the element at [index] without disposing it (it moves elsewhere). */
+    fun detachElementForIndex(index: Int): IElement? {
+        if (index < 0 || index >= size) return null
+        val e = elems!![index]
+        for (i in index + 1 until size) {
+            elems!![i - 1] = elems!![i]
+        }
+        elems!![size - 1] = null
+        size--
+        return e
+    }
+
+    /** Index of [element] (identity), or -1. */
+    fun indexOf(element: IElement?): Int {
+        for (i in 0 until size) if (elems!![i] === element) return i
+        return -1
     }
 
     /**
@@ -77,7 +108,7 @@ open class ElementCollectionImpl(capacity: Int) : IElementCollection {
         for (i in index + 1 until size) {
             elems!![i - 1] = elems!![i]
         }
-        elems!![size] = null
+        elems!![size - 1] = null
         size--
         e!!.dispose()
     }

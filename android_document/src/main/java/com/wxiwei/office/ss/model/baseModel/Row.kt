@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          Row.java
  *
  * 编译器:            android2.2
@@ -9,7 +16,6 @@ package com.wxiwei.office.ss.model.baseModel
 import com.wxiwei.office.common.bg.BackgroundAndFill
 import com.wxiwei.office.constant.SSConstant
 import com.wxiwei.office.ss.other.ExpandedCellRangeAddress
-import java.util.Hashtable
 
 /**
  * Row of this sheet
@@ -52,7 +58,7 @@ open class Row
     // 行中cell
     //cells table
     @JvmField
-    protected var cells: Hashtable<Int, Cell>? = Hashtable(capacity)
+    protected var cells: CellMap? = CellMap()
 
     fun setSheet(sheet: Sheet?) {
         this.sheet = sheet
@@ -210,6 +216,32 @@ open class Row
      */
     fun setRowNumber(rowNumber: Int) {
         this.rowNumber = rowNumber
+    }
+
+    /**
+     * Moves the cells at or after column [at] by [delta] (insert when > 0). With a negative
+     * [delta] the cells of columns at..at-delta-1 are taken out and returned by column.
+     */
+    fun shiftCells(at: Int, delta: Int): Map<Int, Cell> {
+        val cells = cells ?: return emptyMap()
+        val removed = HashMap<Int, Cell>()
+        if (delta < 0) for (c in at until at - delta) cells.remove(c)?.let { removed[c] = it }
+        val from = if (delta < 0) at - delta else at
+        val moving = cells.keys.filter { it >= from }.sorted().let { if (delta > 0) it.reversed() else it }
+        for (k in moving) {
+            val cell = cells.remove(k) ?: continue
+            cell.setColNumber(k + delta)
+            cells[k + delta] = cell
+        }
+        return removed
+    }
+
+    /** Puts cells taken out by [shiftCells] back (after the columns were inserted again). */
+    fun restoreCells(cells: Map<Int, Cell>) {
+        for ((c, cell) in cells) {
+            cell.setColNumber(c)
+            this.cells!![c] = cell
+        }
     }
 
     /**

@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          FontKit.java
  *
  * 编译器:            android2.2
@@ -46,19 +53,6 @@ class FontKit {
         val font = wb?.getFont(s!!.getFontIndex().toInt())
         val isbold = font!!.isBold() //getBoldweight() > HSSFFont.BOLDWEIGHT_NORMAL;
         val isitalics = font.isItalic()
-        // 精斜体
-        if (isbold && isitalics) {
-            paint.textSkewX = -0.2f
-            paint.isFakeBoldText = true
-        }
-        // 粗体
-        else if (isbold) {
-            paint.isFakeBoldText = true
-        }
-        // 斜体
-        else if (isitalics) {
-            paint.textSkewX = -0.2f
-        }
 
         //Strike
         if (font.isStrikeline()) {
@@ -72,8 +66,12 @@ class FontKit {
 
         // 字符样式
         val fontIndex = s!!.getFontIndex().toInt()
+        // the cell font's own family (resolved like Word text), real bold/italic faces
         paint.typeface = typefaceCache.getOrPut(fontIndex) {
-            Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+            val manage = FontTypefaceManage.instance()
+            val name = font.getName()
+            if (name.isNullOrEmpty()) Typeface.create(Typeface.SANS_SERIF, (if (isbold) Typeface.BOLD else 0) or (if (isitalics) Typeface.ITALIC else 0))
+            else manage.getFontTypeface(manage.addFontName(name), isbold, isitalics)
         }
         // fontsize
         paint.textSize = (font.getFontSize() * MainConstant.POINT_TO_PIXEL + 0.5f).toFloat()
@@ -110,7 +108,24 @@ class FontKit {
         //int newPos = wordBreak.following(pos - 1);
         lineBreak.following(pos)
         val newPos = lineBreak.previous()
-        return if (newPos == 0) pos else newPos
+        // no break opportunity (one long word): break between characters, not inside an emoji
+        return if (newPos == 0) clusterStart(text!!, pos).takeIf { it > 0 } ?: pos else newPos
+    }
+
+    /** [i], or the start of the character cluster (surrogate pair, emoji sequence, base + marks) it is inside. */
+    fun clusterStart(text: String, i: Int): Int {
+        if (i <= 0 || i >= text.length) return i
+        val chars = BreakIterator.getCharacterInstance()
+        chars.setText(text)
+        return if (chars.isBoundary(i)) i else chars.preceding(i)
+    }
+
+    /** The end of the character cluster that starts at or contains [i]. */
+    fun clusterEnd(text: String, i: Int): Int {
+        if (i >= text.length) return text.length
+        val chars = BreakIterator.getCharacterInstance()
+        chars.setText(text)
+        return chars.following(i).takeIf { it != BreakIterator.DONE } ?: text.length
     }
 
     fun breakText(content: String, lineWidth: Int, paint: Paint): List<String> {

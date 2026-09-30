@@ -20,7 +20,7 @@
     </style>
 
     <style name="HeaderScreenTitle">
-        <item name="tvColor">@color/white</item>
+        <item name="uiTextColor">@color/white</item>
         <item name="android:includeFontPadding">false</item>
         <item name="android:fontFamily">@font/rb_600</item>
         <item name="android:textSize">@dimen/_14sdp</item>
@@ -29,12 +29,12 @@
     <style name="ButtonAppStyle">
         <item name="android:textAlignment">center</item>
         <item name="android:textSize">@dimen/_10ssp</item>
-        <item name="bgGradientEnd">@color/grdEnd</item>
-        <item name="bgGdOrientation">left_right</item>
-        <item name="bgGradientStart">@color/grdStart</item>
-        <item name="bgIsGradient">true</item>
-        <item name="tvColor">@color/white</item>
-        <item name="cornerRadius">@dimen/_100sdp</item>
+        <item name="uiBackgroundGradientEnd">@color/grdEnd</item>
+        <item name="uiBackgroundGradientOrientation">left_right</item>
+        <item name="uiBackgroundGradientStart">@color/grdStart</item>
+        <item name="uiBackgroundGradientEnabled">true</item>
+        <item name="uiTextColor">@color/white</item>
+        <item name="uiCornerRadius">@dimen/_100sdp</item>
     </style>
 
     <style name="ScannerChip">

@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          ModelUtil.java
  *
  * 编译器:            android2.2
@@ -293,7 +300,8 @@ class ModelUtil {
      * @param dx
      * @return
      */
-    private fun getValueX(sheet: Sheet, columnIndex: Int, dx: Int): Float {
+    /** Left of column [columnIndex] plus [dx], in sheet pixels at zoom 1 (hidden columns take no room). */
+    fun getValueX(sheet: Sheet, columnIndex: Int, dx: Int): Float {
         var x = 0f
         for (i in 0 until columnIndex) {
             if (sheet.isColumnHidden(i)) {
@@ -306,7 +314,8 @@ class ModelUtil {
         return dx + x
     }
 
-    private fun getValueY(sheet: Sheet, rowIndex: Int, dy: Int): Float {
+    /** Top of row [rowIndex] plus [dy], in sheet pixels at zoom 1. */
+    fun getValueY(sheet: Sheet, rowIndex: Int, dy: Int): Float {
         var y = 0f
         var h = 0f
         for (i in 0 until rowIndex) {
@@ -429,11 +438,9 @@ class ModelUtil {
                     if (cached == null && value != null) {
                         synchronized(numericFormatCache) { numericFormatCache[cacheKey] = value!! }
                     }
-                    if (numericType == Cell.CELL_TYPE_NUMERIC_SIMPLEDATE) {
-                        //store string content, so no need to convert any more
-                        cell.setCellType(Cell.CELL_TYPE_STRING)
-                        cell.setCellValue(book.addSharedString(value))
-                    }
+                    // The formatted date used to replace the cell's number here, which broke every
+                    // formula reading that cell (#VALUE!) and edits/saves; numericFormatCache already
+                    // spares the formatting work.
                 } catch (ex: Exception) {
                     value = cell.getNumberValue().toString()
                 }

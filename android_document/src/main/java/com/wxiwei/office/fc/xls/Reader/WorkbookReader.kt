@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.xls.Reader
 
 import android.os.Message
@@ -43,6 +50,7 @@ class WorkbookReader private constructor() {
 
     @Throws(Exception::class)
     fun read(zipPackage: ZipPackage, packagePart: PackagePart, book: Workbook, iReader: SSReader) {
+        this.zipPackage?.takeIf { it !== zipPackage }?.let { close(it) }
         this.zipPackage = zipPackage
         this.book = book
         this.iReader = iReader
@@ -207,12 +215,12 @@ class WorkbookReader private constructor() {
     @Throws(Exception::class)
     private fun searchContentSheetName(documentPart: PackagePart, key: String): Boolean {
         val input = documentPart.inputStream
-        val root = SAXReader().read(input).rootElement
+        val root = SAXReader().read(input)!!.rootElement
         input.close()
-        val iterator = root.element("sheets").elementIterator()
-        while (iterator.hasNext()) {
-            val element = iterator.next() as Element
-            if (element.attributeValue("name").lowercase().contains(key)) return true
+        val iterator = root!!.element("sheets")!!.elementIterator()
+        while (iterator!!.hasNext()) {
+            val element = iterator!!.next() as Element
+            if (element.attributeValue("name")!!.lowercase().contains(key)) return true
         }
         return false
     }
@@ -223,10 +231,20 @@ class WorkbookReader private constructor() {
         return SheetReader.instance().searchContent(zipPackage!!, iReader, part, key)
     }
 
+    /**
+     * Closes [pkg] (the document's file) once the sheet being read stops. Left to the finalizer, a
+     * file deleted meanwhile (shared storage) fails to close with EIO, which kills the app.
+     */
+    private fun close(pkg: ZipPackage) {
+        val job = sheetJob
+        if (job != null && !job.isCompleted) job.invokeOnCompletion { pkg.revert() } else pkg.revert()
+    }
+
     @Synchronized
     fun dispose() {
         cancelReading()
         SheetReader.instance().dispose()
+        zipPackage?.let { close(it) }
         zipPackage = null
         book = null
         iReader = null
@@ -252,20 +270,22 @@ class WorkbookReader private constructor() {
     }
 
     private inner class WorkBookSaxHandler : ElementHandler {
-        override fun onStart(elementPath: ElementPath) {}
-        override fun onEnd(elementPath: ElementPath) {
+        override fun onStart(elementPath: ElementPath?) {}
+        override fun onEnd(elementPath: ElementPath?) {
             if (iReader?.isAborted() == true) throw AbortReaderError("abort Reader")
-            val element = elementPath.current
-            when (element.name) {
+            val element = elementPath?.current
+            when (element!!.name) {
                 "sheet" -> {
-                    val id = element.attributeValue("id")
-                    val name = element.attributeValue("name")
-                    sheetIndexList!![tempIndex++] = id
-                    sheetNameList!![id] = name
+                    val id = element!!.attributeValue("id") ?: ""
+                    val name = element!!.attributeValue("name") ?: ""
+                    if (id.isNotEmpty()) {
+                        sheetIndexList!![tempIndex++] = id
+                        sheetNameList!![id] = name
+                    }
                 }
-                "workbookPr" -> book?.setUsing1904DateWindowing(element.attributeValue("date1904")?.let { it.toInt() != 0 } ?: false)
+                "workbookPr" -> book?.setUsing1904DateWindowing(element!!.attributeValue("date1904")?.let { it.toInt() != 0 } ?: false)
             }
-            element.detach()
+            element!!.detach()
         }
     }
 }

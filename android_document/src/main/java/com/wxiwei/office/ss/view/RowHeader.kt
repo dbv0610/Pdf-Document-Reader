@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          RowHeader.java
  *
  * 编译器:            android2.2
@@ -152,7 +159,7 @@ class RowHeader(sheetView: SheetView?) {
         canvas.drawRect(rect, paint)
 
         // 绘线
-        paint.color = SSConstant.GRIDLINE_COLOR
+        paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
         canvas.drawRect(0f, y, rightBound, y + 1, paint)
         //head line
         paint.color = SSConstant.HEADER_GRIDLINE_COLOR
@@ -214,7 +221,7 @@ class RowHeader(sheetView: SheetView?) {
             canvas.drawRect(rect, paint)
 
             // 绘线
-            paint.color = SSConstant.GRIDLINE_COLOR
+            paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
             canvas.drawRect(0f, y, rightBound.toFloat(), y + 1, paint)
             //head line
             paint.color = SSConstant.HEADER_GRIDLINE_COLOR
@@ -237,7 +244,7 @@ class RowHeader(sheetView: SheetView?) {
         }
 
         // 绘线最后一根线
-        paint.color = SSConstant.GRIDLINE_COLOR
+        paint.color = SSConstant.gridlineColor(sheetview?.getCurrentSheet())
         canvas.drawRect(0f, y, rightBound.toFloat(), y + 1, paint)
         //head line
         paint.color = SSConstant.HEADER_GRIDLINE_COLOR

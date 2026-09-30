@@ -19,7 +19,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -34,25 +33,30 @@ abstract class BaseActivity<VB : ViewBinding>(
     private val bindingFactory: (LayoutInflater) -> VB,
 ) : AppCompatActivity(), BaseHost, FragmentNavigator {
     open val fullStatus: Boolean = false
+
+    /** Whether this activity already pads its root for the status bar (fragments then don't). */
+    internal val padsStatusBar: Boolean get() = !fullStatus
     open val fragmentContainerId: Int = View.NO_ID
     open val navGraph: NavGraph? = null
+    open val hideKeyboardWhenTouch : Boolean = true
 
-    val binding: VB by lazy { bindingFactory(layoutInflater) }
+    // Main-thread only, so the lazies below skip lazy()'s default synchronization.
+    val binding: VB by lazy(LazyThreadSafetyMode.NONE) { bindingFactory(layoutInflater) }
     override val hostScope: CoroutineScope get() = lifecycleScope
     override val hostLifecycleOwner: LifecycleOwner get() = this
     override val toastContext: Context? get() = this
     override val keyboardActivity: Activity? get() = this
     override val mainHandlerHolder = MainHandlerHolder()
 
-    val statusBarHeight: Int by lazy { statusBarHeightPx }
-    val navigationBarHeight: Int by lazy { navigationBarHeightPx }
+    val statusBarHeight: Int by lazy(LazyThreadSafetyMode.NONE) { statusBarHeightPx }
+    val navigationBarHeight: Int by lazy(LazyThreadSafetyMode.NONE) { navigationBarHeightPx }
     open val observeKeyboard: Boolean = false
     var keyboardState: KeyboardState = KeyboardState(false, 0)
         private set
-    private val graph: NavGraph? by lazy { navGraph }
+    private val graph: NavGraph? by lazy(LazyThreadSafetyMode.NONE) { navGraph }
     private val fm: FragmentManager get() = supportFragmentManager
 
-    private val windowInsetsController: WindowInsetsControllerCompat by lazy {
+    private val windowInsetsController: WindowInsetsControllerCompat by lazy(LazyThreadSafetyMode.NONE) {
         WindowCompat.getInsetsController(window, window.decorView)
     }
 
@@ -67,9 +71,7 @@ abstract class BaseActivity<VB : ViewBinding>(
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(binding.root.apply {
-            if (!fullStatus) {
-                updatePadding(top = binding.root.paddingTop + statusBarHeight)
-            }
+            if (!fullStatus) padForStatusBar(statusBarHeight)
         })
         if (observeKeyboard) {
             findViewById<View>(android.R.id.content).observeKeyboardState(this) {
@@ -109,7 +111,7 @@ abstract class BaseActivity<VB : ViewBinding>(
     }
 
     private fun routeId(name: String): Int {
-        graph
+        graph // Building the graph registers its routes, which byName() looks up.
         return RouteRegistry.byName(name).id
     }
 
@@ -163,8 +165,12 @@ abstract class BaseActivity<VB : ViewBinding>(
             .commit()
     }
 
-    override fun goBackFragment(): Boolean =
-        (fm.backStackEntryCount > 0).also { if (it) fm.popBackStack() }
+    override fun goBackFragment(): Boolean {
+        // popBackStack() after onSaveInstanceState throws; report "not handled" instead.
+        if (fm.isStateSaved || fm.backStackEntryCount == 0) return false
+        fm.popBackStack()
+        return true
+    }
 
     override fun popToRoot() {
         if (fm.isStateSaved) return
@@ -189,7 +195,7 @@ abstract class BaseActivity<VB : ViewBinding>(
         popBackTo(routeId(routeName), inclusive)
 
     override fun popBackTo(routeId: Int, inclusive: Boolean): Boolean {
-        graph
+        graph // Registers the graph's routes (see routeId()).
         val name = RouteRegistry.byId(routeId).name
         val exists =
             (0 until fm.backStackEntryCount).any { fm.getBackStackEntryAt(it).name == name }
@@ -231,7 +237,9 @@ abstract class BaseActivity<VB : ViewBinding>(
     fun showKeyboard() = showKeyboard(binding.root)
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        hideKeyboardIfTouchedOutsideFocusedEditText(currentFocus, ev) { hideKeyboard() }
+        if(hideKeyboardWhenTouch){
+            hideKeyboardIfTouchedOutsideFocusedEditText(currentFocus, ev) { hideKeyboard() }
+        }
         return super.dispatchTouchEvent(ev)
     }
 

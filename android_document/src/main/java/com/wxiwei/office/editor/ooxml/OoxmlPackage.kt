@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.editor.ooxml
 
 import com.wxiwei.office.editor.EditResult
@@ -63,7 +70,7 @@ class OoxmlPackage private constructor(
         val key = name(part)
         return documents.getOrPut(key) {
             val data = parts[key] ?: throw FileNotFoundException("Missing OOXML part: $key")
-            parse(data).also { rootNamespaces[key] = namespaces(it.rootElement) }
+            parse(data).also { rootNamespaces[key] = namespaces(it.rootElement!!) }
         }
     }
 
@@ -73,7 +80,7 @@ class OoxmlPackage private constructor(
         requireNotNull(doc.rootElement) { "XML part needs a root element" }
         if (!parts.containsKey(key)) parts[key] = byteArrayOf()
         documents[key] = doc
-        rootNamespaces[key] = namespaces(doc.rootElement)
+        rootNamespaces[key] = namespaces(doc.rootElement!!)
     }
 
     fun relsPartOf(part: String): String {
@@ -86,9 +93,9 @@ class OoxmlPackage private constructor(
     fun relationships(part: String): List<Rel> {
         val key = relsPartOf(part)
         if (!has(key)) return emptyList()
-        return children(xml(key).rootElement, RELS, "Relationship").map {
-            Rel(it.attributeValue("Id"), it.attributeValue("Type"),
-                it.attributeValue("Target"), it.attributeValue("TargetMode"))
+        return children(xml(key).rootElement!!, RELS, "Relationship").map {
+            Rel(it.attributeValue("Id")!!, it.attributeValue("Type")!!,
+                it.attributeValue("Target")!!, it.attributeValue("TargetMode"))
         }
     }
 
@@ -100,7 +107,7 @@ class OoxmlPackage private constructor(
         val id = "rId$n"
         val key = relsPartOf(part)
         if (!has(key)) putXml(key, document(RELS, "Relationships"))
-        xml(key).rootElement.addElement(QName("Relationship", Namespace.get("", RELS))).apply {
+        xml(key).rootElement!!.addElement(QName("Relationship", Namespace.get("", RELS)))!!.apply {
             addAttribute("Id", id)
             addAttribute("Type", type)
             addAttribute("Target", target)
@@ -135,8 +142,21 @@ class OoxmlPackage private constructor(
             it.attributeValue("Extension").equals(extension, ignoreCase = true)
         }
         val entry = matches.firstOrNull() ?: root.addElement(QName("Default", Namespace.get("", TYPES)))
-        entry.addAttribute("Extension", extension).addAttribute("ContentType", contentType)
+        entry!!.addAttribute("Extension", extension)!!.addAttribute("ContentType", contentType)
         matches.drop(1).forEach { root.remove(it) }
+    }
+
+    fun removeOverride(partName: String) {
+        val key = "/" + name(partName)
+        val root = contentTypes()
+        children(root, TYPES, "Override").filter { it.attributeValue("PartName") == key }.forEach { root.remove(it) }
+    }
+
+    fun removeRelationship(part: String, id: String) {
+        val key = relsPartOf(part)
+        if (!has(key)) return
+        val root = xml(key).rootElement!!
+        children(root, RELS, "Relationship").filter { it.attributeValue("Id") == id }.forEach { root.remove(it) }
     }
 
     fun ensureOverride(partName: String, contentType: String) {
@@ -145,7 +165,7 @@ class OoxmlPackage private constructor(
         val root = contentTypes()
         val matches = children(root, TYPES, "Override").filter { it.attributeValue("PartName") == key }
         val entry = matches.firstOrNull() ?: root.addElement(QName("Override", Namespace.get("", TYPES)))
-        entry.addAttribute("PartName", key).addAttribute("ContentType", contentType)
+        entry!!.addAttribute("PartName", key)!!.addAttribute("ContentType", contentType)
         matches.drop(1).forEach { root.remove(it) }
     }
 
@@ -193,7 +213,7 @@ class OoxmlPackage private constructor(
 
     private fun contentTypes(): Element {
         if (!has(CONTENT_TYPES)) putXml(CONTENT_TYPES, document(TYPES, "Types"))
-        return xml(CONTENT_TYPES).rootElement
+        return xml(CONTENT_TYPES).rootElement!!
     }
 
     companion object {
@@ -221,9 +241,9 @@ class OoxmlPackage private constructor(
         private fun name(part: String) = part.trimStart('/')
 
         private fun children(root: Element, uri: String, local: String): List<Element> =
-            root.elements().filterIsInstance<Element>().filter { it.namespaceURI == uri && it.name == local }
+            root.elements()!!.filterIsInstance<Element>().filter { it.namespaceURI == uri && it.name == local }
 
-        private fun document(uri: String, local: String): Document = DocumentHelper.createDocument().apply {
+        private fun document(uri: String, local: String): Document = DocumentHelper.createDocument()!!.apply {
             addElement(QName(local, Namespace.get("", uri)))
         }
 
@@ -233,27 +253,27 @@ class OoxmlPackage private constructor(
             runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
             runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
             runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
-        }.read(bytes.inputStream())
+        }.read(bytes.inputStream())!!
 
         private fun namespaces(root: Element): Map<String, String> = linkedMapOf<String, String>().apply {
-            if (root.namespaceURI.isNotEmpty()) put(root.namespacePrefix, root.namespaceURI)
-            root.declaredNamespaces().filterIsInstance<Namespace>().forEach { put(it.prefix, it.uri) }
+            if (root.namespaceURI!!.isNotEmpty()) put(root.namespacePrefix!!, root.namespaceURI!!)
+            root.declaredNamespaces()!!.filterIsInstance<Namespace>().forEach { put(it.prefix!!, it.uRI) }
         }
 
         private fun serialize(doc: Document, original: Map<String, String>): ByteArray {
             // Preserve declarations even when their only use is in mc:Ignorable's string value.
-            val required = original + namespaces(doc.rootElement)
-            val declared = namespaces(doc.rootElement)
+            val required = original + namespaces(doc.rootElement!!)
+            val declared = namespaces(doc.rootElement!!)
             required.filter { (prefix, uri) -> declared[prefix] != uri }.forEach { (prefix, uri) ->
-                doc.rootElement.addNamespace(prefix, uri)
+                doc.rootElement!!.addNamespace(prefix, uri)
             }
             var result = writeXml(doc)
             val roundTrip = parse(result)
-            val missing = required.filter { (prefix, uri) -> namespaces(roundTrip.rootElement)[prefix] != uri }
+            val missing = required.filter { (prefix, uri) -> namespaces(roundTrip.rootElement!!)[prefix] != uri }
             if (missing.isNotEmpty()) {
-                missing.forEach { (prefix, uri) -> roundTrip.rootElement.addNamespace(prefix, uri) }
+                missing.forEach { (prefix, uri) -> roundTrip.rootElement!!.addNamespace(prefix, uri) }
                 result = writeXml(roundTrip)
-                val actual = namespaces(parse(result).rootElement)
+                val actual = namespaces(parse(result).rootElement!!)
                 if (required.any { (prefix, uri) -> actual[prefix] != uri }) {
                     throw IOException("XML writer dropped root namespace declarations")
                 }

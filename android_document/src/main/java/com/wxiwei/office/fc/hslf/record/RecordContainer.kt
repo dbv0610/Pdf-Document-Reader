@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.hslf.record
 
 import com.wxiwei.office.fc.util.ArrayUtil
@@ -157,7 +164,7 @@ abstract class RecordContainer : Record() {
             val children = br.getChildRecords()
             for (record in children) {
                 if (record is ParentAwareRecord) {
-                    record.setParentRecord(br)
+                    record.parentRecord = br
                 }
                 if (record is RecordContainer) {
                     handleParentAwareRecords(record)

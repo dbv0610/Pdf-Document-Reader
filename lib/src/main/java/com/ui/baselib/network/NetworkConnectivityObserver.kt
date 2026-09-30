@@ -6,6 +6,8 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * NetworkConnectivityObserver - Smart network connectivity monitoring
@@ -56,13 +59,17 @@ class NetworkConnectivityObserver(private val context: Context) {
     }
 
     fun observe(): Flow<Status> = callbackFlow {
+        // Callbacks are per network: losing Wi-Fi while mobile data is up must not report Lost.
+        val networks = ConcurrentHashMap.newKeySet<Network>()
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
+                networks += network
                 trySend(Status.Available)
             }
 
             override fun onLost(network: Network) {
-                trySend(Status.Lost)
+                networks -= network
+                trySend(if (networks.isEmpty()) Status.Lost else Status.Available)
             }
 
             override fun onUnavailable() {
@@ -307,18 +314,25 @@ class NetworkLifecycleObserver(
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    // NetworkCallback runs on a system binder thread; callers update UI, so hop to main.
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     override fun onStart(owner: LifecycleOwner) {
+        val networks = ConcurrentHashMap.newKeySet<Network>()
         callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                onStatusChanged(true)
+                networks += network
+                mainHandler.post { onStatusChanged(true) }
             }
 
             override fun onLost(network: Network) {
-                onStatusChanged(false)
+                networks -= network
+                val available = networks.isNotEmpty()
+                mainHandler.post { onStatusChanged(available) }
             }
 
             override fun onUnavailable() {
-                onStatusChanged(false)
+                mainHandler.post { onStatusChanged(false) }
             }
         }
 
@@ -339,5 +353,6 @@ class NetworkLifecycleObserver(
             connectivityManager.unregisterNetworkCallback(it)
         }
         callback = null
+        mainHandler.removeCallbacksAndMessages(null)
     }
 }

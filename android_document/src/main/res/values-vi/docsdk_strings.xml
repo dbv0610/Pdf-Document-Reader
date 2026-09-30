@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="docsdk_page_of">%1$d / %2$d</string>
+    <string name="docsdk_back">Quay lại</string>
+    <string name="docsdk_open">Mở</string>
+    <string name="docsdk_password_title">Mật khẩu</string>
+    <string name="docsdk_password_hint">Mật khẩu</string>
+    <string name="docsdk_password_required">Tài liệu này có mật khẩu. Nhập mật khẩu để mở.</string>
+    <string name="docsdk_password_incorrect">Mật khẩu không đúng. Hãy thử lại.</string>
+    <string name="docsdk_error_unsupported">Không mở được loại tài liệu này.</string>
+    <string name="docsdk_error_damaged">Tài liệu bị hỏng, không mở được.</string>
+    <string name="docsdk_error_not_found">Không tìm thấy hoặc không đọc được tài liệu.</string>
+    <string name="docsdk_error_memory">Không đủ bộ nhớ để mở tài liệu này.</string>
+    <string name="docsdk_error_generic">Không mở được tài liệu.</string>
+</resources>

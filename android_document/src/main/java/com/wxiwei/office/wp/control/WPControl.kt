@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.wp.control
 
 import android.app.Activity
@@ -165,13 +172,13 @@ class WPControl(private var mainControl: IControl?, doc: IDocument, filePath: St
                 val link = obj as Hyperlink?
                 if (link != null) {
                     try {
-                        if (link.getLinkType() == Hyperlink.LINK_BOOKMARK) {
-                            val bm: Bookmark? = getSysKit().getBookmarkManage().getBookmark(link.getAddress())
+                        if (link.linkType == Hyperlink.LINK_BOOKMARK) {
+                            val bm: Bookmark? = getSysKit().getBookmarkManage().getBookmark(link.address)
                             if (bm != null) {
-                                ControlKit.instance().gotoOffset(wpView, bm.getStart())
+                                ControlKit.instance().gotoOffset(wpView, bm.start)
                             }
                         } else {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.getAddress()))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link.address))
                             getMainFrame().getActivity().startActivity(intent)
                         }
                     } catch (e: Exception) {

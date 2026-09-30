@@ -1,3 +1,10 @@
+/*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
 package com.wxiwei.office.fc.xls.Reader.table
 
 import com.wxiwei.office.fc.dom4j.io.SAXReader
@@ -16,6 +23,15 @@ class TableReader private constructor() {
         fun instance(): TableReader = reader
     }
 
+    private fun parseRange(ref: String): CellRangeAddress? {
+        val range = ref.split(":")
+        if (range.size != 2) return null
+        return CellRangeAddress(
+            ReferenceUtil.instance().getRowIndex(range[0]), ReferenceUtil.instance().getColumnIndex(range[0]),
+            ReferenceUtil.instance().getRowIndex(range[1]), ReferenceUtil.instance().getColumnIndex(range[1])
+        )
+    }
+
     fun read(control: IControl, tablePart: PackagePart, sheet: Sheet) {
         val saxreader = SAXReader()
         try {
@@ -23,9 +39,9 @@ class TableReader private constructor() {
             val tableDocument = saxreader.read(input)
             input.close()
             val table = SSTable()
-            val root = tableDocument.rootElement
-            val reference = root.attributeValue("ref")
-            val range = reference.split(":")
+            val root = tableDocument!!.rootElement
+            val reference = root!!.attributeValue("ref")
+            val range = reference!!.split(":")
             if (range.size == 2) {
                 table.setTableReference(
                     CellRangeAddress(
@@ -36,22 +52,33 @@ class TableReader private constructor() {
                     )
                 )
             }
-            root.attributeValue("totalsRowDxfId")?.let { table.setTotalsRowDxfId(it.toInt()) }
-            root.attributeValue("totalsRowBorderDxfId")?.let { table.setTotalsRowBorderDxfId(it.toInt()) }
-            root.attributeValue("headerRowDxfId")?.let { table.setHeaderRowDxfId(it.toInt()) }
-            root.attributeValue("headerRowBorderDxfId")?.let { table.setHeaderRowBorderDxfId(it.toInt()) }
-            root.attributeValue("tableBorderDxfId")?.let { table.setTableBorderDxfId(it.toInt()) }
+            root!!.attributeValue("totalsRowDxfId")?.let { table.setTotalsRowDxfId(it.toInt()) }
+            root!!.attributeValue("totalsRowBorderDxfId")?.let { table.setTotalsRowBorderDxfId(it.toInt()) }
+            root!!.attributeValue("headerRowDxfId")?.let { table.setHeaderRowDxfId(it.toInt()) }
+            root!!.attributeValue("headerRowBorderDxfId")?.let { table.setHeaderRowBorderDxfId(it.toInt()) }
+            root!!.attributeValue("tableBorderDxfId")?.let { table.setTableBorderDxfId(it.toInt()) }
 
-            if (root.attributeValue("headerRowCount").equals("0", ignoreCase = true)) {
+            if (root!!.attributeValue("headerRowCount").equals("0", ignoreCase = true)) {
                 table.setHeaderRowShown(false)
             }
-            val totalsRowCount = root.attributeValue("totalsRowCount") ?: "0"
-            val totalsRowShown = root.attributeValue("totalsRowShown")
+            val totalsRowCount = root!!.attributeValue("totalsRowCount") ?: "0"
+            val totalsRowShown = root!!.attributeValue("totalsRowShown")
             if (!totalsRowShown.equals("0", ignoreCase = true) && totalsRowCount.equals("1", ignoreCase = true)) {
                 table.setTotalRowShown(true)
             }
 
-            val styleInfo = root.element("tableStyleInfo")
+            // AutoFilter of the table: header buttons, and which columns are filtered
+            root.element("autoFilter")?.attributeValue("ref")?.let { ref ->
+                parseRange(ref)?.let { range ->
+                    val filter = Sheet.AutoFilter(range)
+                    for (fc in root.element("autoFilter")!!.elements("filterColumn")!!.filterIsInstance<com.wxiwei.office.fc.dom4j.Element>()) {
+                        fc.attributeValue("colId")?.toIntOrNull()?.let { filter.filtered.add(range.getFirstColumn() + it) }
+                    }
+                    sheet.addAutoFilter(filter)
+                }
+            }
+
+            val styleInfo = root!!.element("tableStyleInfo")
             if (styleInfo != null) {
                 table.setName(styleInfo.attributeValue("name"))
                 table.setShowFirstColumn(!styleInfo.attributeValue("showFirstColumn").equals("0", ignoreCase = true))

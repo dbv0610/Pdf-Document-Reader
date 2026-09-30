@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:           ParaAttr.java
  *  
  * 编译器:             android2.2
@@ -157,7 +164,7 @@ class ParaAttr {
                 }
             } else if (attrLayout == null && styleElement != null) {
                 val fontRef = styleElement.element("fontRef")
-                if (fontRef.elements().size > 0) {
+                if (fontRef!!.elements()!!.size > 0) {
                     val fontColor = ReaderKit.instance().getColor(master, fontRef)
                     attrLayout = AttributeSetImpl()
                     AttrManage.instance().setFontColor(attrLayout, fontColor)
@@ -175,7 +182,7 @@ class ParaAttr {
 
 
             // when leafElem only contains \n, don't show bullet number 
-            if (p.elements("r").size == 0 && p.elements("fld").size == 0) {
+            if (p.elements("r")!!.isEmpty() && p.elements("fld")!!.isEmpty()) {
                 setParaAttribute(
                     control, pPr, paraElem.getAttribute(), attrLayout, layoutStyle, masterStyle,
                     lnSpcReduction, false, subTitle
@@ -344,7 +351,7 @@ class ParaAttr {
             var temp: Element?
             if (pPr.attribute("algn") != null) {
                 `val` = pPr.attributeValue("algn")
-                setParaAlign(attr, `val`)
+                setParaAlign(attr, `val`!!)
             } else {
                 setParaHorizontalAlign(attrLayout, attr)
             }
@@ -360,7 +367,7 @@ class ParaAttr {
                     if (`val` != null && `val`.length > 0) {
                         AttrManage.instance().setParaBefore(
                             attr,
-                            (`val`.toInt() / 100 * MainConstant.POINT_TO_TWIPS).toInt()
+                            (`val`.toInt() / 100f * MainConstant.POINT_TO_TWIPS).toInt()
                         )
                     }
                 }
@@ -379,7 +386,7 @@ class ParaAttr {
                     if (`val` != null && `val`.length > 0) {
                         AttrManage.instance().setParaAfter(
                             attr,
-                            (`val`.toInt() / 100 * MainConstant.POINT_TO_TWIPS).toInt()
+                            (`val`.toInt() / 100f * MainConstant.POINT_TO_TWIPS).toInt()
                         )
                     }
                 }
@@ -402,7 +409,7 @@ class ParaAttr {
                         // 行距
                         AttrManage.instance().setParaLineSpace(
                             attr,
-                            (`val`.toInt() / 100 * MainConstant.POINT_TO_TWIPS).toInt().toFloat()
+                            (`val`.toInt() / 100f * MainConstant.POINT_TO_TWIPS).toInt().toFloat()
                         )
                     }
                 }

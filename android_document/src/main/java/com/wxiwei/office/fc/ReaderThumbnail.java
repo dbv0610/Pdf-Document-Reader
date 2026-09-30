@@ -1,4 +1,11 @@
 /*
+ * Modifications Copyright (c) 2026 dongb2002. All rights reserved.
+ *
+ * This file is based on third-party open-source code and has been modified by dongb2002.
+ * The modifications are proprietary to dongb2002. The original copyright and license notice
+ * of this file, where present below, remains in effect for the original portions.
+ */
+/*
  * 文件名称:          PTTReaderThumbnail.java
  *  
  * 编译器:            android2.2
@@ -72,7 +79,7 @@ public class ReaderThumbnail
         Property property = poifs.getProperty("\u0005SummaryInformation");
         if (property != null)
         {
-            byte[] data = property.getDocumentRawData();
+            byte[] data = property.documentRawData;
             
             int offset = 0;
             int byteOrder = LittleEndian.getUShort(data, offset);
