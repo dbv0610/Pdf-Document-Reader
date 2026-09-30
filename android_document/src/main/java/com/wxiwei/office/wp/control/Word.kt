@@ -731,6 +731,9 @@ class Word : LinearLayout, IWord {
         return pageRoot!!.getPageCount()
     }
 
+    /** False while the pages are being laid out (on opening, or again after an edit); [getPageCount] is not final then. */
+    fun isLayoutFinished(): Boolean = currentRootType == WPViewConstant.NORMAL_ROOT.toInt() || pageRoot?.isFinishLayout() ?: true
+
     fun getCurrentRootType(): Int = currentRootType
 
     fun setCurrentRootType(currentRootType: Int) {

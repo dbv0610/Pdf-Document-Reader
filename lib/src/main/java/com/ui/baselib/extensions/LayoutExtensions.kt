@@ -52,9 +52,7 @@ fun View.paddingVertical(value: Int) = setPadding(paddingLeft, value, paddingRig
  *
  * @param all Margin value in pixels
  */
-fun View.margin(all: Int) {
-    (layoutParams as? ViewGroup.MarginLayoutParams)?.setMargins(all, all, all, all)
-}
+fun View.margin(all: Int) = updateMargins { setMargins(all, all, all, all) }
 
 /**
  * Set horizontal and vertical margin.
@@ -62,31 +60,28 @@ fun View.margin(all: Int) {
  * @param horizontal Left and right margin in pixels
  * @param vertical Top and bottom margin in pixels
  */
-fun View.margin(horizontal: Int = 0, vertical: Int = 0) {
-    (layoutParams as? ViewGroup.MarginLayoutParams)?.setMargins(horizontal, vertical, horizontal, vertical)
-}
+fun View.margin(horizontal: Int = 0, vertical: Int = 0) =
+    updateMargins { setMargins(horizontal, vertical, horizontal, vertical) }
 
 /**
  * Set individual margin for each side.
  */
-fun View.margin(left: Int = 0, top: Int = 0, right: Int = 0, bottom: Int = 0) {
-    (layoutParams as? ViewGroup.MarginLayoutParams)?.setMargins(left, top, right, bottom)
-}
+fun View.margin(left: Int = 0, top: Int = 0, right: Int = 0, bottom: Int = 0) =
+    updateMargins { setMargins(left, top, right, bottom) }
 
-fun View.marginTop(value: Int) {
-    (layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin = value
-}
+fun View.marginTop(value: Int) = updateMargins { topMargin = value }
 
-fun View.marginBottom(value: Int) {
-    (layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = value
-}
+fun View.marginBottom(value: Int) = updateMargins { bottomMargin = value }
 
-fun View.marginLeft(value: Int) {
-    (layoutParams as? ViewGroup.MarginLayoutParams)?.leftMargin = value
-}
+fun View.marginLeft(value: Int) = updateMargins { leftMargin = value }
 
-fun View.marginRight(value: Int) {
-    (layoutParams as? ViewGroup.MarginLayoutParams)?.rightMargin = value
+fun View.marginRight(value: Int) = updateMargins { rightMargin = value }
+
+/** Editing LayoutParams fields alone doesn't relayout an already laid-out view. */
+private inline fun View.updateMargins(block: ViewGroup.MarginLayoutParams.() -> Unit) {
+    val lp = layoutParams as? ViewGroup.MarginLayoutParams ?: return
+    lp.block()
+    requestLayout()
 }
 
 // endregion
@@ -140,15 +135,18 @@ inline fun View.doOnLayout(crossinline action: (View) -> Unit) {
  * @param index2 Index of second child
  */
 fun ViewGroup.swapChildren(index1: Int, index2: Int) {
-    if (index1 !in 0..<childCount || index2 < 0 || index2 >= childCount) {
+    if (index1 !in 0..<childCount || index2 !in 0..<childCount || index1 == index2) {
         return
     }
-    val view1 = getChildAt(index1)
-    val view2 = getChildAt(index2)
-    removeViewAt(index1)
-    removeViewAt(index2 - 1)
-    addView(view1, index2)
-    addView(view2, index1)
+    // Remove the higher index first so the lower one doesn't shift.
+    val first = minOf(index1, index2)
+    val second = maxOf(index1, index2)
+    val firstView = getChildAt(first)
+    val secondView = getChildAt(second)
+    removeViewAt(second)
+    removeViewAt(first)
+    addView(secondView, first)
+    addView(firstView, second)
     requestLayout()
     invalidate()
 }

@@ -6,16 +6,16 @@
     android:layout_height="match_parent"
     android:layout_marginHorizontal="4dp"
     android:layout_marginBottom="4dp"
-    app:bgColor="@color/white"
-    app:stColor="@color/color_7c8a97"
-    app:cornerRadius="@dimen/_8sdp"
-    app:strokeWidth="@dimen/_1sdp"
-    app:uiDimenRatio="56:78"
+    app:uiBackgroundColor="@color/white"
+    app:uiStrokeColor="@color/color_7c8a97"
+    app:uiCornerRadius="@dimen/_8sdp"
+    app:uiStrokeWidth="@dimen/_1sdp"
+    app:uiDimensionRatio="56:78"
     tools:layout_height="@dimen/_120sdp">
 
     <com.ui.baselib.widget.view.UiImageView
         android:id="@+id/imagePreview"
-        app:cornerRadius="@dimen/_8sdp"
+        app:uiCornerRadius="@dimen/_8sdp"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:adjustViewBounds="true"
@@ -50,14 +50,14 @@
 
     <com.ui.baselib.widget.view.UiTextView
         android:layout_width="wrap_content"
-        app:cornerBottomRight="@dimen/_4sdp"
+        app:uiCornerBottomRight="@dimen/_4sdp"
         tools:text="1243"
-        app:tvColor="@color/white"
+        app:uiTextColor="@color/white"
         android:fontFamily="@font/rb_400"
         android:id="@+id/pageIndex"
         android:paddingVertical="@dimen/_3sdp"
         android:paddingHorizontal="@dimen/_5sdp"
-        app:bgColor="@color/color_7c8a97"
+        app:uiBackgroundColor="@color/color_7c8a97"
         android:textSize="@dimen/_9sdp"
         android:layout_height="wrap_content"/>
 </com.ui.baselib.widget.layout.UiConstraintLayout>

@@ -3,7 +3,6 @@
 
     <string name="ok" tools:ignore="ButtonCase,Typos">Ok</string>
     <string name="cancel">Cancel</string>
-    <string name="file_name_toolbar">file name toolbar</string>
     <string name="toolbar_note">toolbar note</string>
 
 </resources>

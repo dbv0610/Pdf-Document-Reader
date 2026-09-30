@@ -1,10 +1,12 @@
 package com.alf06.document.reader
 
+import androidx.core.content.ContextCompat
 import androidx.multidex.MultiDexApplication
 import com.alf06.document.reader.di.appModule
 import com.alf06.document.reader.di.viewModelModule
 import com.alf06.document.reader.utils.LocateManager
 import com.alf06.document.reader.utils.PreferenceHelper
+import com.editor.docsdk.DialogStyle
 import com.google.firebase.FirebaseApp
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -32,5 +34,8 @@ class MyApplication : MultiDexApplication(), KoinComponent {
         }
         LibLocateManager.languageProvider = { get<PreferenceHelper>().languageSelected }
         FirebaseApp.initializeApp(this)
+        DialogStyle.customizer = DialogStyle.Customizer { context, style ->
+            style.copy(accent = ContextCompat.getColor(context, R.color.primary))
+        }
     }
 }

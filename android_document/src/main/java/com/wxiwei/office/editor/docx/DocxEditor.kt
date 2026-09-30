@@ -26,12 +26,33 @@ private val NUMBER_FORMATS = listOf("decimal", "lowerLetter", "lowerRoman")
  */
 class DocxEditor(private val source: File, private val map: DocxSourceMap) {
     private data class Op(val start: Long, val end: Long, val type: String, val value: String = "",
-                          val image: File? = null, val width: Int = 0, val height: Int = 0)
+                          val image: File? = null, val width: Int = 0, val height: Int = 0, val cell: CellRef? = null,
+                          val picture: Any? = null)
+
+    /**
+     * A table cell with no original offset (added by an earlier operation): cell [cell] of row [row]
+     * of the table, counted when the operation runs. The table is the one [table] made (the
+     * [lastOp] handle of an [insertTable]), else the one holding the operation's offset, which is
+     * in its cell [anchorCell] of row [anchorRow] (checked, so the counts agree).
+     */
+    data class CellRef(val anchorRow: Int, val anchorCell: Int, val row: Int, val cell: Int, val table: Any? = null)
 
     /** Run properties (w:b "1", w:color "FF0000", w:sz half points...) for chars [from, to) of an inserted text. */
     data class RunFormat(val from: Int, val to: Int, val props: List<Pair<String, String>>)
-    /** What a queued insert (see [lastOp]) writes instead of its own text, e.g. the text as edited later. */
-    data class InsertOverride(val text: String, val runs: List<RunFormat>)
+    /**
+     * What a queued insert (see [lastOp]) writes instead of its own text, e.g. the text as edited
+     * later. For a new table cell, [paras] are the properties of its paragraphs, in order.
+     */
+    data class InsertOverride(val text: String, val runs: List<RunFormat>, val paras: List<ParaFormat> = emptyList())
+    /**
+     * Paragraph properties written as they are (null: left as it is): alignment (left, center,
+     * right, both), indents in twips ([specialTwips] > 0 first line, < 0 hanging), spacing in
+     * twips, line spacing [line] with its [lineRule] (auto, atLeast, exact), a [list] (bullet,
+     * decimal, or "0" for none) and its level.
+     */
+    data class ParaFormat(val align: String? = null, val leftTwips: Int? = null, val rightTwips: Int? = null, val specialTwips: Int? = null,
+                          val beforeTwips: Int? = null, val afterTwips: Int? = null, val line: Int? = null, val lineRule: String? = null,
+                          val list: String? = null, val listLevel: Int? = null)
     private val ops = ArrayList<Op>()
     var lastError: EditResult.Error? = null; private set
     private fun queue(op: Op): Boolean {
@@ -194,11 +215,11 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         if (widthPx <= 0 || heightPx <= 0 || !imageFile.isFile) invalid("Image file and positive dimensions required")
         else queue(Op(offset, offset, "image", image = imageFile, width = widthPx, height = heightPx))
     fun appendParagraph(text: String) = queue(Op(0, 0, "append", text))
-    /** The picture or shape at [offset] (its one-char object) gets the size [widthEmu] x [heightEmu]. */
-    fun resizeObject(offset: Long, widthEmu: Long, heightEmu: Long): Boolean =
-        if (widthEmu <= 0 || heightEmu <= 0) invalid("Positive size required") else queue(Op(offset, offset, "objsize", "$widthEmu,$heightEmu"))
-    /** Moves the in-line picture at [from] to the text position [to] (original offsets). */
-    fun moveObject(from: Long, to: Long): Boolean = queue(Op(from, from, "objmove", to.toString()))
+    /** The picture or shape at [offset] (its one-char object; or the one an [insertImage] handle [picture] made) gets the size [widthEmu] x [heightEmu]. */
+    fun resizeObject(offset: Long, widthEmu: Long, heightEmu: Long, picture: Any? = null): Boolean =
+        if (widthEmu <= 0 || heightEmu <= 0) invalid("Positive size required") else queue(Op(offset, offset, "objsize", "$widthEmu,$heightEmu", picture = picture))
+    /** Moves the in-line picture at [from] (or the one an [insertImage] handle [picture] made) to the text position [to] (original offsets). */
+    fun moveObject(from: Long, to: Long, picture: Any? = null): Boolean = queue(Op(from, from, "objmove", to.toString(), picture = picture))
     /** Moves the floating picture or shape at [offset] by [dxEmu], [dyEmu] on the page. */
     fun shiftObject(offset: Long, dxEmu: Long, dyEmu: Long): Boolean = queue(Op(offset, offset, "objshift", "$dxEmu,$dyEmu"))
     /** A [rows] x [cols] table with thin borders after the body paragraph holding [offset]. */
@@ -209,21 +230,21 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
      * the column before it gets wider, the one after it narrower (the table keeps its width);
      * the right edge ([boundary] = column count) widens the last column and the table.
      */
-    fun resizeTableColumn(offset: Long, boundary: Int, dTwips: Int): Boolean =
-        if (boundary < 1) invalid("Bad column border") else queue(Op(offset, offset, "tblcol", "$boundary,$dTwips"))
-    /** A new empty row [below] (or above) the row holding [offset], with the same cells. */
-    fun insertTableRow(offset: Long, below: Boolean): Boolean = queue(Op(offset, offset, "tblrowins", if (below) "below" else "above"))
+    fun resizeTableColumn(offset: Long, boundary: Int, dTwips: Int, cell: CellRef? = null): Boolean =
+        if (boundary < 1) invalid("Bad column border") else queue(Op(offset, offset, "tblcol", "$boundary,$dTwips", cell = cell))
+    /** A new empty row [below] (or above) the row holding [offset] (or the one [cell] names), with the same cells. */
+    fun insertTableRow(offset: Long, below: Boolean, cell: CellRef? = null): Boolean = queue(Op(offset, offset, "tblrowins", if (below) "below" else "above", cell = cell))
     /** A new empty column [right] of (or left of) the cell holding [offset], as wide as that cell's column was; all columns shrink so the table keeps its width. */
-    fun insertTableColumn(offset: Long, right: Boolean): Boolean = queue(Op(offset, offset, "tblcolins", if (right) "right" else "left"))
+    fun insertTableColumn(offset: Long, right: Boolean, cell: CellRef? = null): Boolean = queue(Op(offset, offset, "tblcolins", if (right) "right" else "left", cell = cell))
     /** Removes the row holding [offset] (not the last one of its table). */
-    fun deleteTableRow(offset: Long): Boolean = queue(Op(offset, offset, "tblrowdel"))
+    fun deleteTableRow(offset: Long, cell: CellRef? = null): Boolean = queue(Op(offset, offset, "tblrowdel", cell = cell))
     /** Removes the grid columns of the cell holding [offset] (not the last one); the others widen so the table keeps its width. */
-    fun deleteTableColumn(offset: Long): Boolean = queue(Op(offset, offset, "tblcoldel"))
+    fun deleteTableColumn(offset: Long, cell: CellRef? = null): Boolean = queue(Op(offset, offset, "tblcoldel", cell = cell))
     /** The row holding [offset] is at least [twips] high. */
-    fun setTableRowHeight(offset: Long, twips: Int): Boolean =
-        if (twips < 0) invalid("Bad row height") else queue(Op(offset, offset, "tblrow", twips.toString()))
+    fun setTableRowHeight(offset: Long, twips: Int, cell: CellRef? = null): Boolean =
+        if (twips < 0) invalid("Bad row height") else queue(Op(offset, offset, "tblrow", twips.toString(), cell = cell))
     /** Moves the body table holding [offset] before the body paragraph (or table) holding [to], or [after] it. */
-    fun moveTable(offset: Long, to: Long, after: Boolean): Boolean = queue(Op(offset, offset, "tblmove", "$to,$after"))
+    fun moveTable(offset: Long, to: Long, after: Boolean, cell: CellRef? = null): Boolean = queue(Op(offset, offset, "tblmove", "$to,$after", cell = cell))
     /** Drops the last queued operation (undo of a live edit). */
     fun undoLast(): Boolean = if (ops.isEmpty()) false else { ops.removeAt(ops.lastIndex); true }
     /** Number of queued operations. */
@@ -242,7 +263,14 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
      * [cellFills] (by [lastOp] handle of an [insertTableRow] or [insertTableColumn]) is the text of
      * each cell that op makes, in order (null: left empty), with its run formatting.
      */
-    fun save(target: File, overrides: Map<Any, InsertOverride> = emptyMap(), cellFills: Map<Any, List<InsertOverride?>> = emptyMap()): EditResult {
+    fun save(target: File, overrides: Map<Any, InsertOverride> = emptyMap(), cellFills: Map<Any, List<InsertOverride?>> = emptyMap()): EditResult =
+        write(target, overrides, cellFills)
+
+    /** Applies the queued operations as [save] does, without writing a file: an [EditResult.Error] names what save would fail on. */
+    fun check(overrides: Map<Any, InsertOverride> = emptyMap(), cellFills: Map<Any, List<InsertOverride?>> = emptyMap()): EditResult =
+        write(null, overrides, cellFills)
+
+    private fun write(target: File?, overrides: Map<Any, InsertOverride>, cellFills: Map<Any, List<InsertOverride?>>): EditResult {
         val result = try {
             if (!source.extension.equals("docx", true)) fail(Reason.UNSUPPORTED_FORMAT, "Only DOCX is editable")
             val pkg = OoxmlPackage.open(source)
@@ -251,7 +279,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             for (name in ops.map { (map.partAt(it.start) ?: fail(Reason.MAP_MISMATCH, "No part for offset ${it.start}")).name }.distinct()) {
                 Session(pkg, java.util.IdentityHashMap(overrides), name, parts.filter { it.name == name }, java.util.IdentityHashMap(cellFills)).applyAll()
             }
-            pkg.saveTo(target)
+            if (target != null) pkg.saveTo(target) else EditResult.Ok(source)
         } catch (e: Failure) { EditResult.Error(e.reason, e.message ?: "Edit failed")
         } catch (e: IllegalArgumentException) { EditResult.Error(Reason.INVALID_ARGUMENT, e.message ?: "Invalid argument", e)
         } catch (e: java.io.IOException) { EditResult.Error(Reason.IO, e.message ?: "I/O error", e)
@@ -277,6 +305,10 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         val deletedSeparators = HashSet<Long>()
         val opaqueSpans = HashMap<Int, LongRange>()
         val listNumIds = HashMap<String, String>()
+        /** The w:tbl each queued [insertTable] made, by its op. */
+        val createdTables = java.util.IdentityHashMap<Any, Element>()
+        /** The w:r each queued [insertImage] made, by its op: later [resizeObject] and [moveObject] with that handle find it. */
+        val createdPictures = java.util.IdentityHashMap<Any, Element>()
         fun listNumId(format: String): String = listNumIds.getOrPut(format) {
             // lists are added in the same order the view reserved their ids: bullets first
             if (format == "decimal" && bulletListId >= 0 && numberingListId == bulletListId + 1 && "bullet" !in listNumIds) listNumId("bullet")
@@ -312,7 +344,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 checkRange(op)
                 when (op.type) {
                     "insert" -> overrides[op].let { o -> insert(boundary(op.start), o?.text ?: op.value, o?.runs) }?.let { insertionEnds[op.start] = it }
-                    "image" -> { val b = boundary(op.start); val run = image(op); addBefore(b.parent, b.before, run); insertionEnds[op.start] = run }
+                    "image" -> { val b = boundary(op.start); val run = image(op); addBefore(b.parent, b.before, run); insertionEnds[op.start] = run; createdPictures[op] = run }
                     "delete", "replace" -> {
                         // Capture insertion anchor before removing original characters.
                         val b = if (op.type == "replace") boundary(op.start) else null
@@ -554,7 +586,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 ?: fail(Reason.INVALID_ARGUMENT, "No picture at offset")
 
         fun objectOp(op: Op) {
-            val run = objectRun(op.start)
+            val run = op.picture?.let { createdPictures[it] ?: fail(Reason.MAP_MISMATCH, "Picture was removed") } ?: objectRun(op.start)
             when (op.type) {
                 "objsize" -> {
                     val (cx, cy) = op.value.split(',')
@@ -610,14 +642,18 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
                 w("tblLayout", "type" to "fixed")
             }
             tbl.w("tblGrid").apply { repeat(op.height) { w("gridCol", "w" to colWidth.toString()) } }
+            val made = ArrayList<Element>()
             repeat(op.width) {
                 val tr = tbl.w("tr")
                 repeat(op.height) {
                     val tc = tr.w("tc")
                     tc.w("tcPr").w("tcW", "w" to colWidth.toString(), "type" to "dxa")
                     tc.w("p")
+                    made.add(tc)
                 }
             }
+            createdTables[op] = tbl
+            fill(op, made)
             val siblings = body.elements()!!.filterIsInstance<Element>()
             val next = siblings.getOrNull(siblings.indexOf(p) + 1)
             addBefore(body, next, tbl)
@@ -641,9 +677,26 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
         fun twipsOf(e: Element?, attr: String = "w"): Int? = e?.attributeValue(QName(attr, W))?.toIntOrNull()
 
+        /** The table of [op]: made by an earlier [insertTable] ([CellRef.table]), or the one holding its offset. */
+        fun tableOf(op: Op): Element = op.cell?.table?.let { createdTables[it] ?: fail(Reason.MAP_MISMATCH, "Table was removed") } ?: ancestorAt(op.start, "tbl")
+
+        /** The cell of [op]: the one holding its offset, or the one its [Op.cell] counts to. */
+        fun cellOf(op: Op): Element {
+            val ref = op.cell ?: return ancestorAt(op.start, "tc")
+            if (ref.table != null) return tableOf(op).childrenNamed(W, "tr").getOrNull(ref.row)?.childrenNamed(W, "tc")?.getOrNull(ref.cell) ?: fail(Reason.MAP_MISMATCH, "No such cell")
+            val tbl = ancestorAt(op.start, "tbl")
+            val anchor = ancestorAt(op.start, "tc")
+            val rows = tbl.childrenNamed(W, "tr")
+            val anchorRow = anchor.parent
+            if (rows.indexOf(anchorRow) != ref.anchorRow || anchorRow!!.childrenNamed(W, "tc").indexOf(anchor) != ref.anchorCell)
+                fail(Reason.MAP_MISMATCH, "Table rows differ from the view")
+            return rows.getOrNull(ref.row)?.childrenNamed(W, "tc")?.getOrNull(ref.cell) ?: fail(Reason.MAP_MISMATCH, "No such cell")
+        }
+        fun rowOf(op: Op): Element = if (op.cell == null) ancestorAt(op.start, "tr") else cellOf(op).parent!!
+
         fun tableColumn(op: Op) {
             val (g, d) = op.value.split(',').map { it.toInt() }
-            val tbl = ancestorAt(op.start, "tbl")
+            val tbl = tableOf(op)
             val grid = tbl.firstChild(W, "tblGrid")?.childrenNamed(W, "gridCol") ?: fail(Reason.INVALID_ARGUMENT, "Table without grid")
             if (g !in 1..grid.size) fail(Reason.INVALID_ARGUMENT, "Bad column border")
             val widths = grid.map { twipsOf(it) ?: 0 }.toMutableList()
@@ -672,7 +725,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
 
         fun tableRow(op: Op) {
-            val tr = ancestorAt(op.start, "tr")
+            val tr = rowOf(op)
             // CT_Row: tblPrEx?, trPr?, then the cells
             val trPr = tr.firstChild(W, "trPr") ?: newElement(W, "trPr").also { p ->
                 val children = tr.elements()!!.filterIsInstance<Element>()
@@ -702,19 +755,49 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
             return tc
         }
 
-        /** The text shown in the new cells [made] of [op], written into their empty paragraph. */
+        /** The text shown in the new cells [made] of [op], written into their empty paragraph, with the paragraphs' properties. */
         fun fill(op: Op, made: List<Element>) {
             val fills = cellFills[op] ?: return
             made.forEachIndexed { i, tc ->
                 val f = fills.getOrNull(i) ?: return@forEachIndexed
-                if (f.text.isEmpty()) return@forEachIndexed
                 val p = tc.firstChild(W, "p") ?: return@forEachIndexed
-                insert(Boundary(p, null, null), f.text, f.runs)
+                if (f.text.isNotEmpty()) insert(Boundary(p, null, null), f.text, f.runs)
+                tc.childrenNamed(W, "p").forEachIndexed { k, e -> f.paras.getOrNull(k)?.let { paraFormat(e, it) } }
             }
         }
 
+        /** Writes [f] into the properties of paragraph [p]. */
+        fun paraFormat(p: Element, f: ParaFormat) {
+            val pPr = p.firstChild(W, "pPr") ?: newElement(W, "pPr").also { addBefore(p, p.elements()!!.filterIsInstance<Element>().firstOrNull(), it) }
+            fun child(name: String) = pPr.firstChild(W, name) ?: newElement(W, name).also { insertInPPr(pPr, it) }
+            fun Element.put(k: String, v: Any) = addAttribute(QName(k, W), v.toString())
+            fun Element.drop(vararg names: String) = names.forEach { a -> attribute(QName(a, W))?.let { remove(it) } }
+            f.align?.let { child("jc").put("val", it) }
+            if (f.leftTwips != null || f.rightTwips != null || f.specialTwips != null) child("ind").apply {
+                // w:start/w:end are the bidi-neutral twins of w:left/w:right
+                f.leftTwips?.let { drop("start", "leftChars"); put("left", it) }
+                f.rightTwips?.let { drop("end", "rightChars"); put("right", it) }
+                f.specialTwips?.let { s ->
+                    drop("firstLine", "hanging", "firstLineChars", "hangingChars")
+                    if (s > 0) put("firstLine", s) else if (s < 0) put("hanging", -s)
+                }
+            }
+            if (f.beforeTwips != null || f.afterTwips != null || f.line != null) child("spacing").apply {
+                f.beforeTwips?.let { drop("beforeLines", "beforeAutospacing"); put("before", it) }
+                f.afterTwips?.let { drop("afterLines", "afterAutospacing"); put("after", it) }
+                f.line?.let { put("line", it); put("lineRule", f.lineRule ?: "auto") }
+            }
+            if (f.list != null) {
+                pPr.firstChild(W, "numPr")?.let { pPr.remove(it) }
+                val numPr = newElement(W, "numPr")
+                numPr.addElement(QName("ilvl", W))!!.addAttribute(QName("val", W), (f.listLevel ?: 0).toString())
+                numPr.addElement(QName("numId", W))!!.addAttribute(QName("val", W), if (f.list == "0") "0" else listNumId(f.list))
+                insertInPPr(pPr, numPr)
+            } else f.listLevel?.let { level -> pPr.firstChild(W, "numPr")?.firstChild(W, "ilvl")?.addAttribute(QName("val", W), level.toString()) }
+        }
+
         fun insertRow(op: Op) {
-            val tr = ancestorAt(op.start, "tr")
+            val tr = rowOf(op)
             val row = newElement(W, "tr")
             val made = ArrayList<Element>()
             tr.firstChild(W, "tblPrEx")?.let { row.add(it.createCopy()!!) }
@@ -737,8 +820,8 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
 
         fun insertColumn(op: Op) {
             val right = op.value == "right"
-            val here = ancestorAt(op.start, "tc")
-            val tbl = ancestorAt(op.start, "tbl")
+            val here = cellOf(op)
+            val tbl = here.parent!!.parent!!
             val gridEl = tbl.firstChild(W, "tblGrid") ?: fail(Reason.INVALID_ARGUMENT, "Table without grid")
             val grid = gridEl.childrenNamed(W, "gridCol")
             // the grid columns of the cell holding the caret
@@ -814,7 +897,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
 
         fun deleteRow(op: Op) {
-            val tr = ancestorAt(op.start, "tr")
+            val tr = rowOf(op)
             val tbl = tr.parent ?: fail(Reason.MAP_MISMATCH, "Row was removed")
             val rows = tbl.childrenNamed(W, "tr")
             if (rows.size <= 1) fail(Reason.INVALID_ARGUMENT, "The last row of a table")
@@ -832,8 +915,8 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
         }
 
         fun deleteColumn(op: Op) {
-            val here = ancestorAt(op.start, "tc")
-            val tbl = ancestorAt(op.start, "tbl")
+            val here = cellOf(op)
+            val tbl = here.parent!!.parent!!
             val gridEl = tbl.firstChild(W, "tblGrid") ?: fail(Reason.INVALID_ARGUMENT, "Table without grid")
             val grid = gridEl.childrenNamed(W, "gridCol")
             val (_, from, span) = cellColumns(here.parent!!).firstOrNull { it.first === here } ?: fail(Reason.MAP_MISMATCH, "Cell not in its row")
@@ -866,7 +949,7 @@ class DocxEditor(private val source: File, private val map: DocxSourceMap) {
 
         fun moveTable(op: Op) {
             val (to, after) = op.value.split(',').let { it[0].toLong() to it[1].toBoolean() }
-            val tbl = bodyChildAt(op.start)
+            val tbl = if (op.cell?.table != null) tableOf(op) else bodyChildAt(op.start)
             if (tbl.name != "tbl" || tbl.namespaceURI != W.uRI) fail(Reason.INVALID_ARGUMENT, "No table at offset")
             val target = bodyChildAt(to)
             if (target === tbl) return

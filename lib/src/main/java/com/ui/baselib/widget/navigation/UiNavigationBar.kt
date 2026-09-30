@@ -152,9 +152,9 @@ class UiNavigationBar @JvmOverloads constructor(
         context.obtainStyledAttributes(attrs, R.styleable.UiNavigationBar).apply {
             try {
                 // NavGraph
-                navGraphResId = getResourceId(R.styleable.UiNavigationBar_navGraph, 0)
+                navGraphResId = getResourceId(R.styleable.UiNavigationBar_uiNavGraph, 0)
                 // Indicator
-                indicatorStyle = when (getInt(R.styleable.UiNavigationBar_nav_indicatorStyle, 1)) {
+                indicatorStyle = when (getInt(R.styleable.UiNavigationBar_uiNavIndicatorStyle, 1)) {
                     0 -> IndicatorStyle.NONE
                     1 -> IndicatorStyle.BOTTOM_BAR
                     2 -> IndicatorStyle.BACKGROUND
@@ -162,75 +162,75 @@ class UiNavigationBar @JvmOverloads constructor(
                     else -> IndicatorStyle.BOTTOM_BAR
                 }
                 indicatorColor =
-                    getColor(R.styleable.UiNavigationBar_nav_indicatorColor, indicatorColor)
+                    getColor(R.styleable.UiNavigationBar_uiNavIndicatorColor, indicatorColor)
                 // Parse indicator width - can be dimension or fraction
-                if (hasValue(R.styleable.UiNavigationBar_nav_indicatorWidth)) {
-                    val typeValue = peekValue(R.styleable.UiNavigationBar_nav_indicatorWidth)
+                if (hasValue(R.styleable.UiNavigationBar_uiNavIndicatorWidth)) {
+                    val typeValue = peekValue(R.styleable.UiNavigationBar_uiNavIndicatorWidth)
                     if (typeValue != null && typeValue.type == android.util.TypedValue.TYPE_FRACTION) {
                         indicatorWidthFraction =
-                            getFraction(R.styleable.UiNavigationBar_nav_indicatorWidth, 1, 1, 0.5f)
+                            getFraction(R.styleable.UiNavigationBar_uiNavIndicatorWidth, 1, 1, 0.5f)
                         indicatorWidth = null
                     } else {
                         indicatorWidth =
-                            getDimension(R.styleable.UiNavigationBar_nav_indicatorWidth, 0f)
+                            getDimension(R.styleable.UiNavigationBar_uiNavIndicatorWidth, 0f)
                         if (indicatorWidth == 0f) indicatorWidth = null
                     }
                 }
 
                 indicatorHeight =
-                    getDimension(R.styleable.UiNavigationBar_nav_indicatorHeight, indicatorHeight)
+                    getDimension(R.styleable.UiNavigationBar_uiNavIndicatorHeight, indicatorHeight)
                 indicatorRadius =
-                    getDimension(R.styleable.UiNavigationBar_nav_indicatorRadius, indicatorRadius)
-                if (hasValue(R.styleable.UiNavigationBar_nav_indicatorStylePadding)) {
+                    getDimension(R.styleable.UiNavigationBar_uiNavIndicatorRadius, indicatorRadius)
+                if (hasValue(R.styleable.UiNavigationBar_uiNavIndicatorPadding)) {
                     indicatorStylePadding =
-                        getDimension(R.styleable.UiNavigationBar_nav_indicatorStylePadding, 0f)
+                        getDimension(R.styleable.UiNavigationBar_uiNavIndicatorPadding, 0f)
                 }
-                if (hasValue(R.styleable.UiNavigationBar_nav_indicatorStyleAlpha)) {
+                if (hasValue(R.styleable.UiNavigationBar_uiNavIndicatorAlpha)) {
                     indicatorStyleAlpha =
-                        getFloat(R.styleable.UiNavigationBar_nav_indicatorStyleAlpha, 1f)
+                        getFloat(R.styleable.UiNavigationBar_uiNavIndicatorAlpha, 1f)
                             .coerceIn(0f, 1f)
                 }
                 indicatorAnimated =
-                    getBoolean(R.styleable.UiNavigationBar_nav_indicatorAnimated, indicatorAnimated)
+                    getBoolean(R.styleable.UiNavigationBar_uiNavIndicatorAnimated, indicatorAnimated)
                 indicatorAnimDuration = getInt(
-                    R.styleable.UiNavigationBar_nav_indicatorAnimationDuration,
+                    R.styleable.UiNavigationBar_uiNavIndicatorAnimationDuration,
                     indicatorAnimDuration
                 )
                 // Indicator gradient
                 indicatorGradientEnabled = getBoolean(
-                    R.styleable.UiNavigationBar_nav_indicatorGradient,
+                    R.styleable.UiNavigationBar_uiNavIndicatorGradientEnabled,
                     indicatorGradientEnabled
                 )
                 indicatorGradientStart = getColor(
-                    R.styleable.UiNavigationBar_nav_indicatorGradientStart,
+                    R.styleable.UiNavigationBar_uiNavIndicatorGradientStart,
                     indicatorGradientStart
                 )
                 indicatorGradientCenter = getColor(
-                    R.styleable.UiNavigationBar_nav_indicatorGradientCenter,
+                    R.styleable.UiNavigationBar_uiNavIndicatorGradientCenter,
                     indicatorGradientCenter
                 )
                 indicatorGradientEnd = getColor(
-                    R.styleable.UiNavigationBar_nav_indicatorGradientEnd,
+                    R.styleable.UiNavigationBar_uiNavIndicatorGradientEnd,
                     indicatorGradientEnd
                 )
                 indicatorGradientOrientation =
-                    when (getInt(R.styleable.UiNavigationBar_nav_indicatorGradientOrientation, 0)) {
+                    when (getInt(R.styleable.UiNavigationBar_uiNavIndicatorGradientOrientation, 0)) {
                         0 -> GradientOrientation.HORIZONTAL
                         1 -> GradientOrientation.VERTICAL
                         else -> GradientOrientation.HORIZONTAL
                     }
                 // Text colors
                 textColorSelected =
-                    getColor(R.styleable.UiNavigationBar_nav_textColorSelected, textColorSelected)
+                    getColor(R.styleable.UiNavigationBar_uiNavTextColorSelected, textColorSelected)
                 textColorUnselected = getColor(
-                    R.styleable.UiNavigationBar_nav_textColorUnselected,
+                    R.styleable.UiNavigationBar_uiNavTextColorUnselected,
                     textColorUnselected
                 )
-                isTextSingleLine = getBoolean(R.styleable.UiNavigationBar_nav_textSingleLine, true)
+                isTextSingleLine = getBoolean(R.styleable.UiNavigationBar_uiNavTextSingleLine, true)
                 // Label font family
-                if (hasValue(R.styleable.UiNavigationBar_nav_labelFontFamily)) {
+                if (hasValue(R.styleable.UiNavigationBar_uiNavLabelFontFamily)) {
                     val fontResId =
-                        getResourceId(R.styleable.UiNavigationBar_nav_labelFontFamily, 0)
+                        getResourceId(R.styleable.UiNavigationBar_uiNavLabelFontFamily, 0)
                     if (fontResId != 0) {
                         try {
                             labelFontFamily = androidx.core.content.res.ResourcesCompat.getFont(
@@ -244,53 +244,53 @@ class UiNavigationBar @JvmOverloads constructor(
                 }
                 // Text gradient
                 textGradientEnabled =
-                    getBoolean(R.styleable.UiNavigationBar_nav_textGradient, textGradientEnabled)
+                    getBoolean(R.styleable.UiNavigationBar_uiNavTextGradientEnabled, textGradientEnabled)
                 textGradientStart =
-                    getColor(R.styleable.UiNavigationBar_nav_textGradientStart, textGradientStart)
+                    getColor(R.styleable.UiNavigationBar_uiNavTextGradientStart, textGradientStart)
                 textGradientCenter =
-                    getColor(R.styleable.UiNavigationBar_nav_textGradientCenter, textGradientCenter)
+                    getColor(R.styleable.UiNavigationBar_uiNavTextGradientCenter, textGradientCenter)
                 textGradientEnd =
-                    getColor(R.styleable.UiNavigationBar_nav_textGradientEnd, textGradientEnd)
+                    getColor(R.styleable.UiNavigationBar_uiNavTextGradientEnd, textGradientEnd)
                 textGradientOrientation =
-                    when (getInt(R.styleable.UiNavigationBar_nav_textGradientOrientation, 0)) {
+                    when (getInt(R.styleable.UiNavigationBar_uiNavTextGradientOrientation, 0)) {
                         0 -> GradientOrientation.HORIZONTAL
                         1 -> GradientOrientation.VERTICAL
                         else -> GradientOrientation.HORIZONTAL
                     }
                 // Icon tint
-                if (hasValue(R.styleable.UiNavigationBar_nav_iconTintSelected)) {
+                if (hasValue(R.styleable.UiNavigationBar_uiNavIconTintSelected)) {
                     iconTintSelected = getColor(
-                        R.styleable.UiNavigationBar_nav_iconTintSelected,
+                        R.styleable.UiNavigationBar_uiNavIconTintSelected,
                         textColorSelected
                     )
                 }
-                if (hasValue(R.styleable.UiNavigationBar_nav_iconTintUnselected)) {
+                if (hasValue(R.styleable.UiNavigationBar_uiNavIconTintUnselected)) {
                     iconTintUnselected = getColor(
-                        R.styleable.UiNavigationBar_nav_iconTintUnselected,
+                        R.styleable.UiNavigationBar_uiNavIconTintUnselected,
                         textColorUnselected
                     )
                 }
                 // Sizes
-                textSize = getDimension(R.styleable.UiNavigationBar_nav_textSize, textSize)
-                iconSize = getDimension(R.styleable.UiNavigationBar_nav_iconSize, iconSize)
-                itemPadding = getDimension(R.styleable.UiNavigationBar_nav_itemPadding, itemPadding)
+                textSize = getDimension(R.styleable.UiNavigationBar_uiNavTextSize, textSize)
+                iconSize = getDimension(R.styleable.UiNavigationBar_uiNavIconSize, iconSize)
+                itemPadding = getDimension(R.styleable.UiNavigationBar_uiNavItemPadding, itemPadding)
                 iconTextSpacing =
-                    getDimension(R.styleable.UiNavigationBar_nav_iconTextSpacing, iconTextSpacing)
+                    getDimension(R.styleable.UiNavigationBar_uiNavIconTextSpacing, iconTextSpacing)
                 // Layout
-                itemLayout = when (getInt(R.styleable.UiNavigationBar_nav_itemLayout, 0)) {
+                itemLayout = when (getInt(R.styleable.UiNavigationBar_uiNavItemLayout, 0)) {
                     0 -> ItemLayout.VERTICAL
                     1 -> ItemLayout.HORIZONTAL
                     else -> ItemLayout.VERTICAL
                 }
                 labelVisibility =
-                    when (getInt(R.styleable.UiNavigationBar_nav_labelVisibility, 0)) {
+                    when (getInt(R.styleable.UiNavigationBar_uiNavLabelVisibility, 0)) {
                         0 -> LabelVisibility.ALWAYS
                         1 -> LabelVisibility.SELECTED
                         2 -> LabelVisibility.NEVER
                         else -> LabelVisibility.ALWAYS
                     }
                 // Animation
-                animationType = when (getInt(R.styleable.UiNavigationBar_nav_animationType, 1)) {
+                animationType = when (getInt(R.styleable.UiNavigationBar_uiNavItemAnimation, 1)) {
                     0 -> AnimationType.NONE
                     1 -> AnimationType.SCALE
                     2 -> AnimationType.FADE
@@ -299,33 +299,33 @@ class UiNavigationBar @JvmOverloads constructor(
                     else -> AnimationType.SCALE
                 }
                 animationDuration =
-                    getInt(R.styleable.UiNavigationBar_nav_animationDuration, animationDuration)
+                    getInt(R.styleable.UiNavigationBar_uiNavItemAnimationDuration, animationDuration)
                 // Badge
-                badgeColor = getColor(R.styleable.UiNavigationBar_nav_badgeColor, badgeColor)
+                badgeColor = getColor(R.styleable.UiNavigationBar_uiNavBadgeColor, badgeColor)
                 badgeTextColor =
-                    getColor(R.styleable.UiNavigationBar_nav_badgeTextColor, badgeTextColor)
+                    getColor(R.styleable.UiNavigationBar_uiNavBadgeTextColor, badgeTextColor)
                 // Ripple
                 rippleEnabled =
-                    getBoolean(R.styleable.UiNavigationBar_nav_rippleEnabled, rippleEnabled)
-                rippleColor = getColor(R.styleable.UiNavigationBar_nav_rippleColor, rippleColor)
+                    getBoolean(R.styleable.UiNavigationBar_uiNavRippleEnabled, rippleEnabled)
+                rippleColor = getColor(R.styleable.UiNavigationBar_uiNavRippleColor, rippleColor)
                 // Navigation Animation
                 navAnimateEnabled =
-                    getBoolean(R.styleable.UiNavigationBar_nav_animateEnabled, navAnimateEnabled)
-                if (hasValue(R.styleable.UiNavigationBar_nav_enterAnim)) {
+                    getBoolean(R.styleable.UiNavigationBar_uiNavTransitionEnabled, navAnimateEnabled)
+                if (hasValue(R.styleable.UiNavigationBar_uiNavEnterAnim)) {
                     navEnterAnim =
-                        getResourceId(R.styleable.UiNavigationBar_nav_enterAnim, navEnterAnim)
+                        getResourceId(R.styleable.UiNavigationBar_uiNavEnterAnim, navEnterAnim)
                 }
-                if (hasValue(R.styleable.UiNavigationBar_nav_exitAnim)) {
+                if (hasValue(R.styleable.UiNavigationBar_uiNavExitAnim)) {
                     navExitAnim =
-                        getResourceId(R.styleable.UiNavigationBar_nav_exitAnim, navExitAnim)
+                        getResourceId(R.styleable.UiNavigationBar_uiNavExitAnim, navExitAnim)
                 }
-                if (hasValue(R.styleable.UiNavigationBar_nav_popEnterAnim)) {
+                if (hasValue(R.styleable.UiNavigationBar_uiNavPopEnterAnim)) {
                     navPopEnterAnim =
-                        getResourceId(R.styleable.UiNavigationBar_nav_popEnterAnim, navPopEnterAnim)
+                        getResourceId(R.styleable.UiNavigationBar_uiNavPopEnterAnim, navPopEnterAnim)
                 }
-                if (hasValue(R.styleable.UiNavigationBar_nav_popExitAnim)) {
+                if (hasValue(R.styleable.UiNavigationBar_uiNavPopExitAnim)) {
                     navPopExitAnim =
-                        getResourceId(R.styleable.UiNavigationBar_nav_popExitAnim, navPopExitAnim)
+                        getResourceId(R.styleable.UiNavigationBar_uiNavPopExitAnim, navPopExitAnim)
                 }
             } finally {
                 recycle()

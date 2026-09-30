@@ -111,65 +111,65 @@ class UISeekbar @JvmOverloads constructor(
 
         context.theme.obtainStyledAttributes(attrs, R.styleable.UISeekbar, defStyleAttr, 0).apply {
             try {
-                min = getInt(R.styleable.UISeekbar_sbMin, min)
-                max = getInt(R.styleable.UISeekbar_sbMax, max)
-                progress = getInt(R.styleable.UISeekbar_sbProgress, progress)
-                stepSize = getInt(R.styleable.UISeekbar_sbStepSize, stepSize)
+                min = getInt(R.styleable.UISeekbar_uiSeekbarMin, min)
+                max = getInt(R.styleable.UISeekbar_uiSeekbarMax, max)
+                progress = getInt(R.styleable.UISeekbar_uiSeekbarProgress, progress)
+                stepSize = getInt(R.styleable.UISeekbar_uiSeekbarStepSize, stepSize)
 
-                trackColor = getColor(R.styleable.UISeekbar_sbTrackColor, trackColor)
-                trackHeight = getDimension(R.styleable.UISeekbar_sbTrackHeight, trackHeight)
+                trackColor = getColor(R.styleable.UISeekbar_uiSeekbarTrackColor, trackColor)
+                trackHeight = getDimension(R.styleable.UISeekbar_uiSeekbarTrackHeight, trackHeight)
                 trackCornerRadius =
-                    getDimension(R.styleable.UISeekbar_sbTrackCornerRadius, trackCornerRadius)
-                if (hasValue(R.styleable.UISeekbar_sbTrackGradientStart) &&
-                    hasValue(R.styleable.UISeekbar_sbTrackGradientEnd)
+                    getDimension(R.styleable.UISeekbar_uiSeekbarTrackCornerRadius, trackCornerRadius)
+                if (hasValue(R.styleable.UISeekbar_uiSeekbarTrackGradientStart) &&
+                    hasValue(R.styleable.UISeekbar_uiSeekbarTrackGradientEnd)
                 ) {
-                    trackGradientStart = getColor(R.styleable.UISeekbar_sbTrackGradientStart, 0)
-                    trackGradientEnd = getColor(R.styleable.UISeekbar_sbTrackGradientEnd, 0)
+                    trackGradientStart = getColor(R.styleable.UISeekbar_uiSeekbarTrackGradientStart, 0)
+                    trackGradientEnd = getColor(R.styleable.UISeekbar_uiSeekbarTrackGradientEnd, 0)
                     hasTrackGradient = true
                 }
 
-                progressColor = getColor(R.styleable.UISeekbar_sbProgressColor, progressColor)
-                if (hasValue(R.styleable.UISeekbar_sbProgressGradientStart) &&
-                    hasValue(R.styleable.UISeekbar_sbProgressGradientEnd)
+                progressColor = getColor(R.styleable.UISeekbar_uiSeekbarProgressColor, progressColor)
+                if (hasValue(R.styleable.UISeekbar_uiSeekbarProgressGradientStart) &&
+                    hasValue(R.styleable.UISeekbar_uiSeekbarProgressGradientEnd)
                 ) {
-                    progressGradientStart = getColor(R.styleable.UISeekbar_sbProgressGradientStart, 0)
-                    progressGradientEnd = getColor(R.styleable.UISeekbar_sbProgressGradientEnd, 0)
+                    progressGradientStart = getColor(R.styleable.UISeekbar_uiSeekbarProgressGradientStart, 0)
+                    progressGradientEnd = getColor(R.styleable.UISeekbar_uiSeekbarProgressGradientEnd, 0)
                     hasProgressGradient = true
                 }
 
-                thumbColor = getColor(R.styleable.UISeekbar_sbThumbColor, thumbColor)
-                thumbRadius = getDimension(R.styleable.UISeekbar_sbThumbRadius, thumbRadius)
+                thumbColor = getColor(R.styleable.UISeekbar_uiSeekbarThumbColor, thumbColor)
+                thumbRadius = getDimension(R.styleable.UISeekbar_uiSeekbarThumbRadius, thumbRadius)
                 thumbStrokeWidth =
-                    getDimension(R.styleable.UISeekbar_sbThumbStrokeWidth, thumbStrokeWidth)
-                thumbStrokeColor = getColor(R.styleable.UISeekbar_sbThumbStrokeColor, thumbStrokeColor)
-                thumbDrawable = getDrawable(R.styleable.UISeekbar_sbThumbDrawable)
+                    getDimension(R.styleable.UISeekbar_uiSeekbarThumbStrokeWidth, thumbStrokeWidth)
+                thumbStrokeColor = getColor(R.styleable.UISeekbar_uiSeekbarThumbStrokeColor, thumbStrokeColor)
+                thumbDrawable = getDrawable(R.styleable.UISeekbar_uiSeekbarThumbDrawable)
 
-                thumbElevation = getDimension(R.styleable.UISeekbar_sbThumbElevation, thumbElevation)
-                thumbShadowColor = getColor(R.styleable.UISeekbar_sbThumbShadowColor, thumbShadowColor)
+                thumbElevation = getDimension(R.styleable.UISeekbar_uiSeekbarThumbElevation, thumbElevation)
+                thumbShadowColor = getColor(R.styleable.UISeekbar_uiSeekbarThumbShadowColor, thumbShadowColor)
 
-                showTicks = getBoolean(R.styleable.UISeekbar_sbShowTicks, showTicks)
-                tickColor = getColor(R.styleable.UISeekbar_sbTickColor, thumbColor)
-                tickRadius = getDimension(R.styleable.UISeekbar_sbTickRadius, tickRadius)
+                showTicks = getBoolean(R.styleable.UISeekbar_uiSeekbarShowTicks, showTicks)
+                tickColor = getColor(R.styleable.UISeekbar_uiSeekbarTickColor, thumbColor)
+                tickRadius = getDimension(R.styleable.UISeekbar_uiSeekbarTickRadius, tickRadius)
 
-                showValueLabel = getBoolean(R.styleable.UISeekbar_sbShowValueLabel, showValueLabel)
+                showValueLabel = getBoolean(R.styleable.UISeekbar_uiSeekbarShowValueLabel, showValueLabel)
                 valueLabelAlwaysVisible = getBoolean(
-                    R.styleable.UISeekbar_sbValueLabelAlwaysVisible,
+                    R.styleable.UISeekbar_uiSeekbarValueLabelAlwaysVisible,
                     valueLabelAlwaysVisible
                 )
                 valueLabelBgColor =
-                    getColor(R.styleable.UISeekbar_sbValueLabelBackgroundColor, valueLabelBgColor)
+                    getColor(R.styleable.UISeekbar_uiSeekbarValueLabelBackgroundColor, valueLabelBgColor)
                 valueLabelTextColor =
-                    getColor(R.styleable.UISeekbar_sbValueLabelTextColor, valueLabelTextColor)
+                    getColor(R.styleable.UISeekbar_uiSeekbarValueLabelTextColor, valueLabelTextColor)
                 valueLabelTextSize =
-                    getDimension(R.styleable.UISeekbar_sbValueLabelTextSize, valueLabelTextSize)
+                    getDimension(R.styleable.UISeekbar_uiSeekbarValueLabelTextSize, valueLabelTextSize)
                 valueLabelPadding =
-                    getDimension(R.styleable.UISeekbar_sbValueLabelPadding, valueLabelPadding)
+                    getDimension(R.styleable.UISeekbar_uiSeekbarValueLabelPadding, valueLabelPadding)
                 valueLabelCornerRadius = getDimension(
-                    R.styleable.UISeekbar_sbValueLabelCornerRadius,
+                    R.styleable.UISeekbar_uiSeekbarValueLabelCornerRadius,
                     valueLabelCornerRadius
                 )
                 valueLabelMinWidth =
-                    getDimension(R.styleable.UISeekbar_sbValueLabelMinWidth, valueLabelMinWidth)
+                    getDimension(R.styleable.UISeekbar_uiSeekbarValueLabelMinWidth, valueLabelMinWidth)
             }
             finally {
                 recycle()

@@ -424,6 +424,7 @@ class DOCXReader(control: IControl?, private var filePath: String?) : AbstractRe
                     }
                     if ("paragraph" == styleEle.attributeValue("type") && "1" == styleEle.attributeValue("default")) {
                         defaultParaStyleID = style.getId()
+                        document.defaultParaStyleID = defaultParaStyleID
                     }
                     StyleManage.instance().addStyle(style)
                 }

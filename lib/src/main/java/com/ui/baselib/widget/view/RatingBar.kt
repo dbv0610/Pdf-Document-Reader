@@ -32,13 +32,13 @@ class RatingBar @JvmOverloads constructor(
 
         val typedAttrArray = context.obtainStyledAttributes(attrs, R.styleable.RatingBar, defStyleAttr, 0)
 
-        maximumRating = typedAttrArray.getInt(R.styleable.RatingBar_maxRating, 5)
-        emptyStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_emptyStarDrawable)
-        filledStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_filledStarDrawable)
-        emptyLastStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_emptyLastStarDrawable)
-        filledLastStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_filledLastStarDrawable)
-        starPadding = typedAttrArray.getDimensionPixelSize(R.styleable.RatingBar_starSpacing, 0)
-        userRating = typedAttrArray.getInt(R.styleable.RatingBar_defaultRate, 1)
+        maximumRating = typedAttrArray.getInt(R.styleable.RatingBar_uiRatingMax, 5)
+        emptyStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_uiRatingEmptyDrawable)
+        filledStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_uiRatingFilledDrawable)
+        emptyLastStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_uiRatingEmptyLastDrawable)
+        filledLastStarDraw = typedAttrArray.getDrawable(R.styleable.RatingBar_uiRatingFilledLastDrawable)
+        starPadding = typedAttrArray.getDimensionPixelSize(R.styleable.RatingBar_uiRatingSpacing, 0)
+        userRating = typedAttrArray.getInt(R.styleable.RatingBar_uiRating, 1)
         typedAttrArray.recycle()
 
         setupRatingViews()

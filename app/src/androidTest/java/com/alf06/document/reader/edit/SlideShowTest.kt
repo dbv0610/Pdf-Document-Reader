@@ -253,7 +253,7 @@ class SlideShowTest {
         val pdf = File(out, "deck.pdf").apply { delete() }
         val p = viewer.control!!.getView() as com.wxiwei.office.pg.control.Presentation
         val written = kotlinx.coroutines.runBlocking {
-            pdf.outputStream().use { o -> viewer.thumbnails!!.onDrawingThread { com.alf06.document.reader.ui.home.document.office.edit.writeDeckPdf(p, 10, o) } }
+            pdf.outputStream().use { o -> viewer.thumbnails!!.onDrawingThread { com.wxiwei.office.editor.ui.writeDeckPdf(p, 10, o) } }
         }
         assertEquals(10, written)
         android.graphics.pdf.PdfRenderer(android.os.ParcelFileDescriptor.open(pdf, android.os.ParcelFileDescriptor.MODE_READ_ONLY)).use { r ->

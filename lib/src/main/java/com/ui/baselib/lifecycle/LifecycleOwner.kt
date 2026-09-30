@@ -13,16 +13,18 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 
 fun Fragment.runAfter(delayMillis: Long = 1000L, block: () -> Unit) {
     android.os.Handler(Looper.getMainLooper()).postDelayed({
-        if (isAdded) {
+        // A fragment on the back stack is still added but has no view to update.
+        if (isAdded && view != null) {
             block()
         }
     }, delayMillis)
@@ -99,7 +101,7 @@ fun Fragment.lifecycleCustomScope(
     action()
 }
 /**
- * Launch a coroutine with SupervisorJob for independent child failure handling
+ * Launch a coroutine whose children run in a supervisorScope (still cancelled with the lifecycle)
  * Children failures won't cancel siblings or parent
  * @param dispatcher Coroutine dispatcher (default: Main)
  * @param action The coroutine action to perform
@@ -108,8 +110,8 @@ fun Fragment.lifecycleCustomScope(
 fun Fragment.lifecycleSupervisorScope(
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
     action: suspend CoroutineScope.() -> Unit
-): Job = lifecycleScope.launch(SupervisorJob() + dispatcher) {
-    action()
+): Job = lifecycleScope.launch(dispatcher) {
+    supervisorScope { action() }
 }
 /**
  * Launch coroutine on IO thread and switch to Main for result
@@ -141,6 +143,8 @@ fun Fragment.lifecycleSafeScope(
 ): Job = lifecycleScope.launch(dispatcher) {
     try {
         action()
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         onError(e)
     }
@@ -188,7 +192,7 @@ fun FragmentActivity.lifecycleCustomScope(
     action()
 }
 /**
- * Launch a coroutine with SupervisorJob for independent child failure handling
+ * Launch a coroutine whose children run in a supervisorScope (still cancelled with the lifecycle)
  * Children failures won't cancel siblings or parent
  * @param dispatcher Coroutine dispatcher (default: Main)
  * @param action The coroutine action to perform
@@ -197,8 +201,8 @@ fun FragmentActivity.lifecycleCustomScope(
 fun FragmentActivity.lifecycleSupervisorScope(
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
     action: suspend CoroutineScope.() -> Unit
-): Job = lifecycleScope.launch(SupervisorJob() + dispatcher) {
-    action()
+): Job = lifecycleScope.launch(dispatcher) {
+    supervisorScope { action() }
 }
 /**
  * Launch coroutine on IO thread and switch to Main for result
@@ -230,6 +234,8 @@ fun FragmentActivity.lifecycleSafeScope(
 ): Job = lifecycleScope.launch(dispatcher) {
     try {
         action()
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         onError(e)
     }
@@ -482,13 +488,15 @@ fun ViewModel.launchSafe(
 ): Job = viewModelScope.launch(dispatcher) {
     try {
         action()
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         onError(e)
     }
 }
 
 /**
- * Launch a coroutine with SupervisorJob for independent child failure handling
+ * Launch a coroutine whose children run in a supervisorScope (still cancelled with the lifecycle)
  * Children failures won't cancel siblings or parent
  * @param dispatcher Coroutine dispatcher (default: IO)
  * @param action The coroutine action to perform
@@ -497,8 +505,8 @@ fun ViewModel.launchSafe(
 fun ViewModel.launchSupervisor(
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
     action: suspend CoroutineScope.() -> Unit
-): Job = viewModelScope.launch(SupervisorJob() + dispatcher) {
-    action()
+): Job = viewModelScope.launch(dispatcher) {
+    supervisorScope { action() }
 }
 
 // ==================== Context Switching Extensions ====================
@@ -558,6 +566,8 @@ suspend fun <T> withSafe(
     block: suspend CoroutineScope.() -> T
 ): T? = try {
     withContext(Dispatchers.IO) { block() }
+} catch (e: CancellationException) {
+    throw e
 } catch (e: Exception) {
     onError(e)
     null
@@ -574,6 +584,8 @@ suspend fun <T> withIoSafe(
     block: suspend CoroutineScope.() -> T
 ): T? = try {
     withContext(Dispatchers.IO) { block() }
+} catch (e: CancellationException) {
+    throw e
 } catch (e: Exception) {
     onError(e)
     null
@@ -590,6 +602,8 @@ suspend fun <T> withMainSafe(
     block: suspend CoroutineScope.() -> T
 ): T? = try {
     withContext(Dispatchers.Main) { block() }
+} catch (e: CancellationException) {
+    throw e
 } catch (e: Exception) {
     onError(e)
     null

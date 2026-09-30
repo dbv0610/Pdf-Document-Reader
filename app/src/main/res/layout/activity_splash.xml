@@ -60,16 +60,16 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="@dimen/_12sdp"
         android:indeterminate="true"
-        app:gradientEndColor="@color/grdEnd"
-        app:gradientStartColor="@color/grdStart"
+        app:uiProgressGradientEnd="@color/grdEnd"
+        app:uiProgressGradientStart="@color/grdStart"
         app:layout_constraintBottom_toTopOf="@id/flNativeAd"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintWidth_percent="0.66"
-        app:progressIndeterminate="true"
-        app:progressTrackColor="#3DF59E42"
-        app:progressTrackCornerRadius="@dimen/_12sdp"
-        app:progressTrackThickness="@dimen/_5sdp" />
+        app:uiProgressIndeterminate="true"
+        app:uiProgressTrackColor="#3DF59E42"
+        app:uiProgressTrackCornerRadius="@dimen/_12sdp"
+        app:uiProgressTrackThickness="@dimen/_5sdp" />
 
     <FrameLayout
         android:id="@+id/flNativeAd"

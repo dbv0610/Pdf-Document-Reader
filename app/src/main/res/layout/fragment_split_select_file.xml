@@ -47,10 +47,10 @@
         android:orientation="horizontal"
         android:paddingHorizontal="@dimen/_12sdp"
         android:visibility="gone"
-        app:cornerRadius="@dimen/_8sdp"
+        app:uiCornerRadius="@dimen/_8sdp"
         app:layout_constraintTop_toBottomOf="@id/layoutHeader"
-        app:stColor="@color/color_d0d0d0"
-        app:strokeWidth="@dimen/_1sdp"
+        app:uiStrokeColor="@color/color_d0d0d0"
+        app:uiStrokeWidth="@dimen/_1sdp"
         tools:visibility="visible">
 
         <ImageView

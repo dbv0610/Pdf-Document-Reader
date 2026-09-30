@@ -28,17 +28,14 @@ to them must stay under their own license.
 | Project | Where | Copyright | License |
 |---|---|---|---|
 | PDFium | `src/main/jni/lib/<abi>/libpdfium.so`, `src/main/jni/include` | Copyright 2014 The PDFium Authors; original code copyright 2014 Foxit Software Inc. | BSD-style (PDFium `LICENSE`) |
+| Material Symbols (icons of the edit bar) | `src/main/res/drawable/docsdk_ic_*.xml`, except `docsdk_ic_back.xml`; `delete_column`, `column_wider` and `column_narrower` are turned copies | Copyright Google LLC | Apache License 2.0 |
 
 ## Libraries this module depends on (not included in its source)
 
 | Library | License |
 |---|---|
-| pdfbox-android (`com.tom-roush:pdfbox-android`) | Apache License 2.0 |
-| AndroidX (activity, appcompat, constraintlayout, core, recyclerview, viewpager2), Material Components | Apache License 2.0 |
+| AndroidX (activity, appcompat, core, recyclerview, viewpager2), Material Components | Apache License 2.0 |
 | Kotlin coroutines | Apache License 2.0 |
-| Gson | Apache License 2.0 |
-| Lottie | Apache License 2.0 |
-| sdp-android / ssp-android | MIT License |
 
 The Apache License 2.0 requires the NOTICE file of an Apache project to go with any
 redistribution. Apache POI's NOTICE says: "This product includes software developed by The

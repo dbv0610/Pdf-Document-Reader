@@ -10,7 +10,7 @@
 
     <com.ui.baselib.widget.view.UiImageView
         android:id="@+id/ivPage"
-        app:cornerRadius="8dp"
+        app:uiCornerRadius="8dp"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:importantForAccessibility="no"

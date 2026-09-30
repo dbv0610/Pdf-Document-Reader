@@ -29,8 +29,8 @@ import androidx.core.net.toUri
  */
 fun Context.getPathFromUri(uri: Uri): String? {
     return when (uri.scheme) {
-        uri.scheme -> uri.path
-        uri.scheme -> {
+        "file" -> uri.path
+        "content" -> {
             try {
                 when {
                     isGooglePhotosUri(uri) -> uri.lastPathSegment
@@ -197,10 +197,10 @@ private fun getExternalStoragePath(uri: Uri): String? {
 
 private fun Context.copyFileToTemp(uri: Uri): String? {
     return try {
-        val tempFile = File(
-            cacheDir,
-            "temp_${System.currentTimeMillis()}_${uri.lastPathSegment ?: "file"}"
-        )
+        // Document ids like "primary:Download/a.pdf" contain '/', which would point into a
+        // directory that doesn't exist; keep only the last name part.
+        val name = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { null } ?: "file"
+        val tempFile = File(cacheDir, "temp_${System.currentTimeMillis()}_$name")
         contentResolver.openInputStream(uri)?.use { input ->
             tempFile.outputStream().use { output ->
                 input.copyTo(output)

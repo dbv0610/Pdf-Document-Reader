@@ -454,8 +454,38 @@ class WPDocument : STDocument() {
         // out: everything after it moves back by one
         src.detachLeafAt(index)
         shiftMainBack(from)
-        // in at [at]: a run crossing it is split, everything from it on moves forward by one
-        val at = if (to > from) to - 1 else to
+        placeLeaf(if (to > from) to - 1 else to, obj)
+        return true
+    }
+
+    /**
+     * Puts the new one-char object [obj] (an in-line picture) at the text position [at] of the main
+     * text, before the character there, in a paragraph (not a table's own element), at a run
+     * boundary or inside a plain text run. Returns false when it cannot go there (nothing changed).
+     */
+    fun insertMainObject(at: Long, obj: LeafElement): Boolean {
+        if (!isEditableArea(at) || at >= storyEnd(at)) return false
+        val dst = getParagraph(at) as? ParagraphElement ?: return false
+        if (dst is TableElement) return false
+        val hit = dst.getLeaf(at) ?: return false
+        if (hit.getStartOffset() != at && hit.javaClass != LeafElement::class.java) return false
+        placeLeaf(at, obj)
+        return true
+    }
+
+    /** Takes out the one-char object at [at] that [insertMainObject] put there; everything after it moves back. */
+    fun removeMainObject(at: Long): LeafElement? {
+        val p = getParagraph(at) as? ParagraphElement ?: return null
+        val index = (0 until p.leafCount()).firstOrNull { p.getElementForIndex(it)?.getStartOffset() == at } ?: return null
+        val obj = p.getElementForIndex(index) as? LeafElement ?: return null
+        if (obj.getEndOffset() != at + 1) return null
+        p.detachLeafAt(index)
+        shiftMainBack(at)
+        return obj
+    }
+
+    /** [obj] in at [at]: a run crossing it is split, everything from it on moves forward by one. */
+    private fun placeLeaf(at: Long, obj: LeafElement) {
         val dst = getParagraph(at) as ParagraphElement
         dst.leavesFor(at, at)
         val dstStart = dst.getStartOffset()
@@ -495,7 +525,6 @@ class WPDocument : STDocument() {
         obj.setEndOffset(at + 1)
         val slot = (0 until dst.leafCount()).firstOrNull { (dst.getElementForIndex(it)?.getStartOffset() ?: 0) > at } ?: dst.leafCount()
         dst.insertLeafAt(slot, obj)
-        return true
     }
 
     /**
@@ -551,6 +580,47 @@ class WPDocument : STDocument() {
         paras.sortByOffset()
         tables.sortByOffset()
         return table.getStartOffset() == map(start)
+    }
+
+    /** Style id of a paragraph without pStyle (the default paragraph style), or -1. */
+    var defaultParaStyleID = -1
+
+    /**
+     * Puts the new [table] at [at] of the main text (where a body paragraph ends): cell k of row r
+     * holds [cells][r][k], then [after] (a paragraph after the table) when given. Offsets are
+     * given to them and everything after moves.
+     */
+    fun insertMainTable(at: Long, table: TableElement, rows: List<RowElement>, cells: List<List<ParagraphElement>>, after: ParagraphElement?) {
+        val len = cells.sumOf { r -> r.sumOf { maxOf(1L, it.getEndOffset() - it.getStartOffset()) } } +
+            (after?.let { maxOf(1L, it.getEndOffset() - it.getStartOffset()) } ?: 0L)
+        shiftMainBlock(at, len, emptyList())
+        var o = at
+        table.setStartOffset(at)
+        for ((r, row) in rows.withIndex()) {
+            row.setStartOffset(o)
+            for (k in 0 until row.getCellNumber()) {
+                val cell = row.getElementForIndex(k)!!
+                val n = placeParagraphs(o, listOf(cells[r][k]))
+                cell.setStartOffset(o); cell.setEndOffset(o + n)
+                o += n
+            }
+            row.setEndOffset(o)
+            if (table.rowCount() <= r) table.appendRow(row)
+        }
+        table.setEndOffset(o)
+        after?.let { placeParagraphs(o, listOf(it)) }
+        val tables = getTableCollection(at) ?: return
+        val index = (0 until tables.size()).firstOrNull { (tables.getElementForIndex(it)?.getStartOffset() ?: 0) > at } ?: tables.size()
+        tables.insertElementForIndex(table, index)
+    }
+
+    /** Takes [table] (put there by [insertMainTable]) out of the main text, with the [after] paragraph. */
+    fun removeMainTable(table: TableElement, after: ParagraphElement?) {
+        val start = table.getStartOffset()
+        val end = after?.getEndOffset() ?: table.getEndOffset()
+        removeParagraphs(start, end)
+        getTableCollection(start)?.let { c -> c.indexOf(table).takeIf { it >= 0 }?.let { c.detachElementForIndex(it) } }
+        shiftMainBlock(end, -(end - start), emptyList())
     }
 
     // ---- table rows and cells, live ----------------------------------------------------------

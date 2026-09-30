@@ -208,6 +208,9 @@ class OfficeReader(
         val current = state.value
         val previous = current.pageCount
         if (count == previous && thumbnailCount == current.thumbnailCount && !reloaded) return
+        // an edit lays the pages after it out again: the count drops, then grows back with the
+        // background layout. The last count stays until that layout is done
+        if (!reloaded && count < previous && (observedView as? Word)?.isLayoutFinished() == false) return
         // Word adds pages one at a time while it lays out in the background, noticed on every
         // frame: publishing each one makes the host rebuild its page list and redraw the last
         // thumbnail over and over while the user scrolls. Growth is published at most every

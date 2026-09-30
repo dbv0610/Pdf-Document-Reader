@@ -7,9 +7,9 @@
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingHorizontal="@dimen/_14sdp"
-    app:cornerRadius="@dimen/_12sdp"
-    app:stColor="@color/primary"
-    app:strokeWidth="@dimen/_1sdp">
+    app:uiCornerRadius="@dimen/_12sdp"
+    app:uiStrokeColor="@color/primary"
+    app:uiStrokeWidth="@dimen/_1sdp">
 
     <ImageView
         android:id="@+id/imgIcon"

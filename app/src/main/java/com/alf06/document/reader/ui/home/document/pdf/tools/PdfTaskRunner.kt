@@ -10,7 +10,7 @@ import com.alf06.document.reader.base.shareFile
 import com.alf06.document.reader.model.DocumentType
 import com.alf06.document.reader.model.RecentDocument
 import com.alf06.document.reader.ui.dialog.RenameFileDialog
-import com.alf06.document.reader.ui.home.document.office.edit.DialogKit
+import com.wxiwei.office.editor.ui.DialogKit
 import com.alf06.document.reader.ui.home.document.openDocument
 import com.alf06.document.reader.utils.AppUtils
 import kotlinx.coroutines.CancellationException

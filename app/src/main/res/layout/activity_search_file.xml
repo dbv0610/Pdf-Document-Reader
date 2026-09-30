@@ -32,9 +32,9 @@
             android:orientation="horizontal"
             android:paddingHorizontal="@dimen/_10sdp"
             android:paddingVertical="@dimen/_10sdp"
-            app:cornerRadius="@dimen/_8sdp"
-            app:stColor="@color/color_d0d0d0"
-            app:strokeWidth="@dimen/_1sdp">
+            app:uiCornerRadius="@dimen/_8sdp"
+            app:uiStrokeColor="@color/color_d0d0d0"
+            app:uiStrokeWidth="@dimen/_1sdp">
 
             <ImageView
                 android:layout_width="@dimen/_20sdp"

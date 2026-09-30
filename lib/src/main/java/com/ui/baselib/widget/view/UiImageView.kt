@@ -5,11 +5,11 @@ import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
 import androidx.appcompat.widget.AppCompatImageView
-import androidx.core.graphics.toColorInt
 import androidx.core.graphics.withSave
 import com.ui.baselib.R
 import com.ui.baselib.widget.layout.IUiLayout
 import com.ui.baselib.widget.layout.UiLayoutHelper
+import com.ui.baselib.widget.layout.getColorList
 
 @SuppressLint("CustomViewStyleable")
 class UiImageView @JvmOverloads constructor(
@@ -38,54 +38,49 @@ class UiImageView @JvmOverloads constructor(
                 // Common layout attrs via helper
                 helper.readCornerAttrs(
                     this,
-                    R.styleable.UiImageView_cornerRadius,
-                    R.styleable.UiImageView_cornerTopLeft,
-                    R.styleable.UiImageView_cornerTopRight,
-                    R.styleable.UiImageView_cornerBottomLeft,
-                    R.styleable.UiImageView_cornerBottomRight
+                    R.styleable.UiImageView_uiCornerRadius,
+                    R.styleable.UiImageView_uiCornerTopLeft,
+                    R.styleable.UiImageView_uiCornerTopRight,
+                    R.styleable.UiImageView_uiCornerBottomLeft,
+                    R.styleable.UiImageView_uiCornerBottomRight
                 )
                 helper.readBackgroundAttrs(
                     this,
-                    R.styleable.UiImageView_bgIsGradient,
-                    R.styleable.UiImageView_bgGradientStart,
-                    R.styleable.UiImageView_bgGradientCenter,
-                    R.styleable.UiImageView_bgGradientEnd,
-                    R.styleable.UiImageView_bgColor,
-                    R.styleable.UiImageView_bgGdOrientation,
-                    R.styleable.UiImageView_bgGradientType,
-                    R.styleable.UiImageView_bgGradientCenterX,
-                    R.styleable.UiImageView_bgGradientCenterY,
-                    R.styleable.UiImageView_bgGradientRadius,
-                    R.styleable.UiImageView_bgGradientColors,
-                    R.styleable.UiImageView_bgColors
+                    R.styleable.UiImageView_uiBackgroundGradientEnabled,
+                    R.styleable.UiImageView_uiBackgroundGradientStart,
+                    R.styleable.UiImageView_uiBackgroundGradientCenter,
+                    R.styleable.UiImageView_uiBackgroundGradientEnd,
+                    R.styleable.UiImageView_uiBackgroundColor,
+                    R.styleable.UiImageView_uiBackgroundGradientOrientation,
+                    R.styleable.UiImageView_uiBackgroundGradientType,
+                    R.styleable.UiImageView_uiBackgroundGradientCenterX,
+                    R.styleable.UiImageView_uiBackgroundGradientCenterY,
+                    R.styleable.UiImageView_uiBackgroundGradientRadius,
+                    R.styleable.UiImageView_uiBackgroundGradientColors
                 )
                 helper.readStrokeAttrs(
                     this,
-                    R.styleable.UiImageView_strokeWidth,
-                    R.styleable.UiImageView_stColor,
-                    R.styleable.UiImageView_strokeDistance,
-                    R.styleable.UiImageView_distanceSpace,
-                    R.styleable.UiImageView_strokeGradient,
-                    R.styleable.UiImageView_strokeGdOrientation,
-                    R.styleable.UiImageView_strokeOption,
+                    R.styleable.UiImageView_uiStrokeWidth,
+                    R.styleable.UiImageView_uiStrokeColor,
+                    R.styleable.UiImageView_uiStrokeDashed,
+                    R.styleable.UiImageView_uiStrokeDashGap,
+                    R.styleable.UiImageView_uiStrokeGradientColors,
+                    R.styleable.UiImageView_uiStrokeGradientOrientation,
+                    R.styleable.UiImageView_uiStrokeSides,
                     -1,
-                    R.styleable.UiImageView_stColors,
-                    R.styleable.UiImageView_strokeWidths,
-                    R.styleable.UiImageView_strokeGradientStart,
-                    R.styleable.UiImageView_strokeGradientCenter,
-                    R.styleable.UiImageView_strokeGradientEnd
+                    R.styleable.UiImageView_uiStrokeWidths,
+                    R.styleable.UiImageView_uiStrokeGradientStart,
+                    R.styleable.UiImageView_uiStrokeGradientCenter,
+                    R.styleable.UiImageView_uiStrokeGradientEnd
                 )
                 helper.readShadowAttrs(
                     this,
-                    R.styleable.UiImageView_shadowColor,
-                    R.styleable.UiImageView_shadowRadius,
-                    R.styleable.UiImageView_shadowDx,
-                    R.styleable.UiImageView_shadowDy,
-                    R.styleable.UiImageView_shadowElevation
+                    R.styleable.UiImageView_uiShadowColor,
+                    R.styleable.UiImageView_uiShadowElevation
                 )
                 helper.readDimensionAttrs(
                     this,
-                    R.styleable.UiImageView_uiDimenRatio,
+                    R.styleable.UiImageView_uiDimensionRatio,
                     R.styleable.UiImageView_uiWidthPercent,
                     R.styleable.UiImageView_uiHeightPercent,
                     R.styleable.UiImageView_uiMaxWidthPercent,
@@ -95,9 +90,9 @@ class UiImageView @JvmOverloads constructor(
                 )
 
                 // Image-specific attrs
-                val gradientIconsStr = getString(R.styleable.UiImageView_gradientIcons)
-                gradientIconColors = gradientIconsStr?.parseHexColors()
-                gradientIconOrientation = getInt(R.styleable.UiImageView_imageGdOrientation, 6)
+                gradientIconColors = getColorList(R.styleable.UiImageView_uiIconGradientColors)
+                    ?.takeIf { it.isNotEmpty() }
+                gradientIconOrientation = getInt(R.styleable.UiImageView_uiIconGradientOrientation, 6)
                     .toGradientOrientation()
             } finally {
                 recycle()
@@ -206,16 +201,6 @@ class UiImageView @JvmOverloads constructor(
         return LinearGradient(x0, y0, x1, y1, colors, null, Shader.TileMode.CLAMP)
     }
 
-    private fun String.parseHexColors(): IntArray? {
-        return split(" ")
-            .mapNotNull { if (it.isValidHexColor()) it.toColorInt() else null }
-            .takeIf { it.isNotEmpty() }
-            ?.toIntArray()
-    }
-
-    private fun String.isValidHexColor(): Boolean =
-        matches(HEX_COLOR_REGEX)
-
     private fun Int.toGradientOrientation() =
         UiLayoutHelper.GradientOrientation.entries.getOrElse(this) {
             UiLayoutHelper.GradientOrientation.LEFT_TO_RIGHT
@@ -256,8 +241,4 @@ class UiImageView @JvmOverloads constructor(
     }
 
     fun applyStyle(block: UiImageView.() -> Unit) = apply(block)
-
-    companion object {
-        private val HEX_COLOR_REGEX = Regex("^#?[0-9a-fA-F]{6,8}$")
-    }
 }

@@ -45,39 +45,39 @@ class IndicatorCustomView(context: Context, attrs: AttributeSet) : View(context,
             getContext().theme.obtainStyledAttributes(attrs, R.styleable.IndicatorView, 0, 0)
         try {
             indicatorCount =
-                typedArray.getInteger(R.styleable.IndicatorView_max_count, indicatorCount)
+                typedArray.getInteger(R.styleable.IndicatorView_uiIndicatorCount, indicatorCount)
             indicatorActive =
-                typedArray.getInteger(R.styleable.IndicatorView_active_count, indicatorActive)
+                typedArray.getInteger(R.styleable.IndicatorView_uiIndicatorSelected, indicatorActive)
             indicatorSpacing =
-                typedArray.getDimension(R.styleable.IndicatorView_spacing, indicatorSpacing)
+                typedArray.getDimension(R.styleable.IndicatorView_uiIndicatorSpacing, indicatorSpacing)
             indicatorRadius =
-                typedArray.getDimension(R.styleable.IndicatorView_radius, indicatorRadius)
+                typedArray.getDimension(R.styleable.IndicatorView_uiIndicatorRadius, indicatorRadius)
             indicatorScale =
-                typedArray.getInteger(R.styleable.IndicatorView_scale_value, indicatorScale)
+                typedArray.getInteger(R.styleable.IndicatorView_uiIndicatorStep, indicatorScale)
             paintDefault.color = typedArray.getColor(
-                R.styleable.IndicatorView_default_color,
+                R.styleable.IndicatorView_uiIndicatorColor,
                 ContextCompat.getColor(getContext(), R.color.color_indicator_default)
             )
             activeColor = typedArray.getColor(
-                R.styleable.IndicatorView_active_color,
+                R.styleable.IndicatorView_uiIndicatorSelectedColor,
                 activeColor
             )
             paintActive.color = activeColor
-            isGradient = typedArray.getBoolean(R.styleable.IndicatorView_indicator_gradient, false)
+            isGradient = typedArray.getBoolean(R.styleable.IndicatorView_uiIndicatorGradientEnabled, false)
             gradientStartColor = typedArray.getColor(
-                R.styleable.IndicatorView_indicator_gradient_start,
+                R.styleable.IndicatorView_uiIndicatorGradientStart,
                 gradientStartColor
             )
             gradientEndColor = typedArray.getColor(
-                R.styleable.IndicatorView_indicator_gradient_end,
+                R.styleable.IndicatorView_uiIndicatorGradientEnd,
                 gradientEndColor
             )
             gradientOrientation = typedArray.getInt(
-                R.styleable.IndicatorView_indicator_gradient_orientation,
+                R.styleable.IndicatorView_uiIndicatorGradientOrientation,
                 ORIENTATION_LEFT_RIGHT
             )
             activeWidthMultiplier = typedArray.getFloat(
-                R.styleable.IndicatorView_active_width_multiplier,
+                R.styleable.IndicatorView_uiIndicatorSelectedWidthMultiplier,
                 activeWidthMultiplier
             )
         } finally {

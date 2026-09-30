@@ -25,7 +25,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.alf06.document.reader.R
 import com.alf06.document.reader.databinding.ActivityPdfOrganizeBinding
-import com.alf06.document.reader.ui.home.document.office.edit.DialogKit
+import com.wxiwei.office.editor.ui.DialogKit
 import com.alf06.document.reader.ui.home.document.pdf.PdfThumbnailLoader
 import com.reader.pdfviewer.pdfium.PdfPasswordException
 import com.reader.pdfviewer.tools.PdfSource

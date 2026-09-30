@@ -14,7 +14,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import com.alf06.document.reader.ui.home.document.office.edit.DialogKit
+import com.wxiwei.office.editor.ui.DialogKit
 import androidx.lifecycle.lifecycleScope
 import com.alf06.document.reader.databinding.ActivitySlideShowBinding
 import com.alf06.document.reader.ui.home.document.office.show.InkView

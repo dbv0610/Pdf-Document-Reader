@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.util.AttributeSet
 import android.widget.FrameLayout
-import androidx.core.graphics.withClip
 import com.ui.baselib.R
 
 @Suppress("DEPRECATION")
@@ -21,50 +20,45 @@ open class UiFrameLayout @JvmOverloads constructor(
         context.obtainStyledAttributes(attrs, R.styleable.UiFrameLayout).apply {
             try {
                 helper.readCornerAttrs(this,
-                    R.styleable.UiFrameLayout_cornerRadius,
-                    R.styleable.UiFrameLayout_cornerTopLeft,
-                    R.styleable.UiFrameLayout_cornerTopRight,
-                    R.styleable.UiFrameLayout_cornerBottomLeft,
-                    R.styleable.UiFrameLayout_cornerBottomRight
+                    R.styleable.UiFrameLayout_uiCornerRadius,
+                    R.styleable.UiFrameLayout_uiCornerTopLeft,
+                    R.styleable.UiFrameLayout_uiCornerTopRight,
+                    R.styleable.UiFrameLayout_uiCornerBottomLeft,
+                    R.styleable.UiFrameLayout_uiCornerBottomRight
                 )
                 helper.readBackgroundAttrs(this,
-                    R.styleable.UiFrameLayout_bgIsGradient,
-                    R.styleable.UiFrameLayout_bgGradientStart,
-                    R.styleable.UiFrameLayout_bgGradientCenter,
-                    R.styleable.UiFrameLayout_bgGradientEnd,
-                    R.styleable.UiFrameLayout_bgColor,
-                    R.styleable.UiFrameLayout_bgGdOrientation,
-                    R.styleable.UiFrameLayout_bgGradientType,
-                    R.styleable.UiFrameLayout_bgGradientCenterX,
-                    R.styleable.UiFrameLayout_bgGradientCenterY,
-                    R.styleable.UiFrameLayout_bgGradientRadius,
-                    R.styleable.UiFrameLayout_bgGradientColors,
-                    R.styleable.UiFrameLayout_bgColors
+                    R.styleable.UiFrameLayout_uiBackgroundGradientEnabled,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientStart,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientCenter,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientEnd,
+                    R.styleable.UiFrameLayout_uiBackgroundColor,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientOrientation,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientType,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientCenterX,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientCenterY,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientRadius,
+                    R.styleable.UiFrameLayout_uiBackgroundGradientColors
                 )
                 helper.readStrokeAttrs(this,
-                    R.styleable.UiFrameLayout_strokeWidth,
-                    R.styleable.UiFrameLayout_stColor,
-                    R.styleable.UiFrameLayout_strokeDistance,
-                    R.styleable.UiFrameLayout_distanceSpace,
-                    R.styleable.UiFrameLayout_strokeGradient,
-                    R.styleable.UiFrameLayout_strokeGdOrientation,
-                    R.styleable.UiFrameLayout_strokeOption,
-                    R.styleable.UiFrameLayout_strokeCap,
-                    R.styleable.UiFrameLayout_stColors,
-                    R.styleable.UiFrameLayout_strokeWidths,
-                    R.styleable.UiFrameLayout_strokeGradientStart,
-                    R.styleable.UiFrameLayout_strokeGradientCenter,
-                    R.styleable.UiFrameLayout_strokeGradientEnd
+                    R.styleable.UiFrameLayout_uiStrokeWidth,
+                    R.styleable.UiFrameLayout_uiStrokeColor,
+                    R.styleable.UiFrameLayout_uiStrokeDashed,
+                    R.styleable.UiFrameLayout_uiStrokeDashGap,
+                    R.styleable.UiFrameLayout_uiStrokeGradientColors,
+                    R.styleable.UiFrameLayout_uiStrokeGradientOrientation,
+                    R.styleable.UiFrameLayout_uiStrokeSides,
+                    R.styleable.UiFrameLayout_uiStrokeCap,
+                    R.styleable.UiFrameLayout_uiStrokeWidths,
+                    R.styleable.UiFrameLayout_uiStrokeGradientStart,
+                    R.styleable.UiFrameLayout_uiStrokeGradientCenter,
+                    R.styleable.UiFrameLayout_uiStrokeGradientEnd
                 )
                 helper.readShadowAttrs(this,
-                    R.styleable.UiFrameLayout_shadowColor,
-                    R.styleable.UiFrameLayout_shadowRadius,
-                    R.styleable.UiFrameLayout_shadowDx,
-                    R.styleable.UiFrameLayout_shadowDy,
-                    R.styleable.UiFrameLayout_shadowElevation
+                    R.styleable.UiFrameLayout_uiShadowColor,
+                    R.styleable.UiFrameLayout_uiShadowElevation
                 )
                 helper.readDimensionAttrs(this,
-                    R.styleable.UiFrameLayout_uiDimenRatio,
+                    R.styleable.UiFrameLayout_uiDimensionRatio,
                     R.styleable.UiFrameLayout_uiWidthPercent,
                     R.styleable.UiFrameLayout_uiHeightPercent,
                     R.styleable.UiFrameLayout_uiMaxWidthPercent,
@@ -94,7 +88,7 @@ open class UiFrameLayout @JvmOverloads constructor(
         val h = height.toFloat()
 
         helper.drawBackground(canvas, w, h)
-        canvas.withClip(helper.getClipPath()) {
+        helper.drawClipped(canvas) {
             super.dispatchDraw(canvas)
         }
         helper.drawStroke(canvas, w, h)

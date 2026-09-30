@@ -188,7 +188,7 @@ fun Bundle.putArgsSafely(
 ): Bundle = apply {
     params.forEach { (key, value) ->
         runCatching { putAnySafe(key, value) }
-            .onFailure { Log.w(logTag, "Skip argument \"$key\": ${it.message}") }
+            .onFailure { Log.e(logTag, "Skip argument \"$key\"", it) }
     }
 }
 
@@ -201,7 +201,7 @@ fun Intent.putExtrasSafely(
 ): Intent = apply {
     params.forEach { (key, value) ->
         runCatching { putExtraSmart(key, value) }
-            .onFailure { Log.w(logTag, "Skip extra \"$key\": ${it.message}") }
+            .onFailure { Log.e(logTag, "Skip extra \"$key\"", it) }
     }
 }
 

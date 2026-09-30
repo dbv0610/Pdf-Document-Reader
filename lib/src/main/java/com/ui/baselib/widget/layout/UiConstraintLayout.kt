@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.util.AttributeSet
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.graphics.withClip
 import com.ui.baselib.R
 
 @Suppress("DEPRECATION")
@@ -21,50 +20,45 @@ open class UiConstraintLayout @JvmOverloads constructor(
         context.obtainStyledAttributes(attrs, R.styleable.UiConstraintLayout).apply {
             try {
                 helper.readCornerAttrs(this,
-                    R.styleable.UiConstraintLayout_cornerRadius,
-                    R.styleable.UiConstraintLayout_cornerTopLeft,
-                    R.styleable.UiConstraintLayout_cornerTopRight,
-                    R.styleable.UiConstraintLayout_cornerBottomLeft,
-                    R.styleable.UiConstraintLayout_cornerBottomRight
+                    R.styleable.UiConstraintLayout_uiCornerRadius,
+                    R.styleable.UiConstraintLayout_uiCornerTopLeft,
+                    R.styleable.UiConstraintLayout_uiCornerTopRight,
+                    R.styleable.UiConstraintLayout_uiCornerBottomLeft,
+                    R.styleable.UiConstraintLayout_uiCornerBottomRight
                 )
                 helper.readBackgroundAttrs(this,
-                    R.styleable.UiConstraintLayout_bgIsGradient,
-                    R.styleable.UiConstraintLayout_bgGradientStart,
-                    R.styleable.UiConstraintLayout_bgGradientCenter,
-                    R.styleable.UiConstraintLayout_bgGradientEnd,
-                    R.styleable.UiConstraintLayout_bgColor,
-                    R.styleable.UiConstraintLayout_bgGdOrientation,
-                    R.styleable.UiConstraintLayout_bgGradientType,
-                    R.styleable.UiConstraintLayout_bgGradientCenterX,
-                    R.styleable.UiConstraintLayout_bgGradientCenterY,
-                    R.styleable.UiConstraintLayout_bgGradientRadius,
-                    R.styleable.UiConstraintLayout_bgGradientColors,
-                    R.styleable.UiConstraintLayout_bgColors
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientEnabled,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientStart,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientCenter,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientEnd,
+                    R.styleable.UiConstraintLayout_uiBackgroundColor,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientOrientation,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientType,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientCenterX,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientCenterY,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientRadius,
+                    R.styleable.UiConstraintLayout_uiBackgroundGradientColors
                 )
                 helper.readStrokeAttrs(this,
-                    R.styleable.UiConstraintLayout_strokeWidth,
-                    R.styleable.UiConstraintLayout_stColor,
-                    R.styleable.UiConstraintLayout_strokeDistance,
-                    R.styleable.UiConstraintLayout_distanceSpace,
-                    R.styleable.UiConstraintLayout_strokeGradient,
-                    R.styleable.UiConstraintLayout_strokeGdOrientation,
-                    R.styleable.UiConstraintLayout_strokeOption,
-                    R.styleable.UiConstraintLayout_strokeCap,
-                    R.styleable.UiConstraintLayout_stColors,
-                    R.styleable.UiConstraintLayout_strokeWidths,
-                    R.styleable.UiConstraintLayout_strokeGradientStart,
-                    R.styleable.UiConstraintLayout_strokeGradientCenter,
-                    R.styleable.UiConstraintLayout_strokeGradientEnd
+                    R.styleable.UiConstraintLayout_uiStrokeWidth,
+                    R.styleable.UiConstraintLayout_uiStrokeColor,
+                    R.styleable.UiConstraintLayout_uiStrokeDashed,
+                    R.styleable.UiConstraintLayout_uiStrokeDashGap,
+                    R.styleable.UiConstraintLayout_uiStrokeGradientColors,
+                    R.styleable.UiConstraintLayout_uiStrokeGradientOrientation,
+                    R.styleable.UiConstraintLayout_uiStrokeSides,
+                    R.styleable.UiConstraintLayout_uiStrokeCap,
+                    R.styleable.UiConstraintLayout_uiStrokeWidths,
+                    R.styleable.UiConstraintLayout_uiStrokeGradientStart,
+                    R.styleable.UiConstraintLayout_uiStrokeGradientCenter,
+                    R.styleable.UiConstraintLayout_uiStrokeGradientEnd
                 )
                 helper.readShadowAttrs(this,
-                    R.styleable.UiConstraintLayout_shadowColor,
-                    R.styleable.UiConstraintLayout_shadowRadius,
-                    R.styleable.UiConstraintLayout_shadowDx,
-                    R.styleable.UiConstraintLayout_shadowDy,
-                    R.styleable.UiConstraintLayout_shadowElevation
+                    R.styleable.UiConstraintLayout_uiShadowColor,
+                    R.styleable.UiConstraintLayout_uiShadowElevation
                 )
                 helper.readDimensionAttrs(this,
-                    R.styleable.UiConstraintLayout_uiDimenRatio,
+                    R.styleable.UiConstraintLayout_uiDimensionRatio,
                     R.styleable.UiConstraintLayout_uiWidthPercent,
                     R.styleable.UiConstraintLayout_uiHeightPercent,
                     R.styleable.UiConstraintLayout_uiMaxWidthPercent,
@@ -94,7 +88,7 @@ open class UiConstraintLayout @JvmOverloads constructor(
         val h = height.toFloat()
         
         helper.drawBackground(canvas, w, h)
-        canvas.withClip(helper.getClipPath()) {
+        helper.drawClipped(canvas) {
             super.dispatchDraw(canvas)
         }
         helper.drawStroke(canvas, w, h)

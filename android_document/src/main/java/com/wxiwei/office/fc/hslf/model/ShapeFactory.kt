@@ -146,8 +146,10 @@ object ShapeFactory {
 
             else -> shape = AutoShape(spContainer, parent)
         }
+        // a NotPrimitive shape without vertices: an auto shape, as in Apache POI (it was left null)
+        if (shape == null) shape = AutoShape(spContainer, parent)
         //shape id
-        shape!!.shapeId = spRecord.shapeId
+        shape.shapeId = spRecord.shapeId
 
         return shape
     }

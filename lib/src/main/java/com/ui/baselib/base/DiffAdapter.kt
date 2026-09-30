@@ -34,7 +34,7 @@ class ModelDiffCallback<T : Any>(
 }
 
 abstract class DiffAdapter<T : Any, VB : ViewBinding>(
-    diffCallback: DiffUtil.ItemCallback<T>
+    private val diffCallback: DiffUtil.ItemCallback<T>
 ) : ListAdapter<T, DiffAdapter<T, VB>.ViewHolder>(diffCallback), LifecycleOwner {
 
     constructor(
@@ -53,6 +53,10 @@ abstract class DiffAdapter<T : Any, VB : ViewBinding>(
         private set
 
     var onPositionChanged : (Int)-> Unit = {}
+
+    // submitList() diffs off the main thread, so currentList lags until the diff lands. Edits
+    // build on the last submitted list instead, or back-to-back edits would drop each other.
+    private var latestList: List<T> = emptyList()
     private var lifecycleRegistry = LifecycleRegistry(this)
     private var attachedRecyclerView: RecyclerView? = null
     private var attachedViewLifecycleOwner: LifecycleOwner? = null
@@ -151,6 +155,11 @@ abstract class DiffAdapter<T : Any, VB : ViewBinding>(
     fun getListItem(): List<T> = currentList.toList()
 
     abstract fun createBinding(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): VB
+
+    /**
+     * [position] is the index at bind time. DiffUtil moves don't rebind, so don't capture it in
+     * click listeners; capture [item] (or look the row up when clicked) instead.
+     */
     abstract fun VB.bind(item: T, position: Int)
 
     open fun VB.bind(item: T, position: Int, payloads: List<Any>) {
@@ -188,31 +197,60 @@ abstract class DiffAdapter<T : Any, VB : ViewBinding>(
         }
     }
 
+    override fun submitList(list: List<T>?) = submitList(list, null)
+
+    override fun submitList(list: List<T>?, commitCallback: Runnable?) {
+        latestList = list ?: emptyList()
+        super.submitList(list) {
+            onListCommitted()
+            commitCallback?.run()
+        }
+    }
+
     fun submitListCustom(newList: List<T>?, commitCallback: (() -> Unit)? = null) {
-        submitList(newList?.toList(), commitCallback)
+        submitList(newList?.toList(), commitCallback?.let { Runnable(it) })
+    }
+
+    // The list the selection index refers to. Tracked here rather than in onCurrentListChanged,
+    // which subclasses override without calling super.
+    private var displayedList: List<T> = emptyList()
+
+    /** Keeps the selection on the same item (by areItemsTheSame) when the list changes. */
+    private fun onListCommitted() {
+        val previousList = displayedList
+        displayedList = currentList
+        val pos = getCurrentPos()
+        if (pos == RecyclerView.NO_POSITION) return
+        val selected = previousList.getOrNull(pos)
+        val newPos = if (selected == null) RecyclerView.NO_POSITION
+        else currentList.indexOfFirst { diffCallback.areItemsTheSame(selected, it) }
+        if (newPos != pos) {
+            currentPosition.value = newPos
+            onPositionChanged(newPos)
+        }
     }
 
     fun removeItem(position: Int) {
-        val current = currentList.toMutableList()
+        val current = latestList.toMutableList()
         if (position in current.indices) {
             current.removeAt(position)
-            submitListCustom(current) { normalizeCurrentPosition() }
+            submitListCustom(current)
         }
     }
 
     fun removeItem(item: T) {
-        val index = currentList.indexOf(item)
+        val index = latestList.indexOf(item)
         if (index != -1) removeItem(index)
     }
 
     fun removeItems(predicate: (T) -> Boolean) {
-        val newItems = currentList.filterNot(predicate)
-        if (newItems.size == currentList.size) return
-        submitListCustom(newItems) { normalizeCurrentPosition() }
+        val newItems = latestList.filterNot(predicate)
+        if (newItems.size == latestList.size) return
+        submitListCustom(newItems)
     }
 
-    fun addItem(item: T, index: Int = currentList.size) {
-        val current = currentList.toMutableList()
+    fun addItem(item: T, index: Int = latestList.size) {
+        val current = latestList.toMutableList()
         val safeIndex = index.coerceIn(0, current.size)
         current.add(safeIndex, item)
         submitListCustom(current)
@@ -220,22 +258,19 @@ abstract class DiffAdapter<T : Any, VB : ViewBinding>(
 
     fun addItems(items: List<T>) {
         if (items.isEmpty()) return
-        val current = currentList.toMutableList()
+        val current = latestList.toMutableList()
         current.addAll(items)
         submitListCustom(current)
     }
 
     fun clearAll() {
-        if (currentList.isEmpty()) return
-        submitListCustom(emptyList()) {
-            currentPosition.value = RecyclerView.NO_POSITION
-            onPositionChanged(RecyclerView.NO_POSITION)
-        }
+        if (latestList.isEmpty()) return
+        submitListCustom(emptyList())
     }
 
     fun sortWith(comparator: Comparator<in T>) {
-        if (currentList.size < 2) return
-        submitListCustom(currentList.sortedWith(comparator))
+        if (latestList.size < 2) return
+        submitListCustom(latestList.sortedWith(comparator))
     }
 
     fun <R : Comparable<R>> sortBy(selector: (T) -> R?) {
@@ -247,7 +282,7 @@ abstract class DiffAdapter<T : Any, VB : ViewBinding>(
     }
 
     fun changeItemWithPos(index: Int, newItem: T) {
-        val current = currentList.toMutableList()
+        val current = latestList.toMutableList()
         if (index !in current.indices) return
         current[index] = newItem
         submitListCustom(current)
@@ -258,14 +293,14 @@ abstract class DiffAdapter<T : Any, VB : ViewBinding>(
     }
 
     fun updateItem(predicate: (T) -> Boolean, transform: (T) -> T) {
-        val index = currentList.indexOfFirst(predicate)
+        val index = latestList.indexOfFirst(predicate)
         if (index == -1) return
-        changeItemWithPos(index, transform(currentList[index]))
+        changeItemWithPos(index, transform(latestList[index]))
     }
 
     fun replaceAll(transform: (T) -> T) {
-        if (currentList.isEmpty()) return
-        submitListCustom(currentList.map(transform))
+        if (latestList.isEmpty()) return
+        submitListCustom(latestList.map(transform))
     }
 
     fun setCurrentPos(position: Int) {
@@ -285,13 +320,4 @@ abstract class DiffAdapter<T : Any, VB : ViewBinding>(
     }
 
     fun getCurrentPos(): Int = currentPosition.value ?: RecyclerView.NO_POSITION
-
-    private fun normalizeCurrentPosition() {
-        val current = getCurrentPos()
-        if (current == RecyclerView.NO_POSITION) return
-        if (current !in currentList.indices) {
-            currentPosition.value = RecyclerView.NO_POSITION
-            onPositionChanged(RecyclerView.NO_POSITION)
-        }
-    }
 }

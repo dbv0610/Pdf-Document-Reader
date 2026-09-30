@@ -1,5 +1,6 @@
 package com.ui.baselib.base
 
+import android.content.DialogInterface
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Looper
@@ -12,6 +13,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentActivity
 import androidx.viewbinding.ViewBinding
 import com.google.android.material.R
@@ -36,16 +38,24 @@ abstract class BaseBottomSheet<V : ViewBinding>(
 
     var onDismissListener: () -> Unit = {}
 
+    // Dialog keeps a single dismiss listener; the internal reset must not be replaced by callers.
+    private var externalDismissListener: DialogInterface.OnDismissListener? = null
+
     abstract fun V.onBind()
 
     init {
         setOnShowListener { trySetupBottomSheet() }
 
-        setOnDismissListener {
+        super.setOnDismissListener { dialog ->
             showingGuard.set(false)
             _binding = null
             onDismissListener()
+            externalDismissListener?.onDismiss(dialog)
         }
+    }
+
+    override fun setOnDismissListener(listener: DialogInterface.OnDismissListener?) {
+        externalDismissListener = listener
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,12 +124,13 @@ abstract class BaseBottomSheet<V : ViewBinding>(
             val view = parent
             view.fitsSystemWindows = false
             view.setPadding(0, 0, 0, 0)
-            ViewCompat.setOnApplyWindowInsetsListener(view) { _, _ ->
-                WindowInsetsCompat.CONSUMED
-            }
+            // Don't pad for system bars, but pass insets down so the sheet still sees the IME.
+            ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets -> insets }
             parent = view.parent
         }
-        ViewCompat.setOnApplyWindowInsetsListener(sheet) { _, _ ->
+        ViewCompat.setOnApplyWindowInsetsListener(sheet) { v, insets ->
+            // Lift the content above the keyboard so a focused field isn't hidden behind it.
+            v.updatePadding(bottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
             WindowInsetsCompat.CONSUMED
         }
         BottomSheetBehavior.from(sheet).apply {

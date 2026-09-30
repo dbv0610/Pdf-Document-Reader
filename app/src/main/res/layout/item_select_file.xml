@@ -22,8 +22,8 @@
         android:layout_height="@dimen/_40sdp"
         android:padding="@dimen/_3sdp"
         android:src="@drawable/ic_app_pdf"
-        app:bgColor="#F5F5F5"
-        app:cornerRadius="@dimen/_8sdp" />
+        app:uiBackgroundColor="#F5F5F5"
+        app:uiCornerRadius="@dimen/_8sdp" />
 
     <LinearLayout
         android:layout_width="0dp"

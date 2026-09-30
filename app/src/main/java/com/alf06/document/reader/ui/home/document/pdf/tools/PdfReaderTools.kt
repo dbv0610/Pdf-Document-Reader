@@ -23,7 +23,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.alf06.document.reader.R
-import com.alf06.document.reader.ui.home.document.office.edit.DialogKit
+import com.wxiwei.office.editor.ui.DialogKit
 import com.alf06.document.reader.ui.home.document.savePictureToGallery
 import com.reader.pdfviewer.PDFView
 import com.reader.pdfviewer.model.PdfAnnotationInfo

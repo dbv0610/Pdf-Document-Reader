@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.util.AttributeSet
 import android.widget.LinearLayout
-import androidx.core.graphics.withClip
 import com.ui.baselib.R
 
 @Suppress("DEPRECATION")
@@ -21,50 +20,45 @@ open class UiLinearLayout @JvmOverloads constructor(
         context.obtainStyledAttributes(attrs, R.styleable.UiLinearLayout).apply {
             try {
                 helper.readCornerAttrs(this,
-                    R.styleable.UiLinearLayout_cornerRadius,
-                    R.styleable.UiLinearLayout_cornerTopLeft,
-                    R.styleable.UiLinearLayout_cornerTopRight,
-                    R.styleable.UiLinearLayout_cornerBottomLeft,
-                    R.styleable.UiLinearLayout_cornerBottomRight
+                    R.styleable.UiLinearLayout_uiCornerRadius,
+                    R.styleable.UiLinearLayout_uiCornerTopLeft,
+                    R.styleable.UiLinearLayout_uiCornerTopRight,
+                    R.styleable.UiLinearLayout_uiCornerBottomLeft,
+                    R.styleable.UiLinearLayout_uiCornerBottomRight
                 )
                 helper.readBackgroundAttrs(this,
-                    R.styleable.UiLinearLayout_bgIsGradient,
-                    R.styleable.UiLinearLayout_bgGradientStart,
-                    R.styleable.UiLinearLayout_bgGradientCenter,
-                    R.styleable.UiLinearLayout_bgGradientEnd,
-                    R.styleable.UiLinearLayout_bgColor,
-                    R.styleable.UiLinearLayout_bgGdOrientation,
-                    R.styleable.UiLinearLayout_bgGradientType,
-                    R.styleable.UiLinearLayout_bgGradientCenterX,
-                    R.styleable.UiLinearLayout_bgGradientCenterY,
-                    R.styleable.UiLinearLayout_bgGradientRadius,
-                    R.styleable.UiLinearLayout_bgGradientColors,
-                    R.styleable.UiLinearLayout_bgColors
+                    R.styleable.UiLinearLayout_uiBackgroundGradientEnabled,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientStart,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientCenter,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientEnd,
+                    R.styleable.UiLinearLayout_uiBackgroundColor,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientOrientation,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientType,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientCenterX,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientCenterY,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientRadius,
+                    R.styleable.UiLinearLayout_uiBackgroundGradientColors
                 )
                 helper.readStrokeAttrs(this,
-                    R.styleable.UiLinearLayout_strokeWidth,
-                    R.styleable.UiLinearLayout_stColor,
-                    R.styleable.UiLinearLayout_strokeDistance,
-                    R.styleable.UiLinearLayout_distanceSpace,
-                    R.styleable.UiLinearLayout_strokeGradient,
-                    R.styleable.UiLinearLayout_strokeGdOrientation,
-                    R.styleable.UiLinearLayout_strokeOption,
-                    R.styleable.UiLinearLayout_strokeCap,
-                    R.styleable.UiLinearLayout_stColors,
-                    R.styleable.UiLinearLayout_strokeWidths,
-                    R.styleable.UiLinearLayout_strokeGradientStart,
-                    R.styleable.UiLinearLayout_strokeGradientCenter,
-                    R.styleable.UiLinearLayout_strokeGradientEnd
+                    R.styleable.UiLinearLayout_uiStrokeWidth,
+                    R.styleable.UiLinearLayout_uiStrokeColor,
+                    R.styleable.UiLinearLayout_uiStrokeDashed,
+                    R.styleable.UiLinearLayout_uiStrokeDashGap,
+                    R.styleable.UiLinearLayout_uiStrokeGradientColors,
+                    R.styleable.UiLinearLayout_uiStrokeGradientOrientation,
+                    R.styleable.UiLinearLayout_uiStrokeSides,
+                    R.styleable.UiLinearLayout_uiStrokeCap,
+                    R.styleable.UiLinearLayout_uiStrokeWidths,
+                    R.styleable.UiLinearLayout_uiStrokeGradientStart,
+                    R.styleable.UiLinearLayout_uiStrokeGradientCenter,
+                    R.styleable.UiLinearLayout_uiStrokeGradientEnd
                 )
                 helper.readShadowAttrs(this,
-                    R.styleable.UiLinearLayout_shadowColor,
-                    R.styleable.UiLinearLayout_shadowRadius,
-                    R.styleable.UiLinearLayout_shadowDx,
-                    R.styleable.UiLinearLayout_shadowDy,
-                    R.styleable.UiLinearLayout_shadowElevation
+                    R.styleable.UiLinearLayout_uiShadowColor,
+                    R.styleable.UiLinearLayout_uiShadowElevation
                 )
                 helper.readDimensionAttrs(this,
-                    R.styleable.UiLinearLayout_uiDimenRatio,
+                    R.styleable.UiLinearLayout_uiDimensionRatio,
                     R.styleable.UiLinearLayout_uiWidthPercent,
                     R.styleable.UiLinearLayout_uiHeightPercent,
                     R.styleable.UiLinearLayout_uiMaxWidthPercent,
@@ -94,10 +88,10 @@ open class UiLinearLayout @JvmOverloads constructor(
         val h = height.toFloat()
 
         helper.drawBackground(canvas, w, h)
-        canvas.withClip(helper.getClipPath()) {
-            onDrawUnderChildren(this)
+        helper.drawClipped(canvas) {
+            onDrawUnderChildren(canvas)
             super.dispatchDraw(canvas)
-            onDrawOverChildren(this)
+            onDrawOverChildren(canvas)
         }
         helper.drawStroke(canvas, w, h)
     }

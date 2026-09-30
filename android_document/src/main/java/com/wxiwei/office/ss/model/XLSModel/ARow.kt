@@ -98,16 +98,10 @@ open class ARow
      * @param cellRec low level cell to create the high level representation from
      * @return ACell representing the low level record passed in
      */
-    @Suppress("UNCHECKED_CAST")
     fun createCellFromRecord(cellRec: CellValueRecordInterface): ACell? {
-        // NOTE: the original Java looked the cell up with a boxed Short key
-        // (cells.get(cellRec.getColumn())) in a Hashtable<Integer, Cell>, which never matches;
-        // the lookup is kept identical here to preserve behavior.
-        val cell = (cells as Map<Any?, Cell?>)[cellRec.column]
-        if (cell != null) {
-            return cell as ACell
-        }
-
+        // NOTE: the original Java first looked the cell up with a boxed Short key
+        // (cells.get(cellRec.getColumn())) in a Hashtable<Integer, Cell>, which never matched:
+        // no lookup here, a record always makes its cell (cells is a CellMap, not a Map, now).
         if (isValidateCell(cellRec)) {
             val acell = ACell(sheet, cellRec)
             val colIx = cellRec.column.toInt()

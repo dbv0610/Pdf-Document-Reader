@@ -46,14 +46,15 @@ dependencies {
     implementation("com.google.android.material:material:1.14.0")
     implementation("androidx.activity:activity:1.13.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
+    // Used directly (adapters, EXIF rotation); declared instead of relying on transitive deps.
+    implementation("androidx.recyclerview:recyclerview:1.2.1")
+    implementation("androidx.exifinterface:exifinterface:1.3.6")
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
-    implementation("org.jsoup:jsoup:1.21.2")
     implementation("androidx.navigation:navigation-fragment-ktx:2.9.6")
     implementation("androidx.navigation:navigation-ui-ktx:2.9.6")
     implementation("com.intuit.sdp:sdp-android:1.1.1")
     implementation("com.intuit.ssp:ssp-android:1.1.1")
-    implementation("org.jetbrains.kotlin:kotlin-reflect:2.1.20")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx-android:2.11.0")
 
     // Glide

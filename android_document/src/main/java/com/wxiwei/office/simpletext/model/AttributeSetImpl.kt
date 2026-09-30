@@ -82,6 +82,9 @@ class AttributeSetImpl : IAttributeSet {
         return getAttribute(attrID, true)
     }
 
+    /** The value set on this set itself, not taken from its style; Int.MIN_VALUE when none. */
+    fun getOwnAttribute(attrID: Short): Int = getAttribute(attrID, false)
+
     /**
      * 得到属性
      * @param attrID

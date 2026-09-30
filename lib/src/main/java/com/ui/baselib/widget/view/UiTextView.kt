@@ -1,20 +1,16 @@
 package com.ui.baselib.widget.view
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RectF
 import android.graphics.Shader
 import android.text.TextUtils
 import android.util.AttributeSet
 import android.widget.TextView
 import androidx.annotation.ColorInt
 import androidx.appcompat.widget.AppCompatTextView
-import androidx.core.graphics.withSave
 import com.ui.baselib.R
 import com.ui.baselib.widget.layout.IUiLayout
 import com.ui.baselib.widget.layout.UiLayoutHelper
@@ -112,7 +108,7 @@ class UiTextView @JvmOverloads constructor(
     private var textGradientOrientation: GradientOrientation = GradientOrientation.LEFT_TO_RIGHT
     private var needReapplyTextGradient = false
 
-    private val clipPath = Path()
+    private val topLinePaint = Paint()
 
     init {
         context.obtainStyledAttributes(attrs, R.styleable.UiTextView).apply {
@@ -120,54 +116,49 @@ class UiTextView @JvmOverloads constructor(
                 // Common layout attrs via helper
                 helper.readCornerAttrs(
                     this,
-                    R.styleable.UiTextView_cornerRadius,
-                    R.styleable.UiTextView_cornerTopLeft,
-                    R.styleable.UiTextView_cornerTopRight,
-                    R.styleable.UiTextView_cornerBottomLeft,
-                    R.styleable.UiTextView_cornerBottomRight
+                    R.styleable.UiTextView_uiCornerRadius,
+                    R.styleable.UiTextView_uiCornerTopLeft,
+                    R.styleable.UiTextView_uiCornerTopRight,
+                    R.styleable.UiTextView_uiCornerBottomLeft,
+                    R.styleable.UiTextView_uiCornerBottomRight
                 )
                 helper.readBackgroundAttrs(
                     this,
-                    R.styleable.UiTextView_bgIsGradient,
-                    R.styleable.UiTextView_bgGradientStart,
-                    R.styleable.UiTextView_bgGradientCenter,
-                    R.styleable.UiTextView_bgGradientEnd,
-                    R.styleable.UiTextView_bgColor,
-                    R.styleable.UiTextView_bgGdOrientation,
-                    R.styleable.UiTextView_bgGradientType,
-                    R.styleable.UiTextView_bgGradientCenterX,
-                    R.styleable.UiTextView_bgGradientCenterY,
-                    R.styleable.UiTextView_bgGradientRadius,
-                    R.styleable.UiTextView_bgGradientColors,
-                    R.styleable.UiTextView_bgColors
+                    R.styleable.UiTextView_uiBackgroundGradientEnabled,
+                    R.styleable.UiTextView_uiBackgroundGradientStart,
+                    R.styleable.UiTextView_uiBackgroundGradientCenter,
+                    R.styleable.UiTextView_uiBackgroundGradientEnd,
+                    R.styleable.UiTextView_uiBackgroundColor,
+                    R.styleable.UiTextView_uiBackgroundGradientOrientation,
+                    R.styleable.UiTextView_uiBackgroundGradientType,
+                    R.styleable.UiTextView_uiBackgroundGradientCenterX,
+                    R.styleable.UiTextView_uiBackgroundGradientCenterY,
+                    R.styleable.UiTextView_uiBackgroundGradientRadius,
+                    R.styleable.UiTextView_uiBackgroundGradientColors
                 )
                 helper.readStrokeAttrs(
                     this,
-                    R.styleable.UiTextView_strokeWidth,
-                    R.styleable.UiTextView_stColor,
-                    R.styleable.UiTextView_strokeDashed,
-                    R.styleable.UiTextView_distanceSpace,
-                    R.styleable.UiTextView_strokeGradient,
-                    R.styleable.UiTextView_strokeGdOrientation,
-                    R.styleable.UiTextView_strokeOption,
+                    R.styleable.UiTextView_uiStrokeWidth,
+                    R.styleable.UiTextView_uiStrokeColor,
+                    R.styleable.UiTextView_uiStrokeDashed,
+                    R.styleable.UiTextView_uiStrokeDashGap,
+                    R.styleable.UiTextView_uiStrokeGradientColors,
+                    R.styleable.UiTextView_uiStrokeGradientOrientation,
+                    R.styleable.UiTextView_uiStrokeSides,
                     -1,
-                    R.styleable.UiTextView_stColors,
-                    R.styleable.UiTextView_strokeWidths,
-                    R.styleable.UiTextView_strokeGradientStart,
-                    R.styleable.UiTextView_strokeGradientCenter,
-                    R.styleable.UiTextView_strokeGradientEnd
+                    R.styleable.UiTextView_uiStrokeWidths,
+                    R.styleable.UiTextView_uiStrokeGradientStart,
+                    R.styleable.UiTextView_uiStrokeGradientCenter,
+                    R.styleable.UiTextView_uiStrokeGradientEnd
                 )
                 helper.readShadowAttrs(
                     this,
-                    R.styleable.UiTextView_shadowColor,
-                    R.styleable.UiTextView_shadowRadius,
-                    R.styleable.UiTextView_shadowDx,
-                    R.styleable.UiTextView_shadowDy,
-                    R.styleable.UiTextView_shadowElevation
+                    R.styleable.UiTextView_uiShadowColor,
+                    R.styleable.UiTextView_uiShadowElevation
                 )
                 helper.readDimensionAttrs(
                     this,
-                    R.styleable.UiTextView_uiDimenRatio,
+                    R.styleable.UiTextView_uiDimensionRatio,
                     R.styleable.UiTextView_uiWidthPercent,
                     R.styleable.UiTextView_uiHeightPercent,
                     R.styleable.UiTextView_uiMaxWidthPercent,
@@ -177,21 +168,21 @@ class UiTextView @JvmOverloads constructor(
                 )
 
                 // Text-specific attrs
-                tColor = getColor(R.styleable.UiTextView_tvColor, currentTextColor)
-                tColorHint = getColor(R.styleable.UiTextView_tvColorHint, currentHintTextColor)
+                tColor = getColor(R.styleable.UiTextView_uiTextColor, currentTextColor)
+                tColorHint = getColor(R.styleable.UiTextView_uiTextColorHint, currentHintTextColor)
 
-                lineOption = LineOption.fromValue(getInt(R.styleable.UiTextView_lineOption, 0))
+                lineOption = LineOption.fromValue(getInt(R.styleable.UiTextView_uiTextDecoration, 0))
 
                 // Text gradient
-                textGradient = getBoolean(R.styleable.UiTextView_textGradient, false)
-                textGradientStart = getColor(R.styleable.UiTextView_textGradientStart, Color.TRANSPARENT)
-                textGradientCenter = getColor(R.styleable.UiTextView_textGradientCenter, Color.TRANSPARENT)
-                textGradientEnd = getColor(R.styleable.UiTextView_textGradientEnd, Color.TRANSPARENT)
-                textGradientOrientation = getInt(R.styleable.UiTextView_textGdOrientation, 6).toGradientOrientation()
+                textGradient = getBoolean(R.styleable.UiTextView_uiTextGradientEnabled, false)
+                textGradientStart = getColor(R.styleable.UiTextView_uiTextGradientStart, Color.TRANSPARENT)
+                textGradientCenter = getColor(R.styleable.UiTextView_uiTextGradientCenter, Color.TRANSPARENT)
+                textGradientEnd = getColor(R.styleable.UiTextView_uiTextGradientEnd, Color.TRANSPARENT)
+                textGradientOrientation = getInt(R.styleable.UiTextView_uiTextGradientOrientation, 6).toGradientOrientation()
 
-                drawableSize = getDimensionPixelSize(R.styleable.UiTextView_drawableSize, 0)
+                drawableSize = getDimensionPixelSize(R.styleable.UiTextView_uiDrawableSize, 0)
 
-                val wantSingleLine = getBoolean(R.styleable.UiTextView_tvSingleLine, false)
+                val wantSingleLine = getBoolean(R.styleable.UiTextView_uiSingleLine, false)
                 if (wantSingleLine) {
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -300,7 +291,6 @@ class UiTextView @JvmOverloads constructor(
         if (textGradient || needReapplyTextGradient) applyTextGradient()
     }
 
-    @SuppressLint("DrawAllocation")
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
@@ -309,10 +299,7 @@ class UiTextView @JvmOverloads constructor(
             return
         }
         helper.drawBackground(canvas, w, h)
-        clipPath.reset()
-        clipPath.addRoundRect(RectF(0f, 0f, w, h), helper.getCornerRadii(w, h), Path.Direction.CW)
-        canvas.withSave {
-            runCatching { canvas.clipPath(clipPath) }
+        helper.drawClipped(canvas) {
             super.onDraw(canvas)
         }
 
@@ -343,11 +330,10 @@ class UiTextView @JvmOverloads constructor(
         }
         val lineY = baseline + fontMetrics.top
 
-        val linePaint = Paint(paint).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = textSize / 12f // Similar thickness to underline
-        }
-        canvas.drawLine(startX, lineY, endX, lineY, linePaint)
+        topLinePaint.set(paint)
+        topLinePaint.style = Paint.Style.STROKE
+        topLinePaint.strokeWidth = textSize / 12f // Similar thickness to underline
+        canvas.drawLine(startX, lineY, endX, lineY, topLinePaint)
     }
 
     override fun dispatchDraw(canvas: Canvas) {

@@ -123,9 +123,9 @@
                 android:orientation="horizontal"
                 android:paddingHorizontal="@dimen/_12sdp"
                 android:paddingVertical="@dimen/_8sdp"
-                app:cornerRadius="@dimen/_8sdp"
-                app:stColor="@color/color_d0d0d0"
-                app:strokeWidth="@dimen/_1sdp">
+                app:uiCornerRadius="@dimen/_8sdp"
+                app:uiStrokeColor="@color/color_d0d0d0"
+                app:uiStrokeWidth="@dimen/_1sdp">
 
                 <ImageView
                     android:id="@+id/icSearchData"
@@ -199,7 +199,7 @@
             android:text="0/0"
             android:textColor="@color/white"
             android:textSize="@dimen/_10sdp"
-            app:bgColor="#80000000"
+            app:uiBackgroundColor="#80000000"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             tools:ignore="HardcodedText" />

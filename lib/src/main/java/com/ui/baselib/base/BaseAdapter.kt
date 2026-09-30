@@ -107,6 +107,8 @@ abstract class BaseAdapter<T, VB : ViewBinding> :
         val insertIndex = index.coerceIn(0, listItem.size)
         this.listItem.add(insertIndex, item)
         notifyItemInserted(insertIndex)
+        val current = getCurrentPos()
+        if (current != RecyclerView.NO_POSITION && insertIndex <= current) moveSelection(current + 1)
     }
 
     /** Add multiple items at end of list */
@@ -122,20 +124,20 @@ abstract class BaseAdapter<T, VB : ViewBinding> :
         if (position in 0 until listItem.size) {
             listItem.removeAt(position)
             notifyItemRemoved(position)
+            // bind() receives the position, so rows after the removed one must rebind.
             notifyItemRangeChanged(position, listItem.size - position)
-            normalizeCurrentPosition()
+            val current = getCurrentPos()
+            when {
+                current == position -> moveSelection(RecyclerView.NO_POSITION)
+                current > position -> moveSelection(current - 1)
+            }
         }
     }
 
     /** Remove specific item */
     fun removeItem(item: T) {
         val index = listItem.indexOf(item)
-        if (index != -1) {
-            listItem.removeAt(index)
-            notifyItemRemoved(index)
-            notifyItemRangeChanged(index, listItem.size - index)
-            normalizeCurrentPosition()
-        }
+        if (index != -1) removeItem(index)
     }
 
     /** Remove all items matching a predicate. */
@@ -182,6 +184,12 @@ abstract class BaseAdapter<T, VB : ViewBinding> :
             }
         }
         notifyItemMoved(fromPosition, toPosition)
+        val current = getCurrentPos()
+        when {
+            current == fromPosition -> moveSelection(toPosition)
+            fromPosition < toPosition && current in (fromPosition + 1)..toPosition -> moveSelection(current - 1)
+            fromPosition > toPosition && current in toPosition until fromPosition -> moveSelection(current + 1)
+        }
     }
 
     /** Sort items with a comparator and refresh once. */
@@ -229,6 +237,12 @@ abstract class BaseAdapter<T, VB : ViewBinding> :
 
     /** Get current selected position */
     fun getCurrentPos(): Int = currentPosition.value ?: RecyclerView.NO_POSITION
+
+    /** Follows the selected item to its new index without rebinding (the row itself didn't change). */
+    private fun moveSelection(position: Int) {
+        currentPosition.value = position
+        onPositionChanged(position)
+    }
 
     private fun normalizeCurrentPosition() {
         val current = getCurrentPos()

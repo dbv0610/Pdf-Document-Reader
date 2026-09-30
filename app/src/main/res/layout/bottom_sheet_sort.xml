@@ -6,17 +6,17 @@
     android:orientation="vertical"
     android:paddingHorizontal="@dimen/_16sdp"
     android:paddingBottom="@dimen/_16sdp"
-    app:bgColor="@color/white"
-    app:cornerTopLeft="@dimen/_18sdp"
-    app:cornerTopRight="@dimen/_18sdp">
+    app:uiBackgroundColor="@color/white"
+    app:uiCornerTopLeft="@dimen/_18sdp"
+    app:uiCornerTopRight="@dimen/_18sdp">
 
     <com.ui.baselib.widget.layout.UiView
         android:layout_width="@dimen/_32sdp"
         android:layout_height="@dimen/_4sdp"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="@dimen/_8sdp"
-        app:bgColor="#D1D5DB"
-        app:cornerRadius="@dimen/_4sdp" />
+        app:uiBackgroundColor="#D1D5DB"
+        app:uiCornerRadius="@dimen/_4sdp" />
 
     <TextView
         android:layout_width="match_parent"
@@ -65,5 +65,5 @@
         android:paddingVertical="@dimen/_12sdp"
         android:text="@string/file_action_save"
         android:textSize="@dimen/_13sdp"
-        app:bgGdOrientation="top_bottom" />
+        app:uiBackgroundGradientOrientation="top_bottom" />
 </com.ui.baselib.widget.layout.UiLinearLayout>

@@ -32,6 +32,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -513,28 +514,20 @@ class PdfTools(context: Context) {
         val plain = File(output.parentFile, "${output.name}.plain")
         val temp = File(output.parentFile, "${output.name}.tmp")
         try {
-            // pdfium writes the document without its old protection, PdfBox encrypts it
+            // pdfium writes the document without its old protection, PdfEncryptor encrypts it
             val doc = open(source)
             try {
                 if (!pdfium.saveWithoutSecurity(doc, plain.path)) throw IOException("Cannot write ${output.name}")
             } finally {
                 pdfium.closeDocument(doc)
             }
-            currentCoroutineContext().ensureActive()
-            com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(appContext)
-            com.tom_roush.pdfbox.pdmodel.PDDocument.load(plain).use { pd ->
-                val rights = com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission().apply {
-                    setCanPrint(allowPrint)
-                    setCanPrintFaithful(allowPrint)
-                    setCanExtractContent(allowCopy)
-                    setCanExtractForAccessibility(true)
-                }
-                val owner = ownerPassword ?: java.util.UUID.randomUUID().toString()
-                val policy = com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy(owner, userPassword, rights)
-                policy.encryptionKeyLength = 256
-                pd.protect(policy)
-                pd.save(temp)
-            }
+            val job = currentCoroutineContext().job
+            job.ensureActive()
+            var rights = PdfEncryptor.ALL
+            if (!allowPrint) rights = rights and (PdfEncryptor.PRINT or PdfEncryptor.PRINT_HIGH).inv()
+            if (!allowCopy) rights = rights and PdfEncryptor.COPY.inv()
+            val owner = ownerPassword ?: java.util.UUID.randomUUID().toString()
+            PdfEncryptor.encrypt(plain, temp, userPassword, owner, rights) { !job.isActive }
             if (!temp.renameTo(output)) throw IOException("Cannot move ${temp.name} to ${output.name}")
         } finally {
             plain.delete()

@@ -23,10 +23,10 @@ class NavItem @JvmOverloads constructor(
     init {
         context.obtainStyledAttributes(attrs, R.styleable.NavItem).apply {
             try {
-                destinationId = getResourceId(R.styleable.NavItem_destinationFragment, 0)
-                icon = getResourceId(R.styleable.NavItem_nav_icon, 0)
-                iconSelected = getResourceId(R.styleable.NavItem_nav_iconSelected, icon)
-                title = getString(R.styleable.NavItem_nav_title) ?: ""
+                destinationId = getResourceId(R.styleable.NavItem_uiNavDestination, 0)
+                icon = getResourceId(R.styleable.NavItem_uiNavIcon, 0)
+                iconSelected = getResourceId(R.styleable.NavItem_uiNavIconSelected, icon)
+                title = getString(R.styleable.NavItem_uiNavTitle) ?: ""
             } finally {
                 recycle()
             }

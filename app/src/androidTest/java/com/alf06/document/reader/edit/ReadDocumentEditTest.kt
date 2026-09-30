@@ -13,7 +13,7 @@ import com.alf06.document.reader.R
 import com.alf06.document.reader.model.DocumentType
 import com.alf06.document.reader.model.RecentDocument
 import com.alf06.document.reader.ui.home.document.office.ReadDocumentActivity
-import com.alf06.document.reader.ui.home.document.office.edit.EditDrafts
+import com.wxiwei.office.editor.ui.EditDrafts
 import com.wxiwei.office.reader.OfficeDocumentView
 import com.wxiwei.office.reader.ReaderState
 import com.wxiwei.office.ss.control.ExcelView
@@ -89,8 +89,8 @@ class ReadDocumentEditTest {
                 val cellName = find<TextView>(panel) { it is TextView && it.text.toString() == "B21" }
                 assertTrue("toolbar follows the selected cell", cellName != null)
                 find<EditText>(panel) { it is EditText }!!.setText("=SUM(1,2,3)")
-                find<TextView>(panel) { it is TextView && it.text.toString() == "✓" }!!.performClick()
-                find<TextView>(panel) { it is TextView && it.text.toString() == "B" }!!.performClick()
+                find<View>(panel) { it.tag == "APPLY_VALUE" }!!.performClick()
+                find<View>(panel) { it.tag == "BOLD" }!!.performClick()
             }
             screenshot("excel_toolbar")
             scenario.onActivity { a ->
@@ -98,7 +98,7 @@ class ReadDocumentEditTest {
                 val cell = excel.getSpreadsheet()!!.getWorkbook()!!.getSheet(0)!!.getRow(20)!!.getCell(1)!!
                 assertEquals(6.0, cell.getNumberValue(), 0.0)
                 val panel = a.findViewById<ViewGroup>(R.id.editPanel)
-                find<TextView>(panel) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
+                find<View>(panel) { it.tag == "SAVE" }!!.performClick()
             }
             screenshot("excel_saved")
         }
@@ -114,6 +114,112 @@ class ReadDocumentEditTest {
                 assertEquals("SUM(1,2,3)", cell.formula)
                 assertTrue("bold saved", book.getFont(cell.getCellStyle()!!.getFontIndex().toInt())!!.isBold())
             }
+        }
+    }
+
+    @Test
+    fun customIcons() {
+        val file = sample("sample.docx")
+        val before = com.editor.docsdk.EditStyle.customizer
+        com.editor.docsdk.EditStyle.customizer = com.editor.docsdk.EditStyle.Customizer { _, style ->
+            style.copy(icons = com.editor.docsdk.EditStyle.Icons { action ->
+                if (action == com.editor.docsdk.EditAction.BOLD) com.editor.docsdk.EditAction.ITALIC.icon else null
+            })
+        }
+        try {
+            launch(file, DocumentType.Doc).use { scenario ->
+                lateinit var viewer: OfficeDocumentView
+                scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+                waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+                Thread.sleep(2000)
+                scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+                Thread.sleep(500)
+                scenario.onActivity { a ->
+                    val panel = a.findViewById<ViewGroup>(R.id.editPanel)
+                    fun pixels(tag: String): Bitmap {
+                        val icon = find<android.widget.ImageView>(find<ViewGroup>(panel) { it.tag == tag }!!) { it is android.widget.ImageView }!!
+                        return Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888).also { icon.draw(android.graphics.Canvas(it)) }
+                    }
+                    assertTrue("BOLD shows the icon from EditStyle.icons", pixels("BOLD").sameAs(pixels("ITALIC")))
+                    assertTrue("other buttons keep the SDK's icon", !pixels("UNDERLINE").sameAs(pixels("ITALIC")))
+                }
+            }
+        } finally {
+            com.editor.docsdk.EditStyle.customizer = before
+        }
+    }
+
+    /** The shape of [drawable] (alpha only, so tints do not count) at 48x48. */
+    private fun shape(drawable: android.graphics.drawable.Drawable): IntArray {
+        val b = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
+        drawable.constantState!!.newDrawable().mutate().apply { setTintList(null); setBounds(0, 0, 48, 48); draw(android.graphics.Canvas(b)) }
+        return IntArray(48 * 48).also { b.getPixels(it, 0, 48, 0, 0, 48, 48) }.map { it ushr 24 }.toIntArray()
+    }
+
+    /** Same icon: at most a few pixels differ (anti-aliasing). */
+    private fun sameShape(drawable: android.graphics.drawable.Drawable, id: Int): Boolean {
+        val x = shape(drawable); val y = shape(context.getDrawable(id)!!)
+        return x.indices.count { Math.abs(x[it] - y[it]) > 64 } < 10
+    }
+
+    @Test
+    fun excelCheckAndInputsFollowStyle() {
+        val file = sample("sample.xlsx")
+        val italic = com.editor.docsdk.EditAction.ITALIC.icon
+        val editBefore = com.editor.docsdk.EditStyle.customizer
+        val dialogBefore = com.editor.docsdk.DialogStyle.customizer
+        com.editor.docsdk.EditStyle.customizer = com.editor.docsdk.EditStyle.Customizer { _, style ->
+            style.copy(
+                icons = com.editor.docsdk.EditStyle.Icons { if (it == com.editor.docsdk.EditAction.CELL_VALUE) italic else null },
+                inputHint = 0xFF00AA00.toInt(),
+                inputStyler = com.editor.docsdk.InputStyler { it.setBackgroundColor(0xFFFFEE00.toInt()) },
+            )
+        }
+        com.editor.docsdk.DialogStyle.customizer = com.editor.docsdk.DialogStyle.Customizer { _, style ->
+            style.copy(inputStyler = com.editor.docsdk.InputStyler { it.setBackgroundColor(0xFF00EEFF.toInt()) })
+        }
+        try {
+            launch(file, DocumentType.Excel).use { scenario ->
+                lateinit var viewer: OfficeDocumentView
+                scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+                waitFor { viewer.state.value.status == ReaderState.Status.Ready }
+                Thread.sleep(2000)
+                scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+                Thread.sleep(500)
+                scenario.onActivity { a ->
+                    val panel = a.findViewById<ViewGroup>(R.id.editPanel)
+                    val check = find<android.widget.ImageView>(panel) { it.tag == "APPLY_VALUE" }!!
+                    assertTrue("the check shows the CELL_VALUE icon", sameShape(check.drawable, italic))
+                    val formula = find<EditText>(panel) { it is EditText }!!
+                    assertEquals(0xFF00AA00.toInt(), formula.currentHintTextColor)
+                    assertEquals(0xFFFFEE00.toInt(), (formula.background as android.graphics.drawable.ColorDrawable).color)
+                    lateinit var field: EditText
+                    val dialog = com.wxiwei.office.editor.ui.DialogKit(a).show("t") { field = input("hint") }
+                    assertEquals(0xFF00EEFF.toInt(), (field.background as android.graphics.drawable.ColorDrawable).color)
+                    dialog.dismiss()
+                }
+            }
+        } finally {
+            com.editor.docsdk.EditStyle.customizer = editBefore
+            com.editor.docsdk.DialogStyle.customizer = dialogBefore
+        }
+    }
+
+    @Test
+    fun viewerBackIcon() {
+        val file = sample("sample.docx")
+        val italic = com.editor.docsdk.EditAction.ITALIC.icon
+        val before = com.editor.docsdk.EditStyle.customizer
+        com.editor.docsdk.EditStyle.customizer = com.editor.docsdk.EditStyle.Customizer { _, style -> style.copy(backIcon = italic) }
+        try {
+            ActivityScenario.launch<android.app.Activity>(com.editor.docsdk.DocumentViewer.intent(context, android.net.Uri.fromFile(file))).use { scenario ->
+                scenario.onActivity { a ->
+                    val back = find<android.widget.ImageButton>(a.window.decorView) { it.contentDescription == a.getString(com.wxiwei.office.R.string.docsdk_back) }!!
+                    assertTrue("back shows backIcon", sameShape(back.drawable, italic))
+                }
+            }
+        } finally {
+            com.editor.docsdk.EditStyle.customizer = before
         }
     }
 
@@ -140,7 +246,7 @@ class ReadDocumentEditTest {
             }
             scenario.onActivity { a ->
                 val panel = a.findViewById<ViewGroup>(R.id.editPanel)
-                find<TextView>(panel) { it is TextView && it.text.toString() == "I" }!!.performClick()
+                find<View>(panel) { it.tag == "ITALIC" }!!.performClick()
             }
             Thread.sleep(1500)
             scenario.onActivity {
@@ -202,12 +308,12 @@ class ReadDocumentEditTest {
             // rotate a quarter turn with the toolbar
             scenario.onActivity { a ->
                 val panel = a.findViewById<ViewGroup>(R.id.editPanel)
-                find<TextView>(panel) { it is TextView && it.text.toString() == "⟳ 90°" }!!.performClick()
+                find<View>(panel) { it.tag == "ROTATE" }!!.performClick()
             }
             screenshot("slide_rotated")
             scenario.onActivity { a ->
                 val panel = a.findViewById<ViewGroup>(R.id.editPanel)
-                find<TextView>(panel) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
+                find<View>(panel) { it.tag == "SAVE" }!!.performClick()
             }
             Thread.sleep(1500)
         }
@@ -249,7 +355,7 @@ class ReadDocumentEditTest {
             // type like a Telex keyboard: committed text, then a composing syllable that changes
             instrumentation.runOnMainSync {
                 lateinit var typing: EditText
-                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.officeViewer)) { it is EditText && it.alpha == 0f }!! }
                 assertTrue("typing field focused", typing.hasFocus())
                 val ic = typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!
                 ic.commitText("Xin ", 1)
@@ -271,7 +377,7 @@ class ReadDocumentEditTest {
                 assertTrue(text, text.startsWith("Xin chào!CHƠI CÙNG"))
             }
             scenario.onActivity { a ->
-                find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
+                find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick()
             }
             Thread.sleep(2000)
         }
@@ -405,7 +511,7 @@ class ReadDocumentEditTest {
             Thread.sleep(1200)
             instrumentation.runOnMainSync {
                 lateinit var typing: EditText
-                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.officeViewer)) { it is EditText && it.alpha == 0f }!! }
                 assertTrue("typing field focused", typing.hasFocus())
                 typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("Học ", 1)
             }
@@ -417,7 +523,7 @@ class ReadDocumentEditTest {
                 assertTrue(text, text == "Học Chơi cùng")
             }
             scenario.onActivity { a ->
-                find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick()
+                find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick()
             }
             Thread.sleep(2000)
         }
@@ -437,7 +543,7 @@ class ReadDocumentEditTest {
             }
             com.wxiwei.office.editor.word.WordSelection(word).setSelection(start, start + "PianoLearn".length)
         }
-        scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "B" }!!.performClick() }
+        scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "BOLD" }!!.performClick() }
         Thread.sleep(800)
         return start
     }
@@ -499,7 +605,7 @@ class ReadDocumentEditTest {
                     sel.setSelection(s, s + 5); s
                 }
             }
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "I" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "ITALIC" }!!.performClick() }
             Thread.sleep(500)
             scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
             Thread.sleep(800)
@@ -555,7 +661,7 @@ class ReadDocumentEditTest {
             scenario.onActivity { viewer.getLocationOnScreen(p); size = intArrayOf(viewer.width, viewer.height) }
             tap(p[0] + size[0] * 0.15f, p[1] + size[1] * 0.5f)
             scenario.onActivity { assertTrue("editor closed", find<EditText>(viewer) { it is EditText } == null) }
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(1500)
         }
         assertEquals("SỬA TẠI CHỖ", com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0).first { it.id == expected.id }.text)
@@ -616,12 +722,12 @@ class ReadDocumentEditTest {
             instrumentation.runOnMainSync {
                 scenario.onActivity { a ->
                     lateinit var typing: EditText
-                    typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!!
+                    typing = find(a.findViewById<ViewGroup>(R.id.officeViewer)) { it is EditText && it.alpha == 0f }!!
                     typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("X", 1)
                 }
             }
             Thread.sleep(800)
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(4000)
             tapOn("PianoLearn — Tính năng")
             screenshot("caret_after_save")
@@ -665,13 +771,13 @@ class ReadDocumentEditTest {
                 // the selection menu the user gets on a long-press, with its "Đậm" item
                 val callback = edit.customSelectionActionModeCallback!!
                 val mode = edit.startActionMode(callback)!!
-                val bold = (0 until mode.menu.size()).map { mode.menu.getItem(it) }.first { it.title == "Đậm" }
+                val bold = (0 until mode.menu.size()).map { mode.menu.getItem(it) }.first { it.title == edit.context.getString(com.wxiwei.office.R.string.docsdk_edit_bold) }
                 assertTrue(callback.onActionItemClicked(mode, bold))
             }
             Thread.sleep(1500)
             scenario.onActivity { assertTrue("editor closed to show the slide", find<EditText>(viewer) { it is EditText } == null) }
             screenshot("slide_format_selection")
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(1500)
         }
         val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide1.xml")).readBytes().toString(Charsets.UTF_8) }
@@ -705,14 +811,14 @@ class ReadDocumentEditTest {
             inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
             inject(android.view.MotionEvent.ACTION_UP, point[0], point[1], t)
             Thread.sleep(1200)
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "• Đầu dòng" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "BULLETS" }!!.performClick() }
             Thread.sleep(1000)
             screenshot("word_bullet")
             scenario.onActivity {
                 val doc = (viewer.control!!.getView() as com.wxiwei.office.wp.control.Word).getDocument()
                 assertTrue("bullet on", com.wxiwei.office.simpletext.model.AttrManage.instance().getParaListID(doc.getParagraph(start)!!.getAttribute()) >= 0)
             }
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(2000)
         }
         val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
@@ -743,7 +849,7 @@ class ReadDocumentEditTest {
             Thread.sleep(1200)
             instrumentation.runOnMainSync {
                 lateinit var typing: EditText
-                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.officeViewer)) { it is EditText && it.alpha == 0f }!! }
                 val ic = typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!
                 ic.commitText("Tài liệu mới", 1)
                 ic.commitText("\n", 1)
@@ -751,7 +857,7 @@ class ReadDocumentEditTest {
             }
             Thread.sleep(800)
             screenshot("new_word_typed")
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(2000)
         }
         val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
@@ -793,7 +899,7 @@ class ReadDocumentEditTest {
             screenshot("empty_after_tap2")
             instrumentation.runOnMainSync {
                 lateinit var typing: EditText
-                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.officeViewer)) { it is EditText && it.alpha == 0f }!! }
                 var focus = ""
                 scenario.onActivity { a -> focus = a.currentFocus?.toString() ?: "none" }
                 assertTrue("keyboard target focused after tapping again; focus=$focus", typing.hasFocus())
@@ -820,9 +926,11 @@ class ReadDocumentEditTest {
             Thread.sleep(500)
             // the middle of the empty page
             var point = floatArrayOf(0f, 0f)
+            var scrollAtTap = 0
             scenario.onActivity {
                 val o = IntArray(2); viewer.getLocationOnScreen(o)
                 point = floatArrayOf(o[0] + viewer.width / 2f, o[1] + viewer.height * 0.45f)
+                scrollAtTap = viewer.control!!.getView()!!.scrollY
             }
             val t = android.os.SystemClock.uptimeMillis()
             inject(android.view.MotionEvent.ACTION_DOWN, point[0], point[1], t)
@@ -830,7 +938,7 @@ class ReadDocumentEditTest {
             Thread.sleep(1500)
             instrumentation.runOnMainSync {
                 lateinit var typing: EditText
-                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.editPanel)) { it is EditText && it.alpha == 0f }!! }
+                scenario.onActivity { a -> typing = find(a.findViewById<ViewGroup>(R.id.officeViewer)) { it is EditText && it.alpha == 0f }!! }
                 typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText("Giữa trang", 1)
             }
             Thread.sleep(800)
@@ -846,7 +954,8 @@ class ReadDocumentEditTest {
                     com.wxiwei.office.simpletext.model.AttrManage.instance().getParaHorizontalAlign(doc.getParagraph(at)!!.getAttribute()))
                 val r = com.wxiwei.office.editor.word.WordSelection(word).caretRect(at)!!
                 val o = IntArray(2); word.getLocationOnScreen(o)
-                typedY = o[1] + r.centerY()
+                // the page scrolls up when the keyboard and edit bar cover the caret
+                typedY = o[1] + r.centerY() + (word.scrollY - scrollAtTap)
             }
             assertTrue("text where tapped: $typedY vs ${point[1]}", Math.abs(typedY - point[1]) < viewerLine(scenario))
         }

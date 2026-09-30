@@ -1054,6 +1054,30 @@ class LiveDocxSessionTest {
         }
     }
 
+    /** Deleting the row (column) that moved into the place of one just deleted, from its first char: both are saved. */
+    @Test
+    fun deleteTableRowAndColumnTwiceInPlace() {
+        val source = OpenDocument.copySample("sample.docx", "docx_table_delete2_source.docx")
+        val saved = OpenDocument.output("docx_table_delete2_saved.docx")
+        OpenDocument.open(source, { it.layout != null }) { reader ->
+            val session = onMain { LiveDocxSession(reader.control!!, source) }
+            val place = onMain { session.cellAt(offsetOf(source.absolutePath, "WATCH"))!! }
+            repeat(2) {
+                assertTrue(session.lastError?.toString(), onMain { session.deleteTableRow(session.cellStart(place.table, place.row, 0)) })
+                assertTrue(session.lastError?.toString(), onMain { session.deleteTableColumn(session.cellStart(place.table, 0, 0)) })
+            }
+            val result = onMain { session.save(saved) }
+            assertTrue(result.toString(), result is EditResult.Ok)
+        }
+        OpenDocument.open(saved, { it.layout != null }) { reader ->
+            val shape = onMain {
+                val t = ((reader.control!!.getView() as Word).getDocument() as com.wxiwei.office.wp.model.WPDocument).getTableCollection(0)!!.getElementForIndex(1) as com.wxiwei.office.wp.model.TableElement
+                (0 until t.rowCount()).map { (t.getElementForIndex(it) as com.wxiwei.office.wp.model.RowElement).getCellNumber() }
+            }
+            assertEquals(listOf(1, 1), shape)
+        }
+    }
+
     /** D10: a word shaded 92D050 (written as w:shd, not a named highlight) keeps its color when read back. */
     @Test
     fun shadingReadBack() {

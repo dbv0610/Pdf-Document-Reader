@@ -6,13 +6,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:paddingBottom="@dimen/_6sdp"
-    app:strokeWidth="@dimen/_1sdp"
-    app:shadowRadius="@dimen/_4sdp"
-    app:shadowElevation="@dimen/_4sdp"
-    app:bgColor="@color/white"
-    app:uiDimenRatio="1:1"
-    app:cornerRadius="@dimen/_16sdp"
-    app:shadowColor="#80000000">
+    app:uiStrokeWidth="@dimen/_1sdp"
+   
+    app:uiShadowElevation="@dimen/_4sdp"
+    app:uiBackgroundColor="@color/white"
+    app:uiDimensionRatio="1:1"
+    app:uiCornerRadius="@dimen/_16sdp"
+    app:uiShadowColor="#80000000">
 
     <com.ui.baselib.widget.view.UiImageView
         android:id="@+id/imgContent"
@@ -26,7 +26,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintWidth_percent="0.4"
-        app:uiDimenRatio="1" />
+        app:uiDimensionRatio="1" />
 
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tvTitle"

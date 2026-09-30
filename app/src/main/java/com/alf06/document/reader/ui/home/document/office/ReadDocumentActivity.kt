@@ -29,13 +29,13 @@ import com.alf06.document.reader.ui.dialog.FileOptionsBottomSheet
 import com.alf06.document.reader.ui.dialog.OpenFileErrorDialog
 import com.alf06.document.reader.ui.dialog.RenameFileDialog
 import com.alf06.document.reader.ui.home.document.layoutThumbnailStrip
-import com.alf06.document.reader.ui.home.document.office.edit.DialogKit
+import com.wxiwei.office.editor.ui.DialogKit
 import com.alf06.document.reader.ui.home.document.savePictureToGallery
-import com.alf06.document.reader.ui.home.document.office.edit.EditDrafts
-import com.alf06.document.reader.ui.home.document.office.edit.ExcelEditPanel
-import com.alf06.document.reader.ui.home.document.office.edit.OfficeEditPanel
-import com.alf06.document.reader.ui.home.document.office.edit.SlideEditPanel
-import com.alf06.document.reader.ui.home.document.office.edit.WordEditPanel
+import com.wxiwei.office.editor.ui.EditDrafts
+import com.wxiwei.office.editor.ui.ExcelEditPanel
+import com.wxiwei.office.editor.ui.OfficeEditPanel
+import com.wxiwei.office.editor.ui.SlideEditPanel
+import com.wxiwei.office.editor.ui.WordEditPanel
 import com.alf06.document.reader.viewmodel.DocumentViewModel
 import com.ui.baselib.api.parcelable
 import com.ui.baselib.base.BaseActivity
@@ -155,7 +155,6 @@ class ReadDocumentActivity :
         collectFlow(reader.state.map { it.pageNumber to it.pageCount }.distinctUntilChanged()) { (page, count) ->
             if (count == 0) return@collectFlow
             txtNumberPage.fixWidthFor(count)
-            txtNumberPage.text = "$page/$count"
             val index = (page - 1).coerceAtLeast(0)
             thumbnailAdapter.setCurrentPage(index)
             scrollThumbnailTo(index)
@@ -282,7 +281,7 @@ class ReadDocumentActivity :
         }
         editPanel = panel
         binding.editPanel.removeAllViews()
-        binding.editPanel.addView(panel.view)
+        binding.editPanel.addView(com.wxiwei.office.editor.ui.EditToolbar(panel).view)
         binding.editPanel.visible()
         binding.icEditApp.alpha = 0.5f
     }
@@ -424,7 +423,7 @@ class ReadDocumentActivity :
 
     /** Titles of the slides (edits in progress included), or null for a legacy .ppt. */
     private suspend fun slideScript(): List<com.wxiwei.office.editor.pptx.SlideScript> {
-        (editPanel as? com.alf06.document.reader.ui.home.document.office.edit.SlideEditPanel)?.let { return it.showScript() }
+        (editPanel as? com.wxiwei.office.editor.ui.SlideEditPanel)?.let { return it.showScript() }
         val document = document ?: return emptyList()
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val file = java.io.File(document.path)
@@ -459,7 +458,7 @@ class ReadDocumentActivity :
         val count = reader.state.value.pageCount
         val document = document ?: return
         if (count <= 0) return toast(R.string.can_slide_show_now)
-        val name = java.io.File(document.path).nameWithoutExtension
+        val name = File(document.path).nameWithoutExtension
         fun run(write: suspend ((Int) -> Unit) -> String) {
             lateinit var job: kotlinx.coroutines.Job
             var status: android.widget.TextView? = null
@@ -488,7 +487,7 @@ class ReadDocumentActivity :
                 run { step ->
                     val written = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         contentResolver.openOutputStream(uri, "wt")!!.use { out ->
-                            slides.onDrawingThread { com.alf06.document.reader.ui.home.document.office.edit.writeDeckPdf(presentation, count, out, step) } ?: 0
+                            slides.onDrawingThread { com.wxiwei.office.editor.ui.writeDeckPdf(presentation, count, out, step) } ?: 0
                         }
                     }
                     if (written == count) "Đã xuất $count slide ra PDF" else "Đã xuất PDF ($written/$count slide đã mở xong)"
@@ -499,7 +498,7 @@ class ReadDocumentActivity :
             var saved = 0
             for (i in 0 until count) {
                 val bytes = slides.onDrawingThread {
-                    java.io.ByteArrayOutputStream().also { out -> com.alf06.document.reader.ui.home.document.office.edit.writeSlide(presentation, i, false, out) }.toByteArray()
+                    java.io.ByteArrayOutputStream().also { out -> com.wxiwei.office.editor.ui.writeSlide(presentation, i, false, out) }.toByteArray()
                 } ?: continue
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { if (savePicture(name, "Slide ${i + 1}.png", bytes)) saved++ }
                 step(i + 1)
@@ -603,7 +602,7 @@ class ReadDocumentActivity :
         }
         val document = document ?: return
         val startAt = (reader.state.value.pageNumber - 1).coerceIn(0, count - 1)
-        val panel = editPanel as? com.alf06.document.reader.ui.home.document.office.edit.SlideEditPanel
+        val panel = editPanel as? com.wxiwei.office.editor.ui.SlideEditPanel
         lifecycleScope.launch {
             // animations, transitions, links and titles: from the edits in progress, or the file
             val script = slideScript()

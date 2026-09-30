@@ -112,7 +112,7 @@ class ObjView : LeafView {
         return if (picShape.isWatermarkShape) {
             picShape.bounds!!.width.toFloat()
         } else {
-            (if (isInlineFlag) (picShape as WPPictureShape).getPictureShape()!!.bounds!!.getWidth().toInt() else 0).toFloat()
+            (if (isInlineFlag) inlineBounds()?.width ?: 0 else 0).toFloat()
         }
     }
 
@@ -128,11 +128,12 @@ class ObjView : LeafView {
 
             rect.set(left, top, right, bottom)
 
-            if (!picShape.isWatermarkShape) {
-                BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), (picShape as WPPictureShape).getPictureShape()!!, rect, zoom)
+            val picture = (picShape as? WPPictureShape)?.getPictureShape()
+            if (!picShape.isWatermarkShape && picture != null) {
+                BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), picture, rect, zoom)
 
-                PictureKit.instance().drawPicture(canvas, control, getPageNumber(), picShape.getPictureShape()!!.getPicture(getControl()),
-                    left.toFloat(), top.toFloat(), zoom, getWidth() * zoom, getHeight() * zoom, picShape.getPictureShape()!!.pictureEffectInfor)
+                PictureKit.instance().drawPicture(canvas, control, getPageNumber(), picture.getPicture(getControl()),
+                    left.toFloat(), top.toFloat(), zoom, getWidth() * zoom, getHeight() * zoom, picture.pictureEffectInfor)
             }
         }
     }
@@ -169,16 +170,17 @@ class ObjView : LeafView {
                 Math.round(r.getHeight() * zoom).toFloat(),
                 (picShape as WatermarkShape).effectInfor)
         } else {
-            BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), (picShape as WPPictureShape).getPictureShape()!!, rect, zoom)
+            val picture = (picShape as? WPPictureShape)?.getPictureShape() ?: return
+            BackgroundDrawer.drawLineAndFill(canvas, control, getPageNumber(), picture, rect, zoom)
 
             PictureKit.instance().drawPicture(canvas, control, getPageNumber(),
-                (picShape as WPPictureShape).getPictureShape()!!.getPicture(getControl()),
+                picture.getPicture(getControl()),
                 left.toFloat(),
                 top.toFloat(),
                 zoom,
                 Math.round(r.getWidth() * zoom).toFloat(),
                 Math.round(r.getHeight() * zoom).toFloat(),
-                (picShape as WPPictureShape).getPictureShape()!!.pictureEffectInfor)
+                picture.pictureEffectInfor)
         }
     }
 
@@ -199,12 +201,15 @@ class ObjView : LeafView {
         return picShape!!.wrap.toInt() == com.wxiwei.office.common.shape.WPAbstractShape.WRAP_BOTTOM.toInt()
     }
 
+    /** Size of an in-line object: its picture's, else the shape's own (a shape read without its picture). */
+    private fun inlineBounds() = (picShape as? WPPictureShape)?.getPictureShape()?.bounds ?: picShape?.bounds
+
     /**
      * 得到基线
      */
     override fun getBaseline(): Int {
         if (!picShape!!.isWatermarkShape) {
-            return if (isInlineFlag) (picShape as WPPictureShape).getPictureShape()!!.bounds!!.getHeight().toInt() else 0
+            return if (isInlineFlag) inlineBounds()?.height ?: 0 else 0
         }
 
         return 0

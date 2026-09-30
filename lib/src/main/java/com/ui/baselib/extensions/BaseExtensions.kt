@@ -19,7 +19,9 @@ inline fun <reified T : Fragment> newInstanceWithArgs(vararg params: Pair<String
         for ((key, value) in params) {
             try {
                 putAnySafe(key, value)
-            } catch (_: Throwable) { }
+            } catch (e: Throwable) {
+                android.util.Log.e("BaseExtensions", "Skip argument \"$key\"", e)
+            }
         }
     }
     return fragment
@@ -53,7 +55,7 @@ fun AppCompatActivity.changeFragment(
     val existing = fm.findFragmentByTag(tag)
     val target = existing ?: fragment
     ensureCanUse(target, fm)
-    val current = fm.fragments.firstOrNull { it.isAdded && it.isVisible && it.view?.id == containerId }
+    val current = fm.fragments.firstOrNull { it.isAdded && it.isVisible && it.id == containerId }
     if (current === target) return
     runCatching { fm.executePendingTransactions() }
     val tx = fm.beginTransaction().apply {
@@ -66,8 +68,8 @@ fun AppCompatActivity.changeFragment(
         )
         current?.let { if (it.isAdded) hide(it) }
         if (target.isAdded) {
-            val targetViewId = target.view?.id
-            if (targetViewId != container.id) {
+            val targetContainerId = target.id
+            if (targetContainerId != container.id) {
                 remove(target)
                 add(container.id, target, tag)
             } else {
@@ -107,10 +109,10 @@ fun AppCompatActivity.addFragment(
             com.ui.baselib.R.anim.enter_from_left,
             com.ui.baselib.R.anim.exit_to_right
         )
-        fm.fragments.lastOrNull { it != target && it.isAdded && it.isVisible && it.view?.id == container.id }?.let { hide(it) }
+        fm.fragments.lastOrNull { it != target && it.isAdded && it.isVisible && it.id == container.id }?.let { hide(it) }
         if (target.isAdded) {
-            val targetViewId = target.view?.id
-            if (targetViewId != container.id) {
+            val targetContainerId = target.id
+            if (targetContainerId != container.id) {
                 remove(target)
                 add(container.id, target, tag)
             } else {
@@ -153,8 +155,8 @@ fun AppCompatActivity.replaceFragment(
             com.ui.baselib.R.anim.exit_to_right
         )
         if (target.isAdded) {
-            val targetViewId = target.view?.id
-            if (targetViewId != container.id) {
+            val targetContainerId = target.id
+            if (targetContainerId != container.id) {
                 remove(target)
                 add(container.id, target, tag)
             } else {
@@ -164,7 +166,7 @@ fun AppCompatActivity.replaceFragment(
             add(container.id, target, tag)
         }
         supportFragmentManager.fragments
-            .filter { it !== target && it.view?.id == container.id && it.isAdded }
+            .filter { it !== target && it.id == container.id && it.isAdded }
             .forEach { remove(it) }
         if (addToBackStack) addToBackStack(tag)
     }
@@ -219,8 +221,8 @@ fun Fragment.addFragment(
             com.ui.baselib.R.anim.exit_to_right
         )
         if (target.isAdded) {
-            val targetViewId = target.view?.id
-            if (targetViewId != container.id) {
+            val targetContainerId = target.id
+            if (targetContainerId != container.id) {
                 remove(target)
                 add(container.id, target, tag)
             } else {
@@ -262,8 +264,8 @@ fun Fragment.replaceFullViewFragment(
             com.ui.baselib.R.anim.exit_to_right
         )
         if (target.isAdded) {
-            val targetViewId = target.view?.id
-            if (targetViewId != container.id) {
+            val targetContainerId = target.id
+            if (targetContainerId != container.id) {
                 remove(target)
                 add(container.id, target, tag)
             } else {
@@ -272,7 +274,7 @@ fun Fragment.replaceFullViewFragment(
         } else {
             add(container.id, target, tag)
         }
-        manager.fragments.filter { it !== target && it.view?.id == container.id && it.isAdded }.forEach { remove(it) }
+        manager.fragments.filter { it !== target && it.id == container.id && it.isAdded }.forEach { remove(it) }
         if (addToBackStack) addToBackStack(tag)
     }
     if (manager.isStateSaved) tx.commitAllowingStateLoss() else runCatching { tx.commit() }.onFailure { tx.commitAllowingStateLoss() }
@@ -306,8 +308,8 @@ fun Fragment.replaceFragment(
             com.ui.baselib.R.anim.exit_to_right
         )
         if (target.isAdded) {
-            val targetViewId = target.view?.id
-            if (targetViewId != container.id) {
+            val targetContainerId = target.id
+            if (targetContainerId != container.id) {
                 remove(target)
                 add(container.id, target, tag)
             } else {
@@ -316,7 +318,7 @@ fun Fragment.replaceFragment(
         } else {
             add(container.id, target, tag)
         }
-        manager.fragments.filter { it !== target && it.view?.id == container.id && it.isAdded }.forEach { remove(it) }
+        manager.fragments.filter { it !== target && it.id == container.id && it.isAdded }.forEach { remove(it) }
         if (addToBackStack) addToBackStack(tag)
     }
     if (manager.isStateSaved) tx.commitAllowingStateLoss() else runCatching { tx.commit() }.onFailure { tx.commitAllowingStateLoss() }

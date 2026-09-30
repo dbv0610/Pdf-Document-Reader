@@ -59,39 +59,39 @@ class UiLinearProgressIndicator @JvmOverloads constructor(
             )
             try {
                 gradientStartColor = typedArray.getColor(
-                    R.styleable.UiLinearProgressIndicator_gradientStartColor,
+                    R.styleable.UiLinearProgressIndicator_uiProgressGradientStart,
                     gradientStartColor
                 )
                 gradientEndColor = typedArray.getColor(
-                    R.styleable.UiLinearProgressIndicator_gradientEndColor,
+                    R.styleable.UiLinearProgressIndicator_uiProgressGradientEnd,
                     gradientEndColor
                 )
                 trackColor = typedArray.getColor(
-                    R.styleable.UiLinearProgressIndicator_progressTrackColor,
+                    R.styleable.UiLinearProgressIndicator_uiProgressTrackColor,
                     trackColor
                 )
                 trackThickness = typedArray.getDimension(
-                    R.styleable.UiLinearProgressIndicator_progressTrackThickness,
+                    R.styleable.UiLinearProgressIndicator_uiProgressTrackThickness,
                     trackThickness
                 )
                 trackCornerRadius = typedArray.getDimension(
-                    R.styleable.UiLinearProgressIndicator_progressTrackCornerRadius,
+                    R.styleable.UiLinearProgressIndicator_uiProgressTrackCornerRadius,
                     trackCornerRadius
                 )
                 maxProgress = typedArray.getInt(
-                    R.styleable.UiLinearProgressIndicator_progressMax,
+                    R.styleable.UiLinearProgressIndicator_uiProgressMax,
                     maxProgress
                 )
                 progress = typedArray.getInt(
-                    R.styleable.UiLinearProgressIndicator_progressValue,
+                    R.styleable.UiLinearProgressIndicator_uiProgress,
                     progress
                 )
                 isIndeterminate = typedArray.getBoolean(
-                    R.styleable.UiLinearProgressIndicator_progressIndeterminate,
+                    R.styleable.UiLinearProgressIndicator_uiProgressIndeterminate,
                     isIndeterminate
                 )
                 animationDuration = typedArray.getInt(
-                    R.styleable.UiLinearProgressIndicator_progressAnimationDuration,
+                    R.styleable.UiLinearProgressIndicator_uiProgressAnimationDuration,
                     animationDuration.toInt()
                 ).toLong()
             }

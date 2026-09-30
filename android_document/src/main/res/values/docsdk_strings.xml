@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Texts of the SDK viewer screen (DocumentViewerActivity). Override any of them in your app. -->
+    <string name="docsdk_page_of">%1$d / %2$d</string>
+    <string name="docsdk_back">Back</string>
+    <string name="docsdk_open">Open</string>
+    <string name="docsdk_password_title">Password</string>
+    <string name="docsdk_password_hint">Password</string>
+    <string name="docsdk_password_required">This document is protected. Enter its password to open it.</string>
+    <string name="docsdk_password_incorrect">The password is incorrect. Try again.</string>
+    <string name="docsdk_error_unsupported">This type of document cannot be opened.</string>
+    <string name="docsdk_error_damaged">This document is damaged and cannot be opened.</string>
+    <string name="docsdk_error_not_found">This document cannot be found or read.</string>
+    <string name="docsdk_error_memory">There is not enough memory to open this document.</string>
+    <string name="docsdk_error_generic">This document could not be opened.</string>
+</resources>

@@ -134,12 +134,16 @@ class LiveDocxSession(control: IControl, private val source: File) {
     /** The story (body, headers, footers, one text box) of an offset: edits in one never move offsets of another. */
     private fun area(offset: Long) = offset and (WPModelConstant.AREA_MASK or WPModelConstant.TEXTBOX_MASK)
 
-    /** Current model offset -> original file offset (the start of typed text for positions inside it). */
-    private fun toOriginal(offset: Long): Long {
+    /**
+     * Current model offset -> original file offset (the start of typed text for positions inside it).
+     * A caret right where text was deleted stays before it; with [char], the offset names the char
+     * there, which was after the deleted text (a row, a cell moved into the place of one deleted).
+     */
+    private fun toOriginal(offset: Long, char: Boolean = false): Long {
         var x = offset
         for (e in edits.asReversed()) if (area(e.at) == area(offset)) when (e) {
             is Edit.Insert -> if (x >= e.at + e.length) x -= e.length else if (x > e.at) x = e.at
-            is Edit.Delete -> if (x > e.at) x += e.length
+            is Edit.Delete -> if (x > e.at || char && x == e.at) x += e.length
             is Edit.Move -> x = e.back(x)
         }
         return x
@@ -166,6 +170,19 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 val b = edit.back(s); e = b + (e - s); s = b
             }
         }
+        return false
+    }
+
+    /**
+     * [queued] (a file operation just queued) is dropped when save would fail on it: a table edit
+     * whose place the file cannot find would otherwise stay queued and fail every save after it.
+     */
+    private fun checked(queued: Boolean): Boolean {
+        if (!queued) return false
+        val result = editor.check(overrides(), cellFills())
+        if (result !is EditResult.Error) return true
+        editor.undoLast()
+        ownError = result
         return false
     }
 
@@ -280,7 +297,6 @@ class LiveDocxSession(control: IControl, private val source: File) {
 
     private fun setList(start: Long, end: Long, on: Boolean, bullet: Boolean): Boolean {
         needsFlush = false
-        if (touchesNewCells(start, end)) return refuseInNewCells()
         val id = if (bullet) editor.bulletListId else editor.numberingListId
         if (on && id < 0) return refuse("Cannot read the document's lists")
         if (on) ensureList(id, bullet)
@@ -299,7 +315,6 @@ class LiveDocxSession(control: IControl, private val source: File) {
     /** Moves the listed paragraphs touching [start, end) to list level [level] (0-8). */
     fun setListLevel(start: Long, end: Long, level: Int): Boolean {
         needsFlush = false
-        if (touchesNewCells(start, end)) return refuseInNewCells()
         if (!hasBullet(start)) return refuse("Not in a list")
         return paragraphFormat(start, end, { e, s, t -> e.setListLevel(s, t, level) }) {
             if (am.getParaListID(it) >= 0) am.setParaListLevel(it, level)
@@ -344,8 +359,6 @@ class LiveDocxSession(control: IControl, private val source: File) {
         synchronized(layoutLock) {
             ownError = null
             needsFlush = false
-            needsFlush = false
-        if (touchesNewCells(start, end)) return refuseInNewCells()
             val doc = word.getDocument()
             val targets = ArrayList<IElement>()
             var offset = start
@@ -356,10 +369,16 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 offset = para.getEndOffset()
             }
             if (targets.isEmpty()) return refuse("No paragraph here")
+            // paragraphs of new cells are written from the view on save: nothing to queue for them
+            val inNew = targets.map { touchesNewCells(it.getStartOffset()) }
+            if (inNew.any { it } && !inNew.all { it }) return refuseInNewCells()
+            val viewOnly = inNew.all { it }
             // the file needs original offsets: use the paragraphs' own starts, which typed text never moves
             val os = toOriginal(targets.first().getStartOffset())
             val oe = toOriginal(targets.last().getEndOffset() - 1)
-            if (!fileOp(editor, os, maxOf(oe, os))) return false
+            val file: () -> Boolean = if (viewOnly) { { true } } else { { fileOp(editor, os, maxOf(oe, os)) } }
+            val unfile: () -> Boolean = if (viewOnly) { { true } } else { { editor.undoLast() } }
+            if (!file()) return false
             val before = targets.map { it.getAttribute()!!.clone() }
             targets.forEach { apply(it.getAttribute()!!) }
             val after = targets.map { it.getAttribute()!!.clone() }
@@ -369,8 +388,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 word.relayoutContent(targets.first().getStartOffset())
             }
             undoStack.add(Step(
-                undo = { editor.undoLast().also { if (it) restore(before) } },
-                redo = { fileOp(editor, os, maxOf(oe, os)).also { if (it) restore(after) } },
+                undo = { unfile().also { if (it) restore(before) } },
+                redo = { file().also { if (it) restore(after) } },
             ))
             redoStack.clear()
             return true
@@ -480,6 +499,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
         synchronized(layoutLock) {
             ownError = null
             if (end <= start) return refuse("Empty range")
+            // like a picture of the file, one inserted live is not deleted as text
+            if (newPictures.keys.any { it.getStartOffset() in start until end }) return refuse("Pictures and fields cannot be deleted as text")
             // Backspace right after Enter at the same place: take the Enter back
             (undoStack.lastOrNull() as? SplitStep)?.let { if (it.at == start && end == start + 1) return undo() }
             editTyping(start, end, "")?.let { return it }
@@ -717,17 +738,55 @@ class LiveDocxSession(control: IControl, private val source: File) {
         return false
     }
 
+    /** A picture inserted live: the [op] that makes it in the file, at original [anchor]. */
+    private class NewPicture(var op: Any?, val anchor: Long)
+    private val newPictures = java.util.IdentityHashMap<IElement, NewPicture>()
+    private fun newPictureAt(offset: Long): NewPicture? =
+        word.getDocument().getLeaf(offset)?.takeIf { it.getStartOffset() == offset }?.let { newPictures[it] }
+
     /**
-     * A picture at [offset], [widthPx] x [heightPx] (96 dpi). It is written to the file; the view shows
-     * it after the file is read again ([needsReopen]).
+     * An in-line picture at [offset], [widthPx] x [heightPx] (96 dpi), shown at once; in typed text
+     * (which has no place in the file) or where the view cannot take it, after the file is read
+     * again ([needsReopen]). The image file is read on save: it must stay until then.
      */
     fun insertImage(offset: Long, image: File, widthPx: Int, heightPx: Int): Boolean = synchronized(layoutLock) {
         ownError = null
         needsFlush = false
         if (touchesNewCells(offset)) return refuseInNewCells()
-        if (!editor.insertImage(toOriginal(offset), image, widthPx, heightPx)) return false
-        needsReopen = true
-        undoStack.add(Step({ editor.undoLast() }, { editor.insertImage(toOriginal(offset), image, widthPx, heightPx) })); redoStack.clear()
+        val o = toOriginal(offset)
+        if (!checked(editor.insertImage(o, image, widthPx, heightPx))) return false
+        val doc = word.getDocument() as? WPDocument
+        // like a picture read from the file: a one-char object whose shape draws the image
+        val pictures = word.getControl().getSysKit().getPictureManage()
+        val picture = com.wxiwei.office.common.shape.PictureShape().apply {
+            pictureIndex = pictures.addPicture(com.wxiwei.office.common.picture.Picture().apply { tempFilePath = image.absolutePath; setPictureType(image.extension) })
+            setZoomX(1000.toShort()); setZoomY(1000.toShort())
+            bounds = com.wxiwei.office.java.awt.Rectangle(0, 0, widthPx, heightPx)
+        }
+        val shape = com.wxiwei.office.common.shape.WPPictureShape().apply {
+            setPictureShape(picture); bounds = picture.bounds; setWrap(com.wxiwei.office.common.shape.WPAbstractShape.WRAP_OLE)
+        }
+        val leaf = LeafElement("1")
+        am.setShapeID(leaf.getAttribute()!!, word.getControl().getSysKit().getWPShapeManage().addShape(shape))
+        // before a char in the file: text typed at that place is written before it too
+        if (doc == null || insertedAt(offset) || !doc.insertMainObject(offset, leaf)) {
+            needsReopen = true
+            undoStack.add(Step({ editor.undoLast() }, { editor.insertImage(o, image, widthPx, heightPx) })); redoStack.clear()
+            return true
+        }
+        val made = NewPicture(editor.lastOp(), o)
+        val edit = Edit.Insert(offset, 1)
+        edits.add(edit); newPictures[leaf] = made
+        word.relayoutContent(offset)
+        undoStack.add(Step(
+            undo = { editor.undoLast().also { if (it) {
+                doc.removeMainObject(leaf.getStartOffset()); edits.remove(edit); newPictures.remove(leaf); word.relayoutContent(offset)
+            } } },
+            redo = { editor.insertImage(o, image, widthPx, heightPx).also { if (it) {
+                made.op = editor.lastOp(); doc.insertMainObject(offset, leaf); edits.add(edit); newPictures[leaf] = made; word.relayoutContent(offset)
+            } } },
+        ))
+        redoStack.clear()
         true
     }
 
@@ -780,10 +839,12 @@ class LiveDocxSession(control: IControl, private val source: File) {
 
     /** New size (pixels at 96 dpi) of the picture at [offset]; shown at once. */
     fun resizeObject(offset: Long, widthPx: Int, heightPx: Int): Boolean {
-        val o = toOriginal(offset)
+        // a picture inserted live is found by the op that makes it
+        val made = newPictureAt(offset)
+        val o = made?.anchor ?: toOriginal(offset)
         val boxes = shapeBoxes(offset)
         val before = boxes.map { it.width to it.height }
-        return liveObjectEdit(offset, { editor.resizeObject(o, widthPx * EMU_PER_PX, heightPx * EMU_PER_PX) },
+        return liveObjectEdit(offset, { editor.resizeObject(o, widthPx * EMU_PER_PX, heightPx * EMU_PER_PX, made?.op) },
             live = { boxes.isNotEmpty().also { boxes.forEach { b -> b.width = widthPx; b.height = heightPx } } },
             back = { boxes.forEachIndexed { i, b -> b.width = before[i].first; b.height = before[i].second } })
     }
@@ -793,13 +854,14 @@ class LiveDocxSession(control: IControl, private val source: File) {
         ownError = null
         needsFlush = false
         if (touchesNewCells(from) || touchesNewCells(to)) return refuseInNewCells()
-        val of = toOriginal(from)
+        val made = newPictureAt(from)
+        val of = made?.anchor ?: toOriginal(from)
         val ot = toOriginal(to)
-        if (!editor.moveObject(of, ot)) return false
+        if (!editor.moveObject(of, ot, made?.op)) return false
         val doc = word.getDocument() as? WPDocument
         if (doc == null || !doc.moveMainObject(from, to)) {
             needsReopen = true
-            undoStack.add(Step({ editor.undoLast() }, { editor.moveObject(of, ot) })); redoStack.clear()
+            undoStack.add(Step({ editor.undoLast() }, { editor.moveObject(of, ot, made?.op) })); redoStack.clear()
             return true
         }
         // for the offset map: one char from [from] to where it landed
@@ -812,7 +874,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         val home = if (from > at) from + 1 else from
         undoStack.add(Step(
             undo = { editor.undoLast() && doc.moveMainObject(at, home).also { edits.remove(moved); word.relayoutContent(first) } },
-            redo = { editor.moveObject(of, ot) && doc.moveMainObject(from, to).also { edits.add(moved); word.relayoutContent(first) } },
+            redo = { editor.moveObject(of, ot, made?.op) && doc.moveMainObject(from, to).also { edits.add(moved); word.relayoutContent(first) } },
         ))
         redoStack.clear()
         true
@@ -865,28 +927,30 @@ class LiveDocxSession(control: IControl, private val source: File) {
         grow.forEach { d = maxOf(d, min - am.getTableCellWidth(it.getAttribute())) }
         shrink.forEach { d = minOf(d, am.getTableCellWidth(it.getAttribute()) - min) }
         if (d == 0) return null.also { refuse("Column at its smallest") }
-        val o = toOriginal(table.getStartOffset())
+        val made = newTables[table]
+        val o = made?.anchor ?: toOriginal(table.getStartOffset(), char = true)
+        val ref = made?.let { DocxEditor.CellRef(0, 0, 0, 0, it.op) }
         val start = table.getStartOffset()
         fun apply(by: Int) {
             grow.forEach { am.setTableCellWidth(it.getAttribute(), am.getTableCellWidth(it.getAttribute()) + by) }
             shrink.forEach { am.setTableCellWidth(it.getAttribute(), am.getTableCellWidth(it.getAttribute()) - by) }
         }
         val step = d
-        return if (liveObjectEdit(start, { editor.resizeTableColumn(o, boundary, step) }, live = { apply(step); true }, back = { apply(-step) })) d else null
+        return if (liveObjectEdit(start, { checked(editor.resizeTableColumn(o, boundary, step, ref)) }, live = { apply(step); true }, back = { apply(-step) })) d else null
     }
 
     /** The row starting at [rowStart] is at least [twips] high (the text still fits), shown at once. */
     fun setTableRowHeight(rowStart: Long, twips: Int): Boolean = synchronized(layoutLock) {
         ownError = null
         needsFlush = false
-        if (touchesNewCells(rowStart)) return refuseInNewCells()
         val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
         val table = doc.getParagraph0(rowStart) as? com.wxiwei.office.wp.model.TableElement ?: return refuse("No table here")
-        val row = (0 until table.rowCount()).mapNotNull { table.getElementForIndex(it) }.firstOrNull { it.getStartOffset() == rowStart } ?: return refuse("No row here")
+        val r = (0 until table.rowCount()).firstOrNull { table.getElementForIndex(it)?.getStartOffset() == rowStart } ?: return refuse("No row here")
+        val row = table.getElementForIndex(r)!!
         val before = am.getTableRowHeight(row.getAttribute())
-        val o = toOriginal(rowStart)
+        val (o, ref) = rowRef(table, r) ?: return refuseInNewCells()
         val h = maxOf(0, twips)
-        liveObjectEdit(rowStart, { editor.setTableRowHeight(o, h) },
+        liveObjectEdit(rowStart, { checked(editor.setTableRowHeight(o, h, ref)) },
             live = { am.setTableRowHeight(row.getAttribute(), h); true },
             back = { am.setTableRowHeight(row.getAttribute(), before) })
     }
@@ -900,6 +964,38 @@ class LiveDocxSession(control: IControl, private val source: File) {
      */
     private class NewCells(var op: Any?, val cells: List<IElement>)
     private val newCells = ArrayList<NewCells>()
+    /** Cells added live, then removed with their row or column: nothing of them to write. */
+    private val goneCells: MutableSet<IElement> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
+
+    private fun isNew(cell: IElement) = newCells.any { g -> g.cells.any { it === cell } }
+
+    /** A table inserted live: the [op] that makes it in the file, after the paragraph at original [anchor]. */
+    private class NewTable(var op: Any?, val anchor: Long)
+    private val newTables = java.util.IdentityHashMap<com.wxiwei.office.wp.model.TableElement, NewTable>()
+
+    /**
+     * How the file finds cell [k] of row [r] of [table]: by its original offset, or, for a cell
+     * added live, by counting from an original cell of the table ([DocxEditor.CellRef]). Null when
+     * no cell of the table is in the file yet.
+     */
+    private fun cellRef(table: com.wxiwei.office.wp.model.TableElement, r: Int, k: Int): Pair<Long, DocxEditor.CellRef?>? {
+        val rows = (0 until table.rowCount()).map { table.getElementForIndex(it) as com.wxiwei.office.wp.model.RowElement }
+        val cell = rows[r].getElementForIndex(k) ?: return null
+        newTables[table]?.let { return it.anchor to DocxEditor.CellRef(0, 0, r, k, it.op) }
+        if (!isNew(cell)) return toOriginal(cell.getStartOffset(), char = true) to null
+        for ((i, row) in rows.withIndex()) for (j in 0 until row.getCellNumber()) {
+            val c = row.getElementForIndex(j) ?: continue
+            if (!isNew(c)) return toOriginal(c.getStartOffset(), char = true) to DocxEditor.CellRef(i, j, r, k)
+        }
+        return null
+    }
+
+    /** [cellRef] of row [r]: one of its cells in the file, else its first cell. */
+    private fun rowRef(table: com.wxiwei.office.wp.model.TableElement, r: Int): Pair<Long, DocxEditor.CellRef?>? {
+        val row = table.getElementForIndex(r) as com.wxiwei.office.wp.model.RowElement
+        val k = (0 until row.getCellNumber()).firstOrNull { row.getElementForIndex(it)?.let { c -> !isNew(c) } == true } ?: 0
+        return cellRef(table, r, k)
+    }
 
     /** True after an edit was refused because it needs the document saved first ([touchesNewCells]). */
     var needsFlush = false
@@ -974,11 +1070,10 @@ class LiveDocxSession(control: IControl, private val source: File) {
     fun insertTableRow(offset: Long, below: Boolean): Boolean = synchronized(layoutLock) {
         ownError = null; needsFlush = false
         val place = cellAt(offset) ?: return refuse("Not in a table")
-        if (touchesNewCells(offset)) return refuseInNewCells()
-        val o = toOriginal(offset)
         val doc = word.getDocument() as WPDocument
         val table = doc.getParagraph0(offset) as com.wxiwei.office.wp.model.TableElement
-        if (!plainTable(table)) return reopenEdit { editor.insertTableRow(o, below) }
+        val (o, ref) = cellRef(table, place.row, place.cell) ?: return refuseInNewCells()
+        if (!plainTable(table)) return reopenEdit { checked(editor.insertTableRow(o, below, ref)) }
         val source = table.getElementForIndex(place.row) as com.wxiwei.office.wp.model.RowElement
         val row = com.wxiwei.office.wp.model.RowElement()
         row.setAttribute(source.getAttribute()!!.clone())
@@ -989,7 +1084,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             row.appendCell(cell); paras.add(listOf(para))
         }
         val index = if (below) place.row + 1 else place.row
-        if (!editor.insertTableRow(o, below)) return false
+        if (!checked(editor.insertTableRow(o, below, ref))) return false
         val group = NewCells(editor.lastOp(), (0 until row.getCellNumber()).map { row.getElementForIndex(it)!! })
         doc.insertTableRow(table, index, row, paras)
         val edit = Edit.Insert(row.getStartOffset(), row.getEndOffset() - row.getStartOffset())
@@ -998,7 +1093,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         word.relayoutContent(from)
         undoStack.add(Step(
             undo = { editor.undoLast() && (doc.removeTableRow(table, index) != null).also { edits.remove(edit); newCells.remove(group); word.relayoutContent(from) } },
-            redo = { editor.insertTableRow(o, below).also { if (it) {
+            redo = { editor.insertTableRow(o, below, ref).also { if (it) {
                 group.op = editor.lastOp(); doc.insertTableRow(table, index, row, paras); edits.add(edit); newCells.add(group); word.relayoutContent(from)
             } } },
         ))
@@ -1014,12 +1109,11 @@ class LiveDocxSession(control: IControl, private val source: File) {
     fun insertTableColumn(offset: Long, right: Boolean): Boolean = synchronized(layoutLock) {
         ownError = null; needsFlush = false
         val place = cellAt(offset) ?: return refuse("Not in a table")
-        if (touchesNewCells(offset)) return refuseInNewCells()
-        val o = toOriginal(offset)
         val doc = word.getDocument() as WPDocument
         val table = doc.getParagraph0(offset) as com.wxiwei.office.wp.model.TableElement
+        val (o, ref) = cellRef(table, place.row, place.cell) ?: return refuseInNewCells()
         val rows = (0 until table.rowCount()).map { table.getElementForIndex(it) as com.wxiwei.office.wp.model.RowElement }
-        if (!plainTable(table) || rows.any { it.getCellNumber() != rows[place.row].getCellNumber() }) return reopenEdit { editor.insertTableColumn(o, right) }
+        if (!plainTable(table) || rows.any { it.getCellNumber() != rows[place.row].getCellNumber() }) return reopenEdit { checked(editor.insertTableColumn(o, right, ref)) }
         val at = if (right) place.cell + 1 else place.cell
         // like the file: the new column as wide as the cell's column was, all of them scaled to the old width
         val widths = (0 until rows[place.row].getCellNumber()).map { am.getTableCellWidth(rows[place.row].getElementForIndex(it)!!.getAttribute()) }
@@ -1028,7 +1122,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         val scale = if (total > 0) total.toDouble() / (total + w) else 1.0
         val before = rows.map { r -> (0 until r.getCellNumber()).map { am.getTableCellWidth(r.getElementForIndex(it)!!.getAttribute()) } }
         val made = rows.map { r -> emptyCellLike(doc, r.getElementForIndex(place.cell)!!, Math.round(w * scale).toInt()) }
-        if (!editor.insertTableColumn(o, right)) return false
+        if (!checked(editor.insertTableColumn(o, right, ref))) return false
         val group = NewCells(editor.lastOp(), made.map { it.first })
         val added = ArrayList<Edit.Insert>()
         fun apply() {
@@ -1053,7 +1147,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         word.relayoutContent(from)
         undoStack.add(Step(
             undo = { editor.undoLast().also { if (it) { back(); word.relayoutContent(from) } } },
-            redo = { editor.insertTableColumn(o, right).also { if (it) { group.op = editor.lastOp(); apply(); word.relayoutContent(from) } } },
+            redo = { editor.insertTableColumn(o, right, ref).also { if (it) { group.op = editor.lastOp(); apply(); word.relayoutContent(from) } } },
         ))
         redoStack.clear()
         true
@@ -1067,10 +1161,10 @@ class LiveDocxSession(control: IControl, private val source: File) {
         if (table.rowCount() <= 1) return refuse("Bảng chỉ còn một hàng")
         val place = cellAt(offset) ?: return refuse("Not in a table")
         val row = table.getElementForIndex(place.row) as com.wxiwei.office.wp.model.RowElement
-        if (touchesNewCells(row.getStartOffset(), row.getEndOffset() - 1)) return refuseInNewCells()
-        val o = toOriginal(row.getStartOffset())
-        if (!plainTable(table)) return reopenEdit { editor.deleteTableRow(o) }
-        if (!editor.deleteTableRow(o)) return false
+        val (o, ref) = rowRef(table, place.row) ?: return refuseInNewCells()
+        if (!plainTable(table)) return reopenEdit { checked(editor.deleteTableRow(o, ref)) }
+        if (!checked(editor.deleteTableRow(o, ref))) return false
+        val cells = (0 until row.getCellNumber()).map { row.getElementForIndex(it)!! }
         // its paragraphs, cell by cell, to put back on undo
         val paras = (0 until row.getCellNumber()).map { k ->
             val cell = row.getElementForIndex(k)!!
@@ -1080,11 +1174,12 @@ class LiveDocxSession(control: IControl, private val source: File) {
         doc.removeTableRow(table, place.row)
         val edit = Edit.Delete(start, len)
         edits.add(edit)
+        goneCells.addAll(cells)
         val from = table.getStartOffset()
         word.relayoutContent(from)
         undoStack.add(Step(
-            undo = { editor.undoLast().also { if (it) { doc.insertTableRow(table, place.row, row, paras); edits.remove(edit); word.relayoutContent(from) } } },
-            redo = { editor.deleteTableRow(o).also { if (it) { doc.removeTableRow(table, place.row); edits.add(edit); word.relayoutContent(from) } } },
+            undo = { editor.undoLast().also { if (it) { doc.insertTableRow(table, place.row, row, paras); edits.remove(edit); goneCells.removeAll(cells); word.relayoutContent(from) } } },
+            redo = { editor.deleteTableRow(o, ref).also { if (it) { doc.removeTableRow(table, place.row); edits.add(edit); goneCells.addAll(cells); word.relayoutContent(from) } } },
         ))
         redoStack.clear()
         true
@@ -1098,10 +1193,9 @@ class LiveDocxSession(control: IControl, private val source: File) {
         val table = doc.getParagraph0(offset) as com.wxiwei.office.wp.model.TableElement
         val rows = (0 until table.rowCount()).map { table.getElementForIndex(it) as com.wxiwei.office.wp.model.RowElement }
         if (place.span >= rows[place.row].getCellNumber()) return refuse("Bảng chỉ còn một cột")
-        if (rows.any { r -> r.getElementForIndex(place.cell)?.let { touchesNewCells(it.getStartOffset(), it.getEndOffset() - 1) } == true }) return refuseInNewCells()
-        val o = toOriginal(offset)
-        if (!plainTable(table) || rows.any { it.getCellNumber() != rows[place.row].getCellNumber() }) return reopenEdit { editor.deleteTableColumn(o) }
-        if (!editor.deleteTableColumn(o)) return false
+        val (o, ref) = cellRef(table, place.row, place.cell) ?: return refuseInNewCells()
+        if (!plainTable(table) || rows.any { it.getCellNumber() != rows[place.row].getCellNumber() }) return reopenEdit { checked(editor.deleteTableColumn(o, ref)) }
+        if (!checked(editor.deleteTableColumn(o, ref))) return false
         val c = place.cell
         val before = rows.map { r -> (0 until r.getCellNumber()).map { am.getTableCellWidth(r.getElementForIndex(it)!!.getAttribute()) } }
         val total = before[place.row].sum()
@@ -1119,6 +1213,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 edits.add(e); removed.add(e)
                 for (k in 0 until r.getCellNumber()) r.getElementForIndex(k)!!.getAttribute()?.let { a -> am.setTableCellWidth(a, Math.round(am.getTableCellWidth(a) * scale).toInt()) }
             }
+            goneCells.addAll(cells)
         }
         fun back() {
             for ((i, r) in rows.withIndex().reversed()) {
@@ -1126,13 +1221,14 @@ class LiveDocxSession(control: IControl, private val source: File) {
                 for (k in 0 until r.getCellNumber()) r.getElementForIndex(k)!!.getAttribute()?.let { a -> am.setTableCellWidth(a, before[i][k]) }
             }
             removed.forEach { edits.remove(it) }
+            goneCells.removeAll(cells)
         }
         apply()
         val from = table.getStartOffset()
         word.relayoutContent(from)
         undoStack.add(Step(
             undo = { editor.undoLast().also { if (it) { back(); word.relayoutContent(from) } } },
-            redo = { editor.deleteTableColumn(o).also { if (it) { apply(); word.relayoutContent(from) } } },
+            redo = { editor.deleteTableColumn(o, ref).also { if (it) { apply(); word.relayoutContent(from) } } },
         ))
         redoStack.clear()
         true
@@ -1157,8 +1253,10 @@ class LiveDocxSession(control: IControl, private val source: File) {
         for (g in newCells) {
             val op = g.op ?: continue
             out[op] = g.cells.map { c ->
+                if (c in goneCells) return@map null
                 val s = c.getStartOffset(); val e = c.getEndOffset() - 1 // without the cell's last mark
-                if (e <= s) null else DocxEditor.InsertOverride(doc.getText(s, e), runFormats(s, e))
+                val paras = paragraphsIn(doc as WPDocument, c.getStartOffset(), c.getEndOffset()).map { paraFormat(it.getAttribute()!!) }
+                if (e <= s) DocxEditor.InsertOverride("", emptyList(), paras) else DocxEditor.InsertOverride(doc.getText(s, e), runFormats(s, e), paras)
             }
         }
         return out
@@ -1215,12 +1313,15 @@ class LiveDocxSession(control: IControl, private val source: File) {
         // the live view puts it before a block: the one after [block] for [after]
         val at = if (after) block.getEndOffset() else block.getStartOffset()
         if (at in start..end) return refuse("The table is already there")
-        val os = toOriginal(start); val ot = toOriginal(to)
-        if (!editor.moveTable(os, ot, after)) return false
+        // a table inserted live is found by the op that makes it
+        val made = newTables[table]
+        val os = made?.anchor ?: toOriginal(start, char = true); val ot = toOriginal(to)
+        val ref = made?.let { DocxEditor.CellRef(0, 0, 0, 0, it.op) }
+        if (!checked(editor.moveTable(os, ot, after, ref))) return false
         val len = end - start
         if (!doc.moveMainTable(start, end, at)) {
             needsReopen = true
-            undoStack.add(Step({ editor.undoLast() }, { editor.moveTable(os, ot, after) })); redoStack.clear()
+            undoStack.add(Step({ editor.undoLast() }, { editor.moveTable(os, ot, after, ref) })); redoStack.clear()
             return true
         }
         val dest = if (at < start) at else at - len
@@ -1233,7 +1334,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         val home = if (dest < start) start + len else start
         undoStack.add(Step(
             undo = { editor.undoLast() && doc.moveMainTable(dest, dest + len, home).also { edits.remove(moved); word.relayoutContent(first) } },
-            redo = { editor.moveTable(os, ot, after) && doc.moveMainTable(start, end, at).also { edits.add(moved); word.relayoutContent(first) } },
+            redo = { editor.moveTable(os, ot, after, ref) && doc.moveMainTable(start, end, at).also { edits.add(moved); word.relayoutContent(first) } },
         ))
         redoStack.clear()
         true
@@ -1246,12 +1347,81 @@ class LiveDocxSession(control: IControl, private val source: File) {
         return t.getStartOffset() until t.getEndOffset()
     }
 
-    /** A [rows] x [cols] table after the paragraph at [offset]; shown after the file is read again ([needsReopen]). */
+    /**
+     * A [rows] x [cols] table with thin borders after the body paragraph at [offset], shown at once
+     * (with an empty paragraph after it when a table or the end follows, as in the file); otherwise
+     * after the file is read again ([needsReopen]).
+     */
     fun insertTable(offset: Long, rows: Int, cols: Int): Boolean = synchronized(layoutLock) {
         ownError = null
-        if (!editor.insertTable(toOriginal(offset), rows, cols)) return false
-        needsReopen = true
-        undoStack.add(Step({ editor.undoLast() }, { editor.insertTable(toOriginal(offset), rows, cols) })); redoStack.clear()
+        val doc = word.getDocument() as? WPDocument
+        val para = doc?.getParagraph(offset) as? ParagraphElement
+        // live: a body paragraph whose mark is in the file (the table goes after that paragraph there)
+        val live = doc != null && para != null && (offset and WPModelConstant.AREA_MASK) == WPModelConstant.MAIN &&
+            am.getParaLevel(para.getAttribute()) < 0 && !touchesTyped(para.getEndOffset() - 1, para.getEndOffset())
+        if (!live) {
+            if (!checked(editor.insertTable(toOriginal(offset), rows, cols))) return false
+            needsReopen = true
+            undoStack.add(Step({ editor.undoLast() }, { editor.insertTable(toOriginal(offset), rows, cols) })); redoStack.clear()
+            return true
+        }
+        doc!!; para!!
+        val o = toOriginal(para.getEndOffset() - 1)
+        if (!checked(editor.insertTable(o, rows, cols))) return false
+        // like the file: the text width split evenly, single borders, Word's cell margins
+        val sect = doc.getSection(offset)?.getAttribute()
+        val textWidth = sect?.let { am.getPageWidth(it) - am.getPageMarginLeft(it) - am.getPageMarginRight(it) }?.takeIf { it > 0 } ?: 9360
+        val colWidth = maxOf(1440, textWidth) / cols
+        fun emptyParagraph(level: Int): ParagraphElement = ParagraphElement().also { p ->
+            if (level > 0) am.setParaLevel(p.getAttribute()!!, level)
+            if (doc.defaultParaStyleID >= 0) am.setParaStyleID(p.getAttribute()!!, doc.defaultParaStyleID)
+            val mark = LeafElement("\n")
+            p.setStartOffset(0); p.setEndOffset(1); mark.setStartOffset(0); mark.setEndOffset(1)
+            p.appendLeaf(mark)
+        }
+        val table = com.wxiwei.office.wp.model.TableElement()
+        val rowList = ArrayList<com.wxiwei.office.wp.model.RowElement>()
+        val paras = ArrayList<List<ParagraphElement>>()
+        val cells = ArrayList<IElement>()
+        repeat(rows) {
+            val row = com.wxiwei.office.wp.model.RowElement()
+            val mine = ArrayList<ParagraphElement>()
+            repeat(cols) {
+                val cell = com.wxiwei.office.wp.model.CellElement()
+                val a = cell.getAttribute()!!
+                am.setTableCellWidth(a, colWidth)
+                am.setTableTopBorder(a, 4); am.setTableTopBorderColor(a, Color.BLACK)
+                am.setTableBottomBorder(a, 4); am.setTableBottomBorderColor(a, Color.BLACK)
+                am.setTableLeftBorder(a, 4); am.setTableLeftBorderColor(a, Color.BLACK)
+                am.setTableRightBorder(a, 4); am.setTableRightBorderColor(a, Color.BLACK)
+                am.setTableTopMargin(a, 0); am.setTableBottomMargin(a, 0)
+                am.setTableLeftMargin(a, 108); am.setTableRightMargin(a, 108)
+                row.appendCell(cell); cells.add(cell)
+                mine.add(emptyParagraph(1))
+            }
+            rowList.add(row); paras.add(mine)
+        }
+        val at = para.getEndOffset()
+        // Word wants a paragraph after a table: the file adds one when no paragraph follows
+        val next = if (at < doc.storyEnd(at)) doc.getParagraph0(at) else null
+        val after = if (next == null || next is com.wxiwei.office.wp.model.TableElement) emptyParagraph(0) else null
+        val made = NewTable(editor.lastOp(), o)
+        val group = NewCells(made.op, cells)
+        var inserted: Edit.Insert? = null
+        fun put() {
+            doc.insertMainTable(at, table, rowList, paras, after)
+            edits.add(Edit.Insert(at, (after?.getEndOffset() ?: table.getEndOffset()) - at).also { inserted = it })
+            newTables[table] = made; newCells.add(group)
+        }
+        put()
+        word.relayoutContent(at)
+        undoStack.add(Step(
+            undo = { editor.undoLast().also { if (it) {
+                doc.removeMainTable(table, after); inserted?.let { e -> edits.remove(e) }; newTables.remove(table); newCells.remove(group); word.relayoutContent(at)
+            } } },
+            redo = { editor.insertTable(o, rows, cols).also { if (it) { made.op = editor.lastOp(); group.op = made.op; put(); word.relayoutContent(at) } } },
+        ))
+        redoStack.clear()
         true
     }
 
@@ -1444,6 +1614,48 @@ class LiveDocxSession(control: IControl, private val source: File) {
             else DocxEditor.InsertOverride("", emptyList())
         }
         return result
+    }
+
+    /**
+     * The paragraph properties set on [attr] itself (not from its style), as the file writes them:
+     * what a paragraph of a new cell got from the cell it was made like, and what was set on it since.
+     */
+    private fun paraFormat(attr: IAttributeSet): DocxEditor.ParaFormat {
+        val set = attr as? com.wxiwei.office.simpletext.model.AttributeSetImpl ?: return DocxEditor.ParaFormat()
+        fun own(id: Short) = set.getOwnAttribute(id).takeIf { it != Int.MIN_VALUE }
+        val special = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_SPECIALINDENT_ID)
+        val lineType = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_LINESPACE_TYPE_ID)
+        val line = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_LINESPACE_ID)?.let { it / 100f }
+        val (lineTwips, rule) = when {
+            line == null -> null to null
+            lineType == WPAttrConstant.LINE_SAPCE_MULTIPLE.toInt() -> Math.round(line * 240) to "auto"
+            lineType == WPAttrConstant.LINE_SAPCE_LEAST.toInt() -> Math.round(line) to "atLeast"
+            lineType == WPAttrConstant.LINE_SPACE_EXACTLY.toInt() -> Math.round(-line) to "exact"
+            else -> null to null
+        }
+        val listId = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_LIST_ID)
+        return DocxEditor.ParaFormat(
+            align = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_HORIZONTAL_ID)?.let {
+                when (it) { WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt() -> "center"; WPAttrConstant.PARA_HOR_ALIGN_RIGHT.toInt() -> "right"
+                    WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED.toInt() -> "both"; else -> "left" }
+            },
+            // the view keeps a hanging indent inside the left one (as paragraphLayoutAt reads it back)
+            leftTwips = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_INDENT_LEFT_ID)?.let { it - minOf(special ?: am.getParaSpecialIndent(attr), 0) },
+            rightTwips = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_INDENT_RIGHT_ID),
+            specialTwips = special,
+            beforeTwips = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_BEFORE_ID),
+            afterTwips = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_AFTER_ID),
+            line = lineTwips, lineRule = rule,
+            // only the lists this session sets; one copied from the cell it was made like is in its pPr already
+            list = when {
+                listId == null -> null
+                listId < 0 -> "0"
+                listId == editor.bulletListId -> "bullet"
+                listId == editor.numberingListId -> "decimal"
+                else -> null
+            },
+            listLevel = own(com.wxiwei.office.constant.wp.AttrIDConstant.PARA_LIST_LEVEL_ID),
+        )
     }
 
     /** The formatting shown on [s, e), as run properties relative to [s]. */

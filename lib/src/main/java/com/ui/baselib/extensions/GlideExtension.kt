@@ -11,6 +11,7 @@ import com.bumptech.glide.RequestBuilder
 import com.bumptech.glide.RequestManager
 import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
@@ -27,8 +28,8 @@ import java.io.File
  * Load image from URL with default caching and crossfade.
  */
 fun ImageView.load(url: String?) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .transition(DrawableTransitionOptions.withCrossFade())
         .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -39,9 +40,8 @@ fun ImageView.load(url: String?) {
  * Load image from drawable resource.
  */
 fun ImageView.load(@DrawableRes resId: Int) {
-    Glide.with(context)
+    Glide.with(this)
         .load(resId)
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -49,12 +49,11 @@ fun ImageView.load(@DrawableRes resId: Int) {
  * Load image from URI with crossfade and an optional placeholder.
  */
 fun ImageView.load(uri: Uri?, @DrawableRes placeholder: Int = 0) {
-    if (uri == null) return
-    Glide.with(context)
+    if (uri == null) return clearGlide()
+    Glide.with(this)
         .load(uri)
         .apply { if (placeholder != 0) placeholder(placeholder) }
         .transition(DrawableTransitionOptions.withCrossFade())
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -62,12 +61,11 @@ fun ImageView.load(uri: Uri?, @DrawableRes placeholder: Int = 0) {
  * Load image from File with crossfade and an optional placeholder.
  */
 fun ImageView.load(file: File?, @DrawableRes placeholder: Int = 0) {
-    if (file == null || !file.exists()) return
-    Glide.with(context)
+    if (file == null || !file.exists()) return clearGlide()
+    Glide.with(this)
         .load(file)
         .apply { if (placeholder != 0) placeholder(placeholder) }
         .transition(DrawableTransitionOptions.withCrossFade())
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -75,8 +73,8 @@ fun ImageView.load(file: File?, @DrawableRes placeholder: Int = 0) {
  * Load image from Bitmap.
  */
 fun ImageView.load(bitmap: Bitmap?) {
-    if (bitmap == null) return
-    Glide.with(context)
+    if (bitmap == null) return clearGlide()
+    Glide.with(this)
         .load(bitmap)
         .into(this)
 }
@@ -87,6 +85,8 @@ fun ImageView.load(bitmap: Bitmap?) {
 // region Resize Image Loading
 // ============================================================================
 
+private const val ASPECT_PROBE_PX = 256
+
 /**
  * Load image from drawable resource with resize.
  *
@@ -95,10 +95,9 @@ fun ImageView.load(bitmap: Bitmap?) {
  * @param height Target height in pixels
  */
 fun ImageView.loadResize(@DrawableRes resId: Int, width: Int, height: Int) {
-    Glide.with(context)
+    Glide.with(this)
         .load(resId)
         .override(width, height)
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -117,10 +116,12 @@ fun ImageView.loadResize(@DrawableRes resId: Int, width: Int? = null, height: In
             loadResize(resId, width, height)
         }
         width != null || height != null -> {
-            Glide.with(context)
+            // Only the aspect ratio is needed here: decode a small copy, not the full image.
+            Glide.with(this)
                 .asBitmap()
                 .load(resId)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .override(ASPECT_PROBE_PX)
+                .downsample(DownsampleStrategy.CENTER_INSIDE)
                 .into(object : CustomTarget<Bitmap>() {
                     override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                         val originalWidth = resource.width
@@ -130,10 +131,9 @@ fun ImageView.loadResize(@DrawableRes resId: Int, width: Int? = null, height: In
                         val targetWidth = width ?: (height!! * aspectRatio).toInt()
                         val targetHeight = height ?: (width!! / aspectRatio).toInt()
 
-                        Glide.with(context)
+                        Glide.with(this@loadResize)
                             .load(resId)
                             .override(targetWidth, targetHeight)
-                            .diskCacheStrategy(DiskCacheStrategy.ALL)
                             .into(this@loadResize)
                     }
 
@@ -152,8 +152,8 @@ fun ImageView.loadResize(@DrawableRes resId: Int, width: Int? = null, height: In
  * @param height Target height in pixels
  */
 fun ImageView.loadResize(url: String?, width: Int, height: Int) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .override(width, height)
         .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -170,15 +170,18 @@ fun ImageView.loadResize(url: String?, width: Int, height: Int) {
  * @param height Target height in pixels (null to calculate from width)
  */
 fun ImageView.loadResize(url: String?, width: Int?, height: Int?) {
-    if (url.isNullOrEmpty()) return
+    if (url.isNullOrEmpty()) return clearGlide()
     when {
         width != null && height != null -> {
             loadResize(url, width, height)
         }
         width != null || height != null -> {
-            Glide.with(context)
+            // Only the aspect ratio is needed here: decode a small copy, not the full image.
+            Glide.with(this)
                 .asBitmap()
                 .load(url)
+                .override(ASPECT_PROBE_PX)
+                .downsample(DownsampleStrategy.CENTER_INSIDE)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(object : CustomTarget<Bitmap>() {
                     override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
@@ -189,7 +192,7 @@ fun ImageView.loadResize(url: String?, width: Int?, height: Int?) {
                         val targetWidth = width ?: (height!! * aspectRatio).toInt()
                         val targetHeight = height ?: (width!! / aspectRatio).toInt()
 
-                        Glide.with(context)
+                        Glide.with(this@loadResize)
                             .load(url)
                             .override(targetWidth, targetHeight)
                             .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -207,11 +210,10 @@ fun ImageView.loadResize(url: String?, width: Int?, height: Int?) {
  * Load image from URI with resize.
  */
 fun ImageView.loadResize(uri: Uri?, width: Int, height: Int) {
-    if (uri == null) return
-    Glide.with(context)
+    if (uri == null) return clearGlide()
+    Glide.with(this)
         .load(uri)
         .override(width, height)
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -219,11 +221,10 @@ fun ImageView.loadResize(uri: Uri?, width: Int, height: Int) {
  * Load image from File with resize.
  */
 fun ImageView.loadResize(file: File?, width: Int, height: Int) {
-    if (file == null || !file.exists()) return
-    Glide.with(context)
+    if (file == null || !file.exists()) return clearGlide()
+    Glide.with(this)
         .load(file)
         .override(width, height)
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -231,11 +232,10 @@ fun ImageView.loadResize(file: File?, width: Int, height: Int) {
  * Load image with resize and center crop.
  */
 fun ImageView.loadResizeCenterCrop(@DrawableRes resId: Int, width: Int, height: Int) {
-    Glide.with(context)
+    Glide.with(this)
         .load(resId)
         .override(width, height)
         .centerCrop()
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -243,8 +243,8 @@ fun ImageView.loadResizeCenterCrop(@DrawableRes resId: Int, width: Int, height: 
  * Load image from URL with resize and center crop.
  */
 fun ImageView.loadResizeCenterCrop(url: String?, width: Int, height: Int) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .override(width, height)
         .centerCrop()
@@ -256,11 +256,10 @@ fun ImageView.loadResizeCenterCrop(url: String?, width: Int, height: Int) {
  * Load image with resize and fit center.
  */
 fun ImageView.loadResizeFitCenter(@DrawableRes resId: Int, width: Int, height: Int) {
-    Glide.with(context)
+    Glide.with(this)
         .load(resId)
         .override(width, height)
         .fitCenter()
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -268,8 +267,8 @@ fun ImageView.loadResizeFitCenter(@DrawableRes resId: Int, width: Int, height: I
  * Load image from URL with resize and fit center.
  */
 fun ImageView.loadResizeFitCenter(url: String?, width: Int, height: Int) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .override(width, height)
         .fitCenter()
@@ -281,11 +280,10 @@ fun ImageView.loadResizeFitCenter(url: String?, width: Int, height: Int) {
  * Load image with resize and rounded corners.
  */
 fun ImageView.loadResizeRounded(@DrawableRes resId: Int, width: Int, height: Int, radiusPx: Int) {
-    Glide.with(context)
+    Glide.with(this)
         .load(resId)
         .override(width, height)
         .transform(CenterCrop(), RoundedCorners(radiusPx))
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
         .into(this)
 }
 
@@ -293,8 +291,8 @@ fun ImageView.loadResizeRounded(@DrawableRes resId: Int, width: Int, height: Int
  * Load image from URL with resize and rounded corners.
  */
 fun ImageView.loadResizeRounded(url: String?, width: Int, height: Int, radiusPx: Int) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .override(width, height)
         .transform(CenterCrop(), RoundedCorners(radiusPx))
@@ -317,10 +315,11 @@ fun ImageView.load(
     @DrawableRes error: Int = 0
 ) {
     if (url.isNullOrEmpty()) {
+        clearGlide()
         if (error != 0) setImageResource(error)
         return
     }
-    Glide.with(context)
+    Glide.with(this)
         .load(url)
         .apply {
             if (placeholder != 0) placeholder(placeholder)
@@ -335,8 +334,8 @@ fun ImageView.load(
  * Load image with custom RequestOptions.
  */
 fun ImageView.load(url: String?, options: RequestOptions) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .apply(options)
         .into(this)
@@ -349,8 +348,8 @@ inline fun ImageView.load(
     url: String?,
     builder: RequestBuilder<Drawable>.() -> RequestBuilder<Drawable>
 ) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .builder()
         .into(this)
@@ -366,8 +365,8 @@ inline fun ImageView.load(
  * Load image as circle.
  */
 fun ImageView.loadCircle(url: String?) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .circleCrop()
         .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -383,10 +382,11 @@ fun ImageView.loadCircle(
     @DrawableRes error: Int = 0
 ) {
     if (url.isNullOrEmpty()) {
+        clearGlide()
         if (error != 0) setImageResource(error)
         return
     }
-    Glide.with(context)
+    Glide.with(this)
         .load(url)
         .circleCrop()
         .apply {
@@ -401,7 +401,7 @@ fun ImageView.loadCircle(
  * Load drawable resource as circle.
  */
 fun ImageView.loadCircle(@DrawableRes resId: Int) {
-    Glide.with(context)
+    Glide.with(this)
         .load(resId)
         .circleCrop()
         .into(this)
@@ -420,8 +420,8 @@ fun ImageView.loadCircle(@DrawableRes resId: Int) {
  * @param radiusPx Corner radius in pixels
  */
 fun ImageView.loadRounded(url: String?, radiusPx: Int) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .transform(CenterCrop(), RoundedCorners(radiusPx))
         .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -438,10 +438,11 @@ fun ImageView.loadRounded(
     @DrawableRes error: Int = 0
 ) {
     if (url.isNullOrEmpty()) {
+        clearGlide()
         if (error != 0) setImageResource(error)
         return
     }
-    Glide.with(context)
+    Glide.with(this)
         .load(url)
         .transform(CenterCrop(), RoundedCorners(radiusPx))
         .apply {
@@ -456,7 +457,7 @@ fun ImageView.loadRounded(
  * Load drawable resource with rounded corners.
  */
 fun ImageView.loadRounded(@DrawableRes resId: Int, radiusPx: Int) {
-    Glide.with(context)
+    Glide.with(this)
         .load(resId)
         .transform(CenterCrop(), RoundedCorners(radiusPx))
         .into(this)
@@ -475,7 +476,7 @@ fun ImageView.loadRounded(@DrawableRes resId: Int, radiusPx: Int) {
  * @param sizePx Thumbnail size in pixels
  */
 fun ImageView.loadThumbnail(url: String?, sizePx: Int = 200) {
-    if (url.isNullOrEmpty()) return
+    if (url.isNullOrEmpty()) return clearGlide()
     val options = RequestOptions()
         .override(sizePx, sizePx)
         .format(DecodeFormat.PREFER_RGB_565)
@@ -496,7 +497,7 @@ fun ImageView.loadThumbnail(
     sizePx: Int = 200,
     @DrawableRes placeholder: Int = 0
 ) {
-    if (url.isNullOrEmpty()) return
+    if (url.isNullOrEmpty()) return clearGlide()
     val options = RequestOptions()
         .override(sizePx, sizePx)
         .format(DecodeFormat.PREFER_RGB_565)
@@ -520,8 +521,8 @@ fun ImageView.loadThumbnail(
  * Load image with crossfade animation.
  */
 fun ImageView.loadWithCrossFade(url: String?, durationMs: Int = 300) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .transition(DrawableTransitionOptions.withCrossFade(durationMs))
         .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -536,6 +537,7 @@ fun ImageView.loadWithCrossFade(url: String?, durationMs: Int = 300) {
 
 /**
  * Load image as Bitmap with callback.
+ * Decodes at the image's full size; prefer the overload with width/height for large images.
  */
 fun Context.loadBitmap(
     url: String?,
@@ -605,8 +607,8 @@ fun Context.loadBitmap(
  * Load image skipping memory cache.
  */
 fun ImageView.loadSkipMemoryCache(url: String?) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .skipMemoryCache(true)
         .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -617,8 +619,8 @@ fun ImageView.loadSkipMemoryCache(url: String?) {
  * Load image skipping all caches (force refresh).
  */
 fun ImageView.loadNoCache(url: String?) {
-    if (url.isNullOrEmpty()) return
-    Glide.with(context)
+    if (url.isNullOrEmpty()) return clearGlide()
+    Glide.with(this)
         .load(url)
         .skipMemoryCache(true)
         .diskCacheStrategy(DiskCacheStrategy.NONE)
@@ -629,7 +631,7 @@ fun ImageView.loadNoCache(url: String?) {
  * Clear image and cancel any pending load.
  */
 fun ImageView.clearGlide() {
-    Glide.with(context).clear(this)
+    Glide.with(this).clear(this)
 }
 
 // endregion

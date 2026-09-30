@@ -106,12 +106,12 @@ fun View.animateVisible(duration: Long = DEFAULT_ANIM_DURATION, endAction: (Bool
  * @param endAction Callback called at start (false) and end (true) of animation
  */
 fun View.animateGone(duration: Long = DEFAULT_ANIM_DURATION, endAction: (Boolean) -> Unit = {}) {
-    if (isGone || (isVisible && alpha < 1f)) return
+    if (isGone) return
 
+    // Cancel (not skip) a running fade-in, and fade out from wherever it got to.
     animate().cancel()
     clearAnimation()
     endAction(false)
-    alpha = 1f
     animate()
         .alpha(0f)
         .setDuration(duration)
@@ -138,7 +138,6 @@ fun View.animateInvisible(
     animate().cancel()
     clearAnimation()
     endAction(false)
-    alpha = 1f
 
     animate()
         .alpha(0f)

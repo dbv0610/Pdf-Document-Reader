@@ -169,7 +169,8 @@ class PageRoot(private var word: Word?) : AbstractView(), IRoot {
             if (k < 0) return false
             restart = k
             start = pages[k].getStartOffset(null)
-            for (i in pages.lastIndex downTo k) deleteView(pages.removeAt(i), true)
+            // the layouter shares one header and footer between the pages and lays out the new pages with them: not disposed with the old ones
+            for (i in pages.lastIndex downTo k) deleteView(pages.removeAt(i).also { it.setHeader(null); it.setFooter(null) }, true)
         }
         viewContainer.removeFrom(start)
         wpLayouter.restartAt(start, restart + 1, if (restart > 0) pages[restart - 1].getEndOffset(null) else start)

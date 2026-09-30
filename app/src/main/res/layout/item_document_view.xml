@@ -11,12 +11,12 @@
 
     <com.ui.baselib.widget.view.UiImageView
         android:id="@+id/imgSource"
-        app:cornerRadius="@dimen/_8sdp"
+        app:uiCornerRadius="@dimen/_8sdp"
         android:layout_width="@dimen/_40sdp"
         android:layout_height="@dimen/_40sdp"
         android:padding="@dimen/_3sdp"
         android:src="@drawable/ic_app_pdf"
-        app:bgColor="#F5F5F5" />
+        app:uiBackgroundColor="#F5F5F5" />
 
     <com.ui.baselib.widget.layout.UiLinearLayout
         android:layout_width="0dp"

@@ -73,8 +73,7 @@ fun File.toBase64(): String {
 
 fun Uri.uriToBase64(context: Context): String {
     return try {
-        val inputStream = context.contentResolver.openInputStream(this)
-        val bytes = inputStream?.readBytes() ?: return ""
+        val bytes = context.contentResolver.openInputStream(this)?.use { it.readBytes() } ?: return ""
         Base64.encodeToString(bytes, Base64.DEFAULT)
     } catch (e: Exception) {
         e.printStackTrace()
@@ -123,10 +122,9 @@ fun encodeFileToBase64Simple(path: String): String? {
  */
 suspend fun downloadUrlAsBase64Simple(url: String): String? = withContext(Dispatchers.IO) {
     try {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connect()
-        val bitmap = BitmapFactory.decodeStream(conn.inputStream)
-        conn.disconnect()
+        // Same timeouts/cleanup as downloadBytes(); without them a stalled server hangs forever.
+        val bytes = downloadBytes(url) ?: return@withContext null
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
         Base64.encodeToString(stream.toByteArray(), Base64.DEFAULT)

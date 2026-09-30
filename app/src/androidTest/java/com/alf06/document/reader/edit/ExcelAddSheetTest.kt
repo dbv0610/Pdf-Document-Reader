@@ -57,9 +57,9 @@ class ExcelAddSheetTest {
             scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
             Thread.sleep(800)
             scenario.onActivity { before = (viewer.control!!.getView() as ExcelView).getSpreadsheet()!!.getSheetCount() }
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "+ Sheet" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "ADD_SHEET" }!!.performClick() }
             Thread.sleep(500)
-            onView(withText("Thêm")).inRoot(isDialog()).perform(click())
+            onView(withText(android.R.string.ok)).inRoot(isDialog()).perform(click())
             Thread.sleep(1500)
             scenario.onActivity {
                 val excel = viewer.control!!.getView() as ExcelView
@@ -71,7 +71,7 @@ class ExcelAddSheetTest {
             instrumentation.uiAutomation.takeScreenshot()?.let { b ->
                 File(context.getExternalFilesDir(null), "edit-ui").apply { mkdirs() }.resolve("excel_sheet_added.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(2500)
         }
         val workbook = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("xl/workbook.xml")).readBytes().toString(Charsets.UTF_8) }
@@ -126,9 +126,9 @@ class ExcelAddSheetTest {
             }
             assertTrue("a text cell", at.first >= 0)
             Thread.sleep(800)
-            scenario.onActivity { a -> find<android.widget.TextView>(a.findViewById(R.id.editPanel)) { it is android.widget.TextView && it.text.toString() == "Xoay chữ" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "TEXT_ROTATION" }!!.performClick() }
             Thread.sleep(700)
-            a11yTap("Dọc lên (90°)")
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_rotate_vertical_up))
             Thread.sleep(800)
             scenario.onActivity {
                 val sheet = (viewer.control!!.getView() as ExcelView).getSpreadsheet()!!.getWorkbook()!!.getSheet(0)!!
@@ -140,7 +140,7 @@ class ExcelAddSheetTest {
             instrumentation.uiAutomation.takeScreenshot()?.let { b ->
                 File(context.getExternalFilesDir(null), "edit-ui").apply { mkdirs() }.resolve("excel_rotated.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
-            scenario.onActivity { a -> find<android.widget.TextView>(a.findViewById(R.id.editPanel)) { it is android.widget.TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(2500)
         }
         val styles = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("xl/styles.xml")).readBytes().toString(Charsets.UTF_8) }
@@ -190,16 +190,16 @@ class ExcelAddSheetTest {
             }
             assertTrue("a text cell", at.first >= 0)
             Thread.sleep(800)
-            scenario.onActivity { a -> find<android.widget.TextView>(a.findViewById(R.id.editPanel)) { it is android.widget.TextView && it.text.toString() == "Căn lề…" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "CELL_ALIGNMENT" }!!.performClick() }
             Thread.sleep(700)
-            a11yClick("Phải")
-            a11yClick("Trên")
-            a11yClick("Tăng thụt lề")
-            a11yClick("Tăng thụt lề")
+            a11yClick(ui(com.wxiwei.office.R.string.docsdk_edit_right))
+            a11yClick(ui(com.wxiwei.office.R.string.docsdk_edit_top))
+            a11yClick(ui(com.wxiwei.office.R.string.docsdk_edit_indent_increase))
+            a11yClick(ui(com.wxiwei.office.R.string.docsdk_edit_indent_increase))
             instrumentation.uiAutomation.takeScreenshot()?.let { b ->
                 File(context.getExternalFilesDir(null), "edit-ui").apply { mkdirs() }.resolve("excel_align_dialog.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
-            a11yClick("Áp dụng")
+            a11yClick(ui(com.wxiwei.office.R.string.docsdk_edit_apply))
             Thread.sleep(800)
             scenario.onActivity {
                 val st = cellStyle()
@@ -208,12 +208,12 @@ class ExcelAddSheetTest {
                 assertEquals(2, st.getIndent().toInt())
             }
             // one undo step for the whole dialog
-            scenario.onActivity { a -> find<android.widget.TextView>(a.findViewById(R.id.editPanel)) { it is android.widget.TextView && it.text.toString() == "↶" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "UNDO" }!!.performClick() }
             Thread.sleep(500)
             scenario.onActivity { cellStyle().let { st -> assertEquals(before, Triple(st.getHorizontalAlign(), st.getVerticalAlign(), st.getIndent())) } }
-            scenario.onActivity { a -> find<android.widget.TextView>(a.findViewById(R.id.editPanel)) { it is android.widget.TextView && it.text.toString() == "↷" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "REDO" }!!.performClick() }
             Thread.sleep(500)
-            scenario.onActivity { a -> find<android.widget.TextView>(a.findViewById(R.id.editPanel)) { it is android.widget.TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(2500)
         }
         val styles = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("xl/styles.xml")).readBytes().toString(Charsets.UTF_8) }
@@ -268,10 +268,10 @@ class ExcelAddSheetTest {
             instrumentation.uiAutomation.takeScreenshot()?.let { b ->
                 File(context.getExternalFilesDir(null), "edit-ui").apply { mkdirs() }.resolve("excel_range.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
-            scenario.onActivity { a -> assertEquals("A17:B19", find<TextView>(a.findViewById(R.id.editPanel)) { it is TextView && it.contentDescription == "Ô / vùng chọn" }!!.text.toString()) }
-            scenario.onActivity { a -> find<TextView>(a.findViewById(R.id.editPanel)) { it is TextView && it.text.toString() == "Màu nền" }!!.performClick() }
+            scenario.onActivity { a -> assertEquals("A17:B19", find<TextView>(a.findViewById(R.id.editPanel)) { it is TextView && it.contentDescription == a.getString(com.wxiwei.office.R.string.docsdk_edit_cell_or_range) }!!.text.toString()) }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "FILL_COLOR" }!!.performClick() }
             Thread.sleep(700)
-            a11yClick("Màu #FF0000")
+            a11yClick(ui(com.wxiwei.office.R.string.docsdk_edit_color_description, "FF0000"))
             Thread.sleep(700)
             scenario.onActivity {
                 val sheet = ss().getWorkbook()!!.getSheet(0)!!
@@ -280,9 +280,9 @@ class ExcelAddSheetTest {
                     assertTrue("filled $r,$c", fill != null)
                 }
             }
-            scenario.onActivity { a -> find<TextView>(a.findViewById(R.id.editPanel)) { it is TextView && it.text.toString() == "Gộp ô" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "MERGE_CELLS" }!!.performClick() }
             Thread.sleep(700)
-            a11yClick("Gộp")
+            a11yClick(ui(com.wxiwei.office.R.string.docsdk_edit_merge))
             Thread.sleep(700)
             scenario.onActivity {
                 val sheet = ss().getWorkbook()!!.getSheet(0)!!
@@ -292,10 +292,21 @@ class ExcelAddSheetTest {
             instrumentation.uiAutomation.takeScreenshot()?.let { b ->
                 File(context.getExternalFilesDir(null), "edit-ui").apply { mkdirs() }.resolve("excel_merged.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
-            scenario.onActivity { a -> find<TextView>(a.findViewById(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(2500)
         }
         val xml = java.util.zip.ZipFile(file).use { z -> z.getInputStream(z.getEntry("xl/worksheets/sheet1.xml")).readBytes().toString(Charsets.UTF_8) }
         assertTrue("merge saved", xml.contains("<mergeCell ref=\"A17:B19\"/>"))
+    }
+
+    /** An SDK text in the language of the activity on screen. */
+    private fun ui(id: Int, vararg args: Any): String {
+        var text = ""
+        instrumentation.runOnMainSync {
+            val a = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).first()
+            text = a.getString(id, *args)
+        }
+        return text
     }
 }

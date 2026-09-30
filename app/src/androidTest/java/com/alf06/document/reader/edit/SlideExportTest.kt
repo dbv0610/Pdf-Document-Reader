@@ -12,7 +12,7 @@ import com.alf06.document.reader.R
 import com.alf06.document.reader.model.DocumentType
 import com.alf06.document.reader.model.RecentDocument
 import com.alf06.document.reader.ui.home.document.office.ReadDocumentActivity
-import com.alf06.document.reader.ui.home.document.office.edit.writeSlide
+import com.wxiwei.office.editor.ui.writeSlide
 import com.wxiwei.office.reader.OfficeDocumentView
 import com.wxiwei.office.reader.ReaderState
 import org.junit.Assert.assertEquals

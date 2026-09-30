@@ -105,7 +105,7 @@ class WordObjectDragTest {
             scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
             Thread.sleep(800)
             body(scenario, viewer)
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "Lưu" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(2500)
         }
     }
@@ -132,11 +132,18 @@ class WordObjectDragTest {
         return out
     }
 
+    /** An SDK text in the app's language. */
+    private fun sdk(scenario: ActivityScenario<ReadDocumentActivity>, id: Int): String {
+        var text = ""
+        scenario.onActivity { text = it.getString(id) }
+        return text
+    }
+
     private fun label(scenario: ActivityScenario<ReadDocumentActivity>): String {
         var text = ""
         scenario.onActivity { a ->
             val panel = a.findViewById<ViewGroup>(R.id.editPanel)
-            text = find<TextView>(panel) { it is TextView && it !is android.widget.EditText && it !is android.widget.Button && (it.text.startsWith("Đã chọn") || it.text.startsWith("Kéo") || it.text.startsWith("Chạm") || it.text.startsWith("Đang")) }?.text?.toString().orEmpty()
+            text = find<TextView>(panel) { it is TextView && it.tag == com.wxiwei.office.editor.ui.EditToolbar.STATUS }?.text?.toString().orEmpty()
         }
         return text
     }
@@ -235,7 +242,7 @@ class WordObjectDragTest {
             val box = reveal(scenario, viewer) { it.inlineObjectRect(at) }
             tap(box.exactCenterX(), box.exactCenterY())
             screenshot("picture_tap_selected")
-            assertTrue("selected: '${label(scenario)}'", label(scenario).startsWith("Đã chọn ảnh"))
+            assertTrue("selected: '${label(scenario)}'", label(scenario) == sdk(scenario, com.wxiwei.office.R.string.docsdk_edit_picture_selected_hint))
             val scroll = scrollY(scenario, viewer)
             var view: Any? = null
             scenario.onActivity { view = word(viewer) }
@@ -406,7 +413,7 @@ class WordObjectDragTest {
     private fun type(scenario: ActivityScenario<ReadDocumentActivity>, text: String) {
         instrumentation.runOnMainSync {
             scenario.onActivity { a ->
-                val typing = find<android.widget.EditText>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is android.widget.EditText && it.alpha == 0f }!!
+                val typing = find<android.widget.EditText>(a.findViewById<ViewGroup>(R.id.officeViewer)) { it is android.widget.EditText && it.alpha == 0f }!!
                 assertTrue("typing field focused", typing.hasFocus())
                 typing.onCreateInputConnection(android.view.inputmethod.EditorInfo())!!.commitText(text, 1)
             }
@@ -471,10 +478,10 @@ class WordObjectDragTest {
             screenshot("cells_typed")
             // 3. a new 2 x 2 table after the heading, typed into its first (empty) cell
             pointOf(scenario, viewer, "Tổng quan tính năng").let { (x, y) -> tap(x, y) }
-            scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == "+ Bảng" }!!.performClick() }
+            scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "INSERT_TABLE" }!!.performClick() }
             Thread.sleep(800)
             // the dialog: 3 x 3 (its default), Insert
-            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Chèn"))
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(com.wxiwei.office.R.string.docsdk_edit_insert))
                 .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                 .perform(androidx.test.espresso.action.ViewActions.click())
             Thread.sleep(1000)
@@ -505,8 +512,9 @@ class WordObjectDragTest {
         assertTrue("saved C3 in a cell", cells.any { it.contains(">C3<") })
     }
 
-    private fun press(scenario: ActivityScenario<ReadDocumentActivity>, text: String) {
-        scenario.onActivity { a -> find<TextView>(a.findViewById<ViewGroup>(R.id.editPanel)) { it is TextView && it.text.toString() == text }!!.performClick() }
+    /** Clicks the edit bar's button of the EditAction named [action]. */
+    private fun press(scenario: ActivityScenario<ReadDocumentActivity>, action: String) {
+        scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == action }!!.performClick() }
     }
 
     /** A tap on "WATCH", "+ Hàng dưới", typed "R1" in the new row; "+ Cột phải", typed "K1" in the new column; saved. */
@@ -522,14 +530,14 @@ class WordObjectDragTest {
             reveal(scenario, viewer) { it.tableRect(start, end) }
             pointOf(scenario, viewer, "WATCH").let { (x, y) -> tap(x, y) }
             val scroll = scrollY(scenario, viewer)
-            press(scenario, "+ Hàng dưới")
+            press(scenario, "ROW_BELOW")
             waitFor { viewer.state.value.status == ReaderState.Status.Ready }
             Thread.sleep(3000)
-            assertTrue("typing in the new cell: '${label(scenario)}'", label(scenario).startsWith("Đang gõ"))
+            assertTrue("typing in the new cell: '${label(scenario)}'", label(scenario).startsWith(sdk(scenario, com.wxiwei.office.R.string.docsdk_edit_typing_hint)))
             android.util.Log.i("DragTest", "insert row: scroll $scroll -> ${scrollY(scenario, viewer)}")
             type(scenario, "R1")
             screenshot("table_row_added")
-            press(scenario, "+ Cột phải")
+            press(scenario, "COLUMN_RIGHT")
             waitFor { viewer.state.value.status == ReaderState.Status.Ready }
             Thread.sleep(3000)
             type(scenario, "K1")
@@ -562,13 +570,13 @@ class WordObjectDragTest {
             fun count(t: String) = Regex(Regex.escape(t)).findAll(modelText(scenario, viewer)).count()
             val plays = count("PLAY_ALONG"); val descs = count("Mô tả")
             pointOf(scenario, viewer, "PLAY_ALONG").let { (x, y) -> tap(x, y) }
-            press(scenario, "− Hàng")
+            press(scenario, "DELETE_ROW")
             waitFor { viewer.state.value.status == ReaderState.Status.Ready }
             Thread.sleep(3000)
-            assertTrue("caret in the row taking its place: '${label(scenario)}'", label(scenario).startsWith("Đang gõ"))
+            assertTrue("caret in the row taking its place: '${label(scenario)}'", label(scenario).startsWith(sdk(scenario, com.wxiwei.office.R.string.docsdk_edit_typing_hint)))
             assertEquals("row gone", plays - 1, count("PLAY_ALONG"))
             pointOf(scenario, viewer, "Mô tả").let { (x, y) -> tap(x, y) }
-            press(scenario, "− Cột")
+            press(scenario, "DELETE_COLUMN")
             waitFor { viewer.state.value.status == ReaderState.Status.Ready }
             Thread.sleep(3000)
             screenshot("table_deleted")
@@ -588,9 +596,9 @@ class WordObjectDragTest {
         val file = sample("sample.docx")
         open(file) { scenario, viewer ->
             pointOf(scenario, viewer, "Tổng quan tính năng").let { (x, y) -> tap(x, y) }
-            press(scenario, "+ Bảng")
+            press(scenario, "INSERT_TABLE")
             Thread.sleep(800)
-            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Chèn"))
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(com.wxiwei.office.R.string.docsdk_edit_insert))
                 .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog()).perform(androidx.test.espresso.action.ViewActions.click())
             Thread.sleep(1000)
             waitFor { viewer.state.value.status == ReaderState.Status.Ready }
@@ -691,9 +699,9 @@ class WordObjectDragTest {
         open(file) { scenario, viewer ->
             // a new 3 x 3 table after "Tổng quan tính năng"
             pointOf(scenario, viewer, "Tổng quan tính năng").let { (x, y) -> tap(x, y) }
-            press(scenario, "+ Bảng")
+            press(scenario, "INSERT_TABLE")
             Thread.sleep(800)
-            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText("Chèn"))
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(com.wxiwei.office.R.string.docsdk_edit_insert))
                 .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog()).perform(androidx.test.espresso.action.ViewActions.click())
             Thread.sleep(1000)
             waitFor { viewer.state.value.status == ReaderState.Status.Ready }
@@ -745,7 +753,7 @@ class WordObjectDragTest {
                 var selected = ""
                 scenario.onActivity { selected = WordSelection(word(viewer)).selectedText() }
                 android.util.Log.i("DragTest", "$needle: selected '$selected' label='${label(scenario)}'")
-                press(scenario, "I")
+                press(scenario, "ITALIC")
                 Thread.sleep(700)
                 screenshot("italic_" + needle)
                 scenario.onActivity {
@@ -774,7 +782,7 @@ class WordObjectDragTest {
                 p = (o[0] + r.left + 1f) to (o[1] + r.exactCenterY())
             }
             tap(p.first, p.second)
-            press(scenario, "I")
+            press(scenario, "ITALIC")
             Thread.sleep(600)
             fun italic(o: Long): Boolean { var b = false; scenario.onActivity { val d = word(viewer).getDocument(); b = com.wxiwei.office.simpletext.model.AttrManage.instance().getFontItalic(d.getParagraph(o)!!.getAttribute(), d.getLeaf(o)!!.getAttribute()) }; return b }
             assertTrue("the word under the caret", (0 until 5).all { italic(at + it) })
@@ -785,7 +793,7 @@ class WordObjectDragTest {
                 p = (o[0] + r.left + 1f) to (o[1] + r.exactCenterY())
             }
             tap(p.first, p.second)
-            press(scenario, "I")
+            press(scenario, "ITALIC")
             type(scenario, "xyz")
             var typedAt = -1L
             scenario.onActivity { val d = word(viewer).getDocument(); typedAt = d.getText(0, (d as WPDocument).getAreaEnd(0)).indexOf("xyz").toLong() }
@@ -808,25 +816,25 @@ class WordObjectDragTest {
             fun lineLeft(text: String): Int { var x = 0; scenario.onActivity { val w = word(viewer); val d = w.getDocument(); val at = d.getText(0, (d as WPDocument).getAreaEnd(0)).indexOf(text).toLong(); x = WordSelection(w).rectsFor(at, at + 1).first().left }; return x }
             pointOf(scenario, viewer, needle).let { (x, y) -> tap(x + 20, y) }
             val left0 = lineLeft(needle)
-            val expected = mapOf("⇥" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_RIGHT, "↔" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER,
-                "☰" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED, "⇤" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_LEFT)
+            val expected = mapOf("ALIGN_RIGHT" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_RIGHT, "ALIGN_CENTER" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER,
+                "ALIGN_JUSTIFY" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_JUSTIFIED, "ALIGN_LEFT" to com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_LEFT)
             for ((button, value) in expected) {
                 press(scenario, button)
                 Thread.sleep(600)
                 assertEquals("$button with the caret", value.toInt(), align(needle))
             }
             // right, then back to left: the line really moved
-            press(scenario, "⇥"); Thread.sleep(600)
+            press(scenario, "ALIGN_RIGHT"); Thread.sleep(600)
             val right = lineLeft(needle)
-            press(scenario, "⇤"); Thread.sleep(600)
+            press(scenario, "ALIGN_LEFT"); Thread.sleep(600)
             assertTrue("right-aligned line starts further right: $left0 -> $right", right > left0)
             assertEquals("back at the left", left0, lineLeft(needle))
-            press(scenario, "⇥"); Thread.sleep(600)
+            press(scenario, "ALIGN_RIGHT"); Thread.sleep(600)
             // a word selected in a table cell, centered
             val (cx, cy) = pointOf(scenario, viewer, "WATCH")
             val t = SystemClock.uptimeMillis()
             inject(MotionEvent.ACTION_DOWN, cx + 8, cy, t); Thread.sleep(900); inject(MotionEvent.ACTION_UP, cx + 8, cy, t); Thread.sleep(700)
-            press(scenario, "↔"); Thread.sleep(600)
+            press(scenario, "ALIGN_CENTER"); Thread.sleep(600)
             assertEquals("↔ on a word in a cell", com.wxiwei.office.constant.wp.WPAttrConstant.PARA_HOR_ALIGN_CENTER.toInt(), align("WATCH"))
             screenshot("align")
         }
@@ -852,12 +860,12 @@ class WordObjectDragTest {
             pointOf(scenario, viewer, needle).let { (x, y) -> tap(x + 20, y) }
             val before = layout()!!
             val firstBefore = lineLeft(0)
-            press(scenario, "Đoạn văn…"); Thread.sleep(800)
-            a11yTap("Đều hai bên")
+            press(scenario, "PARAGRAPH"); Thread.sleep(800)
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_justify))
             a11ySetField(0, "1")
-            a11yTap("Dòng đầu")
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_indent_first_line))
             a11ySetField(2, "0.5")
-            a11yTap("Áp dụng"); Thread.sleep(900)
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_apply)); Thread.sleep(900)
             val after = layout()!!
             android.util.Log.i("DragTest", "paragraph $before -> $after")
             assertEquals("both", after.align)
@@ -867,9 +875,9 @@ class WordObjectDragTest {
             assertTrue("first line moved right: $firstBefore -> $firstAfter", firstAfter > firstBefore + 20)
             screenshot("paragraph_dialog")
             // one step back
-            press(scenario, "↶"); Thread.sleep(800)
+            press(scenario, "UNDO"); Thread.sleep(800)
             assertEquals("undo", before, layout())
-            press(scenario, "↷"); Thread.sleep(800)
+            press(scenario, "REDO"); Thread.sleep(800)
             assertEquals("redo", after, layout())
         }
         val xml = xml(file)
@@ -904,9 +912,9 @@ class WordObjectDragTest {
                 return r
             }
             pointOf(scenario, viewer, needle).let { (x, y) -> tap(x + 20, y) }
-            press(scenario, "⇤"); Thread.sleep(600)
+            press(scenario, "ALIGN_LEFT"); Thread.sleep(600)
             assertEquals("left: nothing spread", 0f to 0f, spread(needle))
-            press(scenario, "☰"); Thread.sleep(800)
+            press(scenario, "ALIGN_JUSTIFY"); Thread.sleep(800)
             val (first, last) = spread(needle)
             android.util.Log.i("JustifyTest", "first line +$first px per space, last line +$last")
             assertTrue("first line spread: $first", first > 0f)
@@ -926,7 +934,7 @@ class WordObjectDragTest {
             val (x, y) = pointOf(scenario, viewer, "WATCH")
             val t = SystemClock.uptimeMillis()
             inject(MotionEvent.ACTION_DOWN, x + 8, y, t); Thread.sleep(900); inject(MotionEvent.ACTION_UP, x + 8, y, t); Thread.sleep(700)
-            press(scenario, "S̶"); Thread.sleep(600)
+            press(scenario, "STRIKETHROUGH"); Thread.sleep(600)
             scenario.onActivity {
                 val d = word(viewer).getDocument(); val at = d.getText(0, (d as WPDocument).getAreaEnd(0)).indexOf("WATCH").toLong()
                 assertTrue("struck in the model", com.wxiwei.office.simpletext.model.AttrManage.instance().getFontStrike(d.getParagraph(at)!!.getAttribute(), d.getLeaf(at + 1)!!.getAttribute()))
@@ -973,7 +981,7 @@ class WordObjectDragTest {
                 inject(MotionEvent.ACTION_DOWN, x + 8, y, t); Thread.sleep(900); inject(MotionEvent.ACTION_UP, x + 8, y, t); Thread.sleep(700)
             }
             selectWatch()
-            press(scenario, "Màu chữ"); Thread.sleep(800)
+            press(scenario, "TEXT_COLOR"); Thread.sleep(800)
             a11y { root -> find(root) { it.className?.toString() == "android.widget.EditText" && it.isEditable }?.let { n ->
                 n.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
                     putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "1A2B3C") }) } }
@@ -984,10 +992,10 @@ class WordObjectDragTest {
             // the code field's keyboard goes away first
             Thread.sleep(1500)
             selectWatch()
-            press(scenario, "Màu chữ"); Thread.sleep(1200)
+            press(scenario, "TEXT_COLOR"); Thread.sleep(1200)
             screenshot("color_picker")
             var r = android.graphics.Rect()
-            a11y { root -> find(root) { it.contentDescription?.toString() == "Màu #ED7D31" }?.getBoundsInScreen(r) }
+            a11y { root -> find(root) { it.contentDescription?.toString() == ui(com.wxiwei.office.R.string.docsdk_edit_color_description, "ED7D31") }?.getBoundsInScreen(r) }
             assertTrue("swatch found", !r.isEmpty)
             tap(r.exactCenterX(), r.exactCenterY())
             Thread.sleep(700)
@@ -1030,7 +1038,7 @@ class WordObjectDragTest {
             val (x, y) = pointOf(scenario, viewer, needle)
             tap(x + 20, y)
             val before = pitch()
-            press(scenario, "Giãn dòng"); Thread.sleep(800)
+            press(scenario, "LINE_SPACING"); Thread.sleep(800)
             a11yTap("2.0")
             a11ySetField(1, "12"); a11ySetField(2, "6")
             a11yTap("OK"); Thread.sleep(800)
@@ -1041,8 +1049,8 @@ class WordObjectDragTest {
             val doubled = pitch()
             android.util.Log.i("DragTest", "line pitch $before -> $doubled")
             assertTrue("lines further apart: $before -> $doubled", doubled > before * 1.5)
-            press(scenario, "Giãn dòng"); Thread.sleep(800)
-            a11yTap("Chính xác (pt)")
+            press(scenario, "LINE_SPACING"); Thread.sleep(800)
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_spacing_exactly))
             a11ySetField(0, "30")
             a11yTap("OK"); Thread.sleep(800)
             val p3 = para()
@@ -1069,10 +1077,10 @@ class WordObjectDragTest {
                 val t = SystemClock.uptimeMillis()
                 inject(MotionEvent.ACTION_DOWN, x + 8, y, t); Thread.sleep(900); inject(MotionEvent.ACTION_UP, x + 8, y, t); Thread.sleep(700)
             }
-            selectWord("WATCH"); press(scenario, "x²"); Thread.sleep(600)
+            selectWord("WATCH"); press(scenario, "SUPERSCRIPT"); Thread.sleep(600)
             assertEquals("superscript", 1, script("WATCH"))
             screenshot("superscript")
-            selectWord("Play-along cho"); press(scenario, "x₂"); Thread.sleep(600)
+            selectWord("Play-along cho"); press(scenario, "SUBSCRIPT"); Thread.sleep(600)
             assertEquals("subscript", 2, script("Play-along cho"))
             screenshot("subscript")
         }
@@ -1096,14 +1104,14 @@ class WordObjectDragTest {
                 inject(MotionEvent.ACTION_DOWN, x + 8, y, t); Thread.sleep(900); inject(MotionEvent.ACTION_UP, x + 8, y, t); Thread.sleep(700)
             }
             val arial = width()
-            selectWord(); press(scenario, "Font"); Thread.sleep(700)
+            selectWord(); press(scenario, "FONT"); Thread.sleep(700)
             screenshot("font_list")
             a11yTap("Times New Roman"); Thread.sleep(700)
             assertEquals("Times New Roman", font())
             val times = width()
             android.util.Log.i("DragTest", "'Play' width: Arial $arial, Times $times")
             assertTrue("drawn in another font: $arial -> $times", times != arial)
-            selectWord(); press(scenario, "Font"); Thread.sleep(700)
+            selectWord(); press(scenario, "FONT"); Thread.sleep(700)
             a11yTap("Roboto"); Thread.sleep(700)
             assertEquals("Roboto", font())
         }
@@ -1124,9 +1132,9 @@ class WordObjectDragTest {
             val n = count("Play-along")
             android.util.Log.i("DragTest", "Play-along x$n")
             assertTrue(n >= 3)
-            press(scenario, "Tìm & thay"); Thread.sleep(800)
+            press(scenario, "FIND_REPLACE"); Thread.sleep(800)
             a11ySetField(0, "Play-along"); a11ySetField(1, "Chơi cùng")
-            a11yTap("Tìm tiếp"); Thread.sleep(700)
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_find_next)); Thread.sleep(700)
             var selected = ""
             scenario.onActivity { selected = WordSelection(word(viewer)).selectedText() }
             assertTrue("first match selected: '$selected'", selected.equals("Play-along", ignoreCase = true))
@@ -1142,18 +1150,18 @@ class WordObjectDragTest {
             android.util.Log.i("DragTest", "match $match dialog $dialogBox")
             assertTrue("match $match not under the dialog $dialogBox", !android.graphics.Rect.intersects(match, dialogBox))
             screenshot("find_first")
-            a11yTap("Thay"); Thread.sleep(700)
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_replace)); Thread.sleep(700)
             assertEquals("one replaced", n - 1, count("Play-along"))
             assertTrue("the new text is there", count("Chơi cùng") >= 1)
-            a11yTap("Thay tất cả"); Thread.sleep(1200)
+            a11yTap(ui(com.wxiwei.office.R.string.docsdk_edit_replace_all)); Thread.sleep(1200)
             val left = count("Play-along")
             android.util.Log.i("DragTest", "after replace all: $left left")
             assertEquals("all replaced", 0, left)
             // close the dialog, undo once: the replace-all comes back as one step
             instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); Thread.sleep(600)
-            press(scenario, "↶"); Thread.sleep(800)
+            press(scenario, "UNDO"); Thread.sleep(800)
             assertEquals("one undo brings them all back", n - 1, count("Play-along"))
-            press(scenario, "↷"); Thread.sleep(800)
+            press(scenario, "REDO"); Thread.sleep(800)
             assertEquals(0, count("Play-along"))
         }
         val plain = Regex("<w:t(?: [^>]*)?>([^<]*)</w:t>").findAll(xml(file)).joinToString("") { it.groupValues[1] }
@@ -1164,20 +1172,31 @@ class WordObjectDragTest {
     @Test
     fun autosaveDraft() {
         val file = sample("sample.docx")
-        com.alf06.document.reader.ui.home.document.office.edit.OfficeEditPanel.autosaveMs = 3000
+        com.wxiwei.office.editor.ui.OfficeEditPanel.autosaveMs = 3000
         try {
             open(file) { scenario, viewer ->
-                com.alf06.document.reader.ui.home.document.office.edit.EditDrafts.delete(context, file)
+                com.wxiwei.office.editor.ui.EditDrafts.delete(context, file)
                 pointOf(scenario, viewer, "Tính năng Play-along cho phép").let { (x, y) -> tap(x + 20, y) }
                 type(scenario, "zz")
                 Thread.sleep(5000)
-                val draft = com.alf06.document.reader.ui.home.document.office.edit.EditDrafts.pending(context, file)
+                val draft = com.wxiwei.office.editor.ui.EditDrafts.pending(context, file)
                 assertTrue("a draft kept while editing", draft != null)
                 val text = java.util.zip.ZipFile(draft!!).use { z -> z.getInputStream(z.getEntry("word/document.xml")).readBytes().toString(Charsets.UTF_8) }
                 assertTrue("the typed text is in it", text.contains("zz"))
             }
         } finally {
-            com.alf06.document.reader.ui.home.document.office.edit.OfficeEditPanel.autosaveMs = 120_000L
+            com.wxiwei.office.editor.ui.OfficeEditPanel.autosaveMs = 120_000L
         }
+    }
+
+    /** An SDK text in the language of the activity on screen. */
+    private fun ui(id: Int, vararg args: Any): String {
+        var text = ""
+        instrumentation.runOnMainSync {
+            val a = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).first()
+            text = a.getString(id, *args)
+        }
+        return text
     }
 }

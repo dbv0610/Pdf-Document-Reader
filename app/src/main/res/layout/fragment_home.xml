@@ -111,10 +111,10 @@
         android:orientation="horizontal"
         android:paddingHorizontal="@dimen/_12sdp"
         android:paddingVertical="@dimen/_10sdp"
-        app:cornerRadius="@dimen/_8sdp"
+        app:uiCornerRadius="@dimen/_8sdp"
         app:layout_constraintTop_toBottomOf="@+id/nstOption"
-        app:stColor="@color/color_d0d0d0"
-        app:strokeWidth="@dimen/_1sdp"
+        app:uiStrokeColor="@color/color_d0d0d0"
+        app:uiStrokeWidth="@dimen/_1sdp"
         tools:layout_editor_absoluteX="16dp">
 
         <ImageView
