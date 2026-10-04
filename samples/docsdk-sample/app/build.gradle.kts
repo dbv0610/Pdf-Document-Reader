@@ -35,7 +35,7 @@ android {
 }
 
 dependencies {
-    implementation("com.editor:docsdk:1.0.0")
+    implementation("com.editor:docsdk:1.1.0")
     implementation("androidx.appcompat:appcompat:1.8.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
 

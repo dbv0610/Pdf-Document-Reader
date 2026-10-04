@@ -3,6 +3,10 @@
 
 # ---- public API ----
 -keep public class com.editor.docsdk.** { public protected *; }
+# PDF viewer API: integrators may embed PDFView directly when they need its advanced
+# configuration, callbacks, document metadata, table of contents, links or annotations.
+# Keep the complete public/protected surface and the names of public types used by it.
+-keep public class com.reader.pdfviewer.** { public protected *; }
 # the edit UI (panels, bar, overlays, dialogs) and what their public signatures use, for apps
 # that build their own edit screen or subclass a panel
 -keep public class com.wxiwei.office.editor.ui.** { public protected *; }

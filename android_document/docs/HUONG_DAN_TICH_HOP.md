@@ -53,7 +53,7 @@ SDK **không khai báo quyền nào**. SDK đọc tài liệu qua `Uri` do ngư�
 SDK có toạ độ Maven là:
 
 ```
-com.editor:docsdk:1.0.0
+com.editor:docsdk:1.1.0
 ```
 
 ### 2.1. Khai báo kho Maven
@@ -103,7 +103,7 @@ Trong `app/build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.editor:docsdk:1.0.0")
+    implementation("com.editor:docsdk:1.1.0")
 }
 ```
 
@@ -112,16 +112,16 @@ dependencies {
 Groovy (`build.gradle`):
 
 ```groovy
-implementation 'com.editor:docsdk:1.0.0'
+implementation 'com.editor:docsdk:1.1.0'
 ```
 
 ### 2.3. Nếu chỉ có file `.aar`
 
-Nên dùng kho Maven, vì Gradle sẽ tự kéo các thư viện phụ thuộc. Nếu buộc phải dùng file `docsdk-1.0.0.aar`, hãy chép nó vào `app/libs/` và khai báo thêm các thư viện nó cần:
+Nên dùng kho Maven, vì Gradle sẽ tự kéo các thư viện phụ thuộc. Nếu buộc phải dùng file `docsdk-1.1.0.aar`, hãy chép nó vào `app/libs/` và khai báo thêm các thư viện nó cần:
 
 ```kotlin
 dependencies {
-    implementation(files("libs/docsdk-1.0.0.aar"))
+    implementation(files("libs/docsdk-1.1.0.aar"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.appcompat:appcompat:1.8.0")
@@ -132,7 +132,7 @@ dependencies {
 }
 ```
 
-Danh sách này lấy từ file `docsdk-1.0.0.pom`. Khi nâng phiên bản SDK, hãy xem lại file POM mới.
+Danh sách này lấy từ file `docsdk-1.1.0.pom`. Khi nâng phiên bản SDK, hãy xem lại file POM mới.
 
 ---
 
@@ -500,6 +500,44 @@ Lưu ý:
 
 ---
 
+### 4.5. Dùng trực tiếp `PDFView` (API nâng cao)
+
+Từ `1.1.0`, app có thể dùng trực tiếp `com.reader.pdfviewer.PDFView` khi cần các API PDF
+nâng cao như mục lục, metadata, liên kết, tìm kiếm, lựa chọn chữ hoặc chú thích. Với nhu cầu xem
+tài liệu thông thường, vẫn nên dùng `DocumentView` để cùng một API mở được mọi định dạng.
+
+```xml
+<com.reader.pdfviewer.PDFView
+    android:id="@+id/pdfView"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+```
+
+Mục lục chỉ có sau khi tài liệu tải xong:
+
+```kotlin
+pdfView.fromUri(uri)
+    .onLoad {
+        val tableOfContents = pdfView.tableOfContents.orEmpty()
+        tableOfContents.forEach { bookmark ->
+            bookmark ?: return@forEach
+            val title = bookmark.title
+            val page = bookmark.pageIdx.toInt() // chỉ số trang bắt đầu từ 0
+            val children = bookmark.children
+        }
+    }
+    .load()
+
+override fun onDestroy() {
+    pdfView.recycle()
+    super.onDestroy()
+}
+```
+
+Các class public trong package `com.reader.pdfviewer` và các package con được giữ nguyên tên khi
+publish để app tích hợp có thể gọi trực tiếp. Các thành phần không public vẫn là implementation
+nội bộ và có thể thay đổi giữa các phiên bản.
+
 ## 5. Xử lý tài liệu: `DocumentTools`
 
 `DocumentTools` xử lý tài liệu mà không cần giao diện. Tạo một lần rồi dùng lại:
@@ -769,7 +807,7 @@ android {
 App đang dùng phiên bản khác của cùng thư viện. Gradle thường tự chọn bản mới nhất. Nếu vẫn trùng, hãy loại bản bị trùng:
 
 ```kotlin
-implementation("com.editor:docsdk:1.0.0") {
+implementation("com.editor:docsdk:1.1.0") {
     exclude(group = "androidx.viewpager2", module = "viewpager2")
 }
 ```
