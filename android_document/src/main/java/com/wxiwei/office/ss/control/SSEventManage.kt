@@ -287,14 +287,16 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
         }
     }
 
-    // smooth pinch: the zoom follows the finger distance continuously on a preview of the last
-    // frame; the sheet is laid out and drawn at the new zoom once, when the pinch ends
+    // smooth pinch: the zoom and the scroll follow the fingers continuously; the cells are a
+    // preview of the last frame under the real row and column headers, and are laid out and
+    // drawn at the new zoom once, when the pinch ends
     private var pinching = false
     private var pinchStartDistance = 0f
     private var pinchBaseZoom = 1f
     private var pinchScale = 1f
-    private var pinchFocusX = 0f
-    private var pinchFocusY = 0f
+    // the sheet point (sheet units) under the middle of the fingers when the pinch started
+    private var pinchSheetX = 0f
+    private var pinchSheetY = 0f
 
     private fun spread(event: MotionEvent): Float {
         val dx = event.getX(0) - event.getX(1)
@@ -311,9 +313,9 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
                 pinchStartDistance = spread(event)
                 pinchBaseZoom = sheetView.getZoom()
                 pinchScale = 1f
-                pinchFocusX = (event.getX(0) + event.getX(1)) / 2
-                pinchFocusY = (event.getY(0) + event.getY(1)) / 2
-                pinching = pinchStartDistance > 0 && ss.beginPinchPreview(pinchFocusX, pinchFocusY)
+                pinchSheetX = sheetView.getScrollX() + ((event.getX(0) + event.getX(1)) / 2 - sheetView.getRowHeaderWidth()) / pinchBaseZoom
+                pinchSheetY = sheetView.getScrollY() + ((event.getY(0) + event.getY(1)) / 2 - sheetView.getColumnHeaderHeight()) / pinchBaseZoom
+                pinching = pinchStartDistance > 0 && ss.beginPinchPreview()
                 if (!pinching) return super.zoom(event)
                 isScroll = true
                 zoomChange = true
@@ -323,36 +325,37 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
                 val target = (pinchBaseZoom * spread(event) / pinchStartDistance)
                     .coerceIn(minOf(ss.getFitZoom(), pinchBaseZoom), MAX_ZOOM)
                 pinchScale = target / pinchBaseZoom
-                ss.setPinchPreviewScale(pinchScale)
+                // that sheet point stays under the middle of the fingers: they zoom and drag at once
+                sheetView.setZoom(target, true)
+                sheetView.scrollTo(
+                    pinchSheetX - ((event.getX(0) + event.getX(1)) / 2 - sheetView.getRowHeaderWidth()) / target,
+                    pinchSheetY - ((event.getY(0) + event.getY(1)) / 2 - sheetView.getColumnHeaderHeight()) / target,
+                )
+                ss.postInvalidateOnAnimation()
             }
-            MotionEvent.ACTION_POINTER_UP -> if (pinching) {
+            // a pinch taken away (a parent intercepts) ends too: the preview must not stay on screen
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> if (pinching) {
                 pinching = false
-                commitPinch(ss, sheetView)
+                commitPinch(ss)
             }
         }
         return true
     }
 
-    /** Applies the pinch zoom, keeping the sheet point under the fingers in place. */
-    private fun commitPinch(ss: Spreadsheet, sheetView: com.wxiwei.office.ss.view.SheetView) {
-        val newZoom = pinchBaseZoom * pinchScale
-        val sheetX = sheetView.getScrollX() + (pinchFocusX - sheetView.getRowHeaderWidth()) / pinchBaseZoom
-        val sheetY = sheetView.getScrollY() + (pinchFocusY - sheetView.getColumnHeaderHeight()) / pinchBaseZoom
+    /** Ends the preview: the sheet, already at the zoom and scroll of the pinch, is drawn for real. */
+    private fun commitPinch(ss: Spreadsheet) {
         ss.endPinchPreview()
-        if (Math.abs(pinchScale - 1f) > 0.001f) {
-            sheetView.setZoom(newZoom, true)
-            sheetView.scrollTo(
-                sheetX - (pinchFocusX - sheetView.getRowHeaderWidth()) / newZoom,
-                sheetY - (pinchFocusY - sheetView.getColumnHeaderHeight()) / newZoom,
-            )
-            control.getMainFrame().changeZoom()
-        }
+        if (Math.abs(pinchScale - 1f) > 0.001f) control.getMainFrame().changeZoom()
         ss.postInvalidate()
     }
 
     override fun onTouch(v: View?, event: MotionEvent): Boolean {
         val ss = spreadsheet ?: return false
         val touchStarted = android.os.SystemClock.uptimeMillis()
+        if (pinching && event.pointerCount != 2) {
+            pinching = false
+            commitPinch(ss)
+        }
         super.onTouch(v, event)
         if (event.pointerCount == 2) {
             scrolling = true
@@ -483,6 +486,9 @@ class SSEventManage(spreadsheet: Spreadsheet, control: IControl) : AEventManage(
 
     override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
         super.onScroll(e1, e2, distanceX, distanceY)
+        // the finger left on the screen after a pinch does not drag: its first move would jump by
+        // all it travelled while pinching
+        if (zoomChange) return true
         val sheetView = spreadsheet!!.getSheetView()!!
         var dx = distanceX
         var dy = distanceY

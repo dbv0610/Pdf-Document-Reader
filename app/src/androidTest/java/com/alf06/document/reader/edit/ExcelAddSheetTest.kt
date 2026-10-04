@@ -299,6 +299,56 @@ class ExcelAddSheetTest {
         assertTrue("merge saved", xml.contains("<mergeCell ref=\"A17:B19\"/>"))
     }
 
+    private fun inject2(action: Int, x0: Float, x1: Float, y: Float, downTime: Long) {
+        val props = Array(2) { android.view.MotionEvent.PointerProperties().apply { id = it; toolType = android.view.MotionEvent.TOOL_TYPE_FINGER } }
+        val coords = Array(2) { i -> android.view.MotionEvent.PointerCoords().apply { x = if (i == 0) x0 else x1; this.y = y; pressure = 1f; size = 1f } }
+        val e = android.view.MotionEvent.obtain(downTime, android.os.SystemClock.uptimeMillis(), action, 2, props, coords, 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0)
+        instrumentation.uiAutomation.injectInputEvent(e, true); e.recycle()
+    }
+
+    /** Pinch in edit mode with the fingers resting a moment: no range drag starts, the row/column headers are there after it. */
+    @Test
+    fun pinchInEditKeepsHeaders() {
+        val file = File(context.filesDir, "edit-test-pinch.xlsx")
+        instrumentation.context.assets.open("samples/sample.xlsx").use { i -> file.outputStream().use { i.copyTo(it) } }
+        val intent = Intent(context, ReadDocumentActivity::class.java)
+            .putExtra(ReadDocumentActivity.ARG_DOCUMENT, RecentDocument(path = file.absolutePath, size = file.length(), type = DocumentType.Excel))
+        ActivityScenario.launch<ReadDocumentActivity>(intent).use { scenario ->
+            lateinit var viewer: OfficeDocumentView
+            scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
+            val end = System.currentTimeMillis() + 60_000
+            while (viewer.state.value.status != ReaderState.Status.Ready && System.currentTimeMillis() < end) Thread.sleep(200)
+            Thread.sleep(3000)
+            scenario.onActivity { it.findViewById<View>(R.id.icEditApp).performClick() }
+            Thread.sleep(1000)
+            fun ss() = (viewer.control!!.getView() as ExcelView).getSpreadsheet()!!
+            val loc = IntArray(2)
+            var w = 0; var h = 0
+            scenario.onActivity { ss().getLocationOnScreen(loc); w = ss().width; h = ss().height }
+            val cx = loc[0] + w / 2f; val cy = loc[1] + h / 2f
+            val t = android.os.SystemClock.uptimeMillis()
+            inject(android.view.MotionEvent.ACTION_DOWN, cx - 100, cy, t)
+            inject2(android.view.MotionEvent.ACTION_POINTER_DOWN or (1 shl android.view.MotionEvent.ACTION_POINTER_INDEX_SHIFT), cx - 100, cx + 100, cy, t)
+            for (i in 1..10) { inject2(android.view.MotionEvent.ACTION_MOVE, cx - 100 - i * 5, cx + 100 + i * 5, cy, t); Thread.sleep(16) }
+            Thread.sleep(1200) // fingers resting: longer than a long press
+            for (i in 11..20) { inject2(android.view.MotionEvent.ACTION_MOVE, cx - 100 - i * 5, cx + 100 + i * 5, cy, t); Thread.sleep(16) }
+            inject2(android.view.MotionEvent.ACTION_POINTER_UP or (1 shl android.view.MotionEvent.ACTION_POINTER_INDEX_SHIFT), cx - 200, cx + 200, cy, t)
+            inject(android.view.MotionEvent.ACTION_UP, cx - 200, cy, t)
+            Thread.sleep(800)
+            scenario.onActivity {
+                val sv = ss().getSheetView()!!
+                assertEquals("no range drag started", null, sv.getCurrentSheet()!!.getSelectionRange())
+                assertEquals("zoomed", 2f, sv.getZoom(), 0.05f)
+                val frame = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                ss().draw(android.graphics.Canvas(frame))
+                assertEquals("headers are shown", com.wxiwei.office.constant.SSConstant.HEADER_FILL_COLOR, frame.getPixel(2, 2))
+            }
+            instrumentation.uiAutomation.takeScreenshot()?.let { b ->
+                File(context.getExternalFilesDir(null), "edit-ui").apply { mkdirs() }.resolve("excel_pinch.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }
+            }
+        }
+    }
+
     /** An SDK text in the language of the activity on screen. */
     private fun ui(id: Int, vararg args: Any): String {
         var text = ""

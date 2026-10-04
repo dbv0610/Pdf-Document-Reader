@@ -350,41 +350,63 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
     /**
      *
      */
-    // pinch-zoom preview: the frame at pinch start, drawn scaled until the gesture ends
+    // pinch-zoom preview: the frame at pinch start, with the zoom, scroll and header sizes it was
+    // drawn at; its cells are drawn where the sheet view now puts them until the gesture ends
     private var pinchFrame: Bitmap? = null
-    private var pinchScale = 1f
-    private var pinchX = 0f
-    private var pinchY = 0f
+    private var pinchZoom = 1f
+    private var pinchScrollX = 0f
+    private var pinchScrollY = 0f
+    private var pinchHeaderWidth = 0
+    private var pinchHeaderHeight = 0
 
-    /** Captures the current frame for a pinch around ([x], [y]); false when it cannot. */
-    fun beginPinchPreview(x: Float, y: Float): Boolean {
+    /** Captures the current frame for a pinch; false when it cannot. */
+    fun beginPinchPreview(): Boolean {
         endPinchPreview()
-        if (width <= 0 || height <= 0 || sheetview == null) return false
+        val view = sheetview
+        if (width <= 0 || height <= 0 || view == null) return false
         return try {
             val frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(frame)
             canvas.drawColor(Color.WHITE)
-            sheetview!!.drawSheet(canvas, true)
+            view.drawSheet(canvas, true)
             pinchFrame = frame
-            pinchScale = 1f
-            pinchX = x
-            pinchY = y
+            pinchZoom = view.getZoom()
+            pinchScrollX = view.getScrollX()
+            pinchScrollY = view.getScrollY()
+            pinchHeaderWidth = view.getRowHeaderWidth()
+            pinchHeaderHeight = view.getColumnHeaderHeight()
             true
         } catch (e: OutOfMemoryError) {
             false
         }
     }
 
-    fun setPinchPreviewScale(scale: Float) {
-        if (pinchFrame == null) return
-        pinchScale = scale
-        postInvalidateOnAnimation()
-    }
-
     fun endPinchPreview() {
         pinchFrame?.recycle()
         pinchFrame = null
-        pinchScale = 1f
+    }
+
+    /** The cells of the pinch frame moved and scaled to the zoom and scroll of now, under the headers of now. */
+    private fun drawPinchPreview(canvas: Canvas, frame: Bitmap, view: SheetView) {
+        val zoom = view.getZoom()
+        val headerWidth = view.getRowHeaderWidth().toFloat()
+        val headerHeight = view.getColumnHeaderHeight().toFloat()
+        val scale = zoom / pinchZoom
+        val left = headerWidth + (pinchScrollX - view.getScrollX()) * zoom
+        val top = headerHeight + (pinchScrollY - view.getScrollY()) * zoom
+        // white where the frame has no cells to show (zoomed out, or dragged past its edge)
+        if (left > headerWidth || top > headerHeight || left + (frame.width - pinchHeaderWidth) * scale < width ||
+            top + (frame.height - pinchHeaderHeight) * scale < height) canvas.drawColor(Color.WHITE)
+        canvas.save()
+        canvas.clipRect(headerWidth, headerHeight, width.toFloat(), height.toFloat())
+        canvas.translate(left, top)
+        canvas.scale(scale, scale)
+        canvas.translate(-pinchHeaderWidth.toFloat(), -pinchHeaderHeight.toFloat())
+        // the headers of the frame are out of date: only its cells
+        canvas.clipRect(pinchHeaderWidth.toFloat(), pinchHeaderHeight.toFloat(), frame.width.toFloat(), frame.height.toFloat())
+        canvas.drawBitmap(frame, 0f, 0f, null)
+        canvas.restore()
+        view.drawHeaders(canvas)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -393,11 +415,7 @@ class Spreadsheet(context: Context, filepath: String?, book: Workbook?, control:
         }
         pinchFrame?.let { frame ->
             // cheap while the fingers move: no cell layout or text drawing per frame
-            canvas.drawColor(SSConstant.HEADER_FILL_COLOR)
-            canvas.save()
-            canvas.scale(pinchScale, pinchScale, pinchX, pinchY)
-            canvas.drawBitmap(frame, 0f, 0f, null)
-            canvas.restore()
+            drawPinchPreview(canvas, frame, sheetview!!)
             return
         }
         try {

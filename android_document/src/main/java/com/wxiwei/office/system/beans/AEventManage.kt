@@ -57,6 +57,14 @@ abstract class AEventManage(
             val currentControl = control
             currentControl.getMainFrame().onEventMethod(v, event, null, -1.0f, -1.0f, IMainFrame.ON_TOUCH)
             if (event.pointerCount == 2) {
+                if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+                    // the detector gets no two-finger events: without this its long press of the
+                    // first finger fires mid-pinch (in edit mode that starts a drag and takes the touch)
+                    val cancel = MotionEvent.obtain(event)
+                    cancel.action = MotionEvent.ACTION_CANCEL
+                    currentGesture.onTouchEvent(cancel)
+                    cancel.recycle()
+                }
                 return zoom(event)
             }
             currentGesture.onTouchEvent(event)
