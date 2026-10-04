@@ -132,6 +132,259 @@ class PdfViewEditTest {
         assertEquals(180f, image.right, 0.5f)
     }
 
+    /**
+     * Points of a page turned a quarter map between the screen and the PDF as pdfium maps them,
+     * and without waiting for pdfium while another thread keeps it busy (a page being rendered).
+     */
+    @Test
+    fun pagePointsMapLikePdfiumWithoutWaitingForIt() {
+        val plain = textPdf("view_map.pdf", 1)
+        val file = File(context.cacheDir, "view_map_turned.pdf").also { it.delete() }
+        val pdfium = PdfiumCore(context)
+        pdfium.newDocument(ParcelFileDescriptor.open(plain, ParcelFileDescriptor.MODE_READ_ONLY)).let { doc ->
+            try {
+                assertTrue(pdfium.setPageRotation(doc, 0, 1))
+                assertTrue(pdfium.saveAsCopy(doc, file.path))
+            } finally {
+                pdfium.closeDocument(doc)
+            }
+        }
+        withView(file) { view ->
+            val shown = onMain { view.pageViewRect(0) }!!
+            val box = RectF(100f, 700f, 220f, 640f)
+            val doc = pdfium.newDocument(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+            try {
+                pdfium.openPage(doc, 0)
+                val expected = pdfium.mapRectToDevice(doc, 0, 0, 0, shown.width().toInt(), shown.height().toInt(), 0, box)
+                expected.sort()
+                expected.offset(shown.left, shown.top)
+                val mapped = onMain { view.pageRectToView(0, box) }!!
+                for ((a, b) in listOf(expected.left to mapped.left, expected.top to mapped.top, expected.right to mapped.right, expected.bottom to mapped.bottom))
+                    assertEquals("as pdfium maps it: $expected / $mapped", a, b, 2f)
+                val (page, point) = onMain { view.viewToPagePoint(mapped.centerX(), mapped.centerY()) }!!
+                assertEquals(0, page)
+                assertEquals(box.centerX(), point.x, 0.5f)
+                assertEquals(box.centerY(), point.y, 0.5f)
+
+                // pdfium kept busy by large renderings, as when a page is drawn again after an edit
+                val busy = java.util.concurrent.atomic.AtomicBoolean(true)
+                val big = Bitmap.createBitmap(3000, 3000, Bitmap.Config.ARGB_8888)
+                val renderer = Thread { while (busy.get()) pdfium.renderPageBitmapOnce(doc, big, 0) }.apply { start() }
+                try {
+                    Thread.sleep(100)
+                    val ms = onMain {
+                        val started = System.nanoTime()
+                        repeat(300) { view.pageRectToView(0, box); view.viewToPagePoint(mapped.centerX(), mapped.centerY()) }
+                        (System.nanoTime() - started) / 1e6
+                    }
+                    assertTrue("600 mappings took ${ms}ms", ms < 50)
+                } finally {
+                    busy.set(false)
+                    renderer.join()
+                    big.recycle()
+                }
+            } finally {
+                pdfium.closeDocument(doc)
+            }
+        }
+    }
+
+    /** An annotation that came with the file: listed and deleted off the main thread, and the deletion can be undone. */
+    @Test
+    fun deleteAnAnnotationOfTheFileAndUndo() {
+        val file = File(context.cacheDir, "view_imported.pdf").also { it.delete() }
+        // snapshots left by a run that was stopped
+        File(context.cacheDir, "pdfview-undo").deleteRecursively()
+        withView(textPdf("view_import_source.pdf", 3)) { view ->
+            assertNotNull(onMain { view.addShape(1, PDFView.SHAPE_RECT, RectF(100f, 700f, 200f, 600f), Color.RED, 2f) })
+            assertTrue(view.saveDocument(file))
+        }
+        withView(file) { view ->
+            val listed = CountDownLatch(1)
+            var all = emptyList<Pair<com.reader.pdfviewer.model.PdfAnnotationInfo, String?>>()
+            onMain { view.loadAnnotations({ true }) { all = it; listed.countDown() } }
+            assertTrue(listed.await(10, TimeUnit.SECONDS))
+            val info = all.single().first
+            assertEquals(1, info.page)
+            assertFalse("it came with the file", onMain { view.canMoveAnnotation(info.name) })
+
+            val deleted = CountDownLatch(1)
+            var removed = false
+            onMain { view.removeAnnotation(info) { removed = it; deleted.countDown() } }
+            assertTrue(deleted.await(10, TimeUnit.SECONDS))
+            assertTrue(removed)
+            assertTrue(onMain { view.getAnnotations(1) }.isEmpty())
+            val snapshots = File(context.cacheDir, "pdfview-undo").listFiles().orEmpty()
+            assertEquals("its copy of the document is on disk", 1, snapshots.size)
+
+            val undone = CountDownLatch(1)
+            var back = false
+            onMain { view.undoEdit { back = it; undone.countDown() } }
+            assertTrue(undone.await(10, TimeUnit.SECONDS))
+            assertTrue(back)
+            assertEquals(info.name, onMain { view.getAnnotations(1) }.single().name)
+            assertTrue(onMain { view.redoEdit() })
+            assertTrue(onMain { view.getAnnotations(1) }.isEmpty())
+            onMain { view.recycle() }
+            assertTrue("removed with the document", File(context.cacheDir, "pdfview-undo").listFiles().orEmpty().isEmpty())
+        }
+    }
+
+    private fun renderPage(file: File, width: Int): Bitmap {
+        val pdfium = PdfiumCore(context)
+        val doc = pdfium.newDocument(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+        try {
+            val size = pdfium.getPagePointSize(doc, 0)!!
+            val bitmap = Bitmap.createBitmap(width, width * size.height / size.width, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE)
+            assertTrue(pdfium.renderPageBitmapOnce(doc, bitmap, 0, renderAnnot = true))
+            return bitmap
+        } finally {
+            pdfium.closeDocument(doc)
+        }
+    }
+
+    /**
+     * A picture added off the main thread, then moved and made larger: it is drawn at its new
+     * place, no longer at the old one. Text added with it embeds only its own glyphs.
+     */
+    @Test
+    fun pictureMovedAndTextWithItsGlyphsOnly() {
+        val file = textPdf("view_picture.pdf", 1)
+        val saved = File(context.cacheDir, "view_picture_saved.pdf").also { it.delete() }
+        withView(file) { view ->
+            // two halves, so a picture cut or stretched the wrong way shows
+            fun halves(width: Int, height: Int, left: Int, right: Int) = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+                for (x in 0 until width) for (y in 0 until height) setPixel(x, y, if (x < width / 2) left else right)
+            }
+            val picture = halves(40, 20, Color.BLUE, Color.RED)
+            val added = CountDownLatch(1)
+            var name: String? = null
+            onMain { view.addImage(0, RectF(50f, 700f, 150f, 650f), picture) { name = it; added.countDown() } }
+            assertTrue(added.await(10, TimeUnit.SECONDS))
+            assertNotNull(name)
+            assertTrue(onMain { view.moveAnnotation(name!!, RectF(300f, 300f, 500f, 200f)) })
+            assertTrue(onMain { view.undoEdit() })
+            assertEquals(RectF(50f, 700f, 150f, 650f), onMain { view.movableBounds(name!!) })
+            assertTrue(onMain { view.redoEdit() })
+            // made larger around where it is
+            val grown = onMain { view.addImage(0, RectF(50f, 150f, 100f, 100f), halves(20, 20, Color.GREEN, Color.BLACK)) }!!
+            assertTrue(onMain { view.moveAnnotation(grown, RectF(30f, 180f, 160f, 80f)) })
+            assertNotNull(onMain { view.addText(0, 60f, 500f, "Xin chào Việt Nam", 18f, Color.RED) })
+            assertTrue(view.saveDocument(saved))
+        }
+        // PDF y goes up: the picture is now at 300..500 x 200..300 of a 595 x 842 page
+        val page = renderPage(saved, 595)
+        assertEquals("at its new place", Color.BLUE, page.getPixel(350, 842 - 250))
+        assertEquals("all of it", Color.RED, page.getPixel(450, 842 - 250))
+        assertEquals("gone from the old one", Color.WHITE, page.getPixel(100, 842 - 675))
+        assertEquals("fills its larger bounds", Color.GREEN, page.getPixel(40, 842 - 90))
+        assertEquals(Color.BLACK, page.getPixel(150, 842 - 170))
+        assertEquals("and nothing more", Color.WHITE, page.getPixel(170, 842 - 90))
+        // the saved appearance is at the bounds itself: viewers that do not fit it into the rectangle show it right too
+        val bytes = saved.readBytes().toString(Charsets.ISO_8859_1)
+        assertTrue("appearance box of the moved picture", Regex("/BBox\\s*\\[\\s*300 200 500 300\\s*]").containsMatchIn(bytes))
+        assertTrue("appearance box of the enlarged picture", Regex("/BBox\\s*\\[\\s*30 80 160 180\\s*]").containsMatchIn(bytes))
+        var red = 0
+        for (y in 842 - 505 until 842 - 475) for (x in 60 until 260) if (Color.red(page.getPixel(x, y)) > 180 && Color.blue(page.getPixel(x, y)) < 100) red++
+        assertTrue("the text is drawn ($red red pixels)", red > 100)
+        assertTrue("grew by ${saved.length() - file.length()} bytes", saved.length() - file.length() < 150_000)
+    }
+
+    /**
+     * Edits are drawn by rendering again only the parts of the page they touch: each shows once
+     * its part is redrawn, and undoing one leaves the other as it was drawn.
+     */
+    @Test
+    fun editIsShownAfterRedrawingItsPart() {
+        withView(textPdf("view_partial.pdf", 1)) { view ->
+            fun shown(): Bitmap = onMain {
+                Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(android.graphics.Canvas(it)) }
+            }
+            fun colorAt(pageRect: RectF): Int {
+                val r = onMain { view.pageRectToView(0, pageRect) }!!
+                return shown().getPixel(r.centerX().toInt(), r.centerY().toInt())
+            }
+            val first = RectF(100f, 700f, 200f, 600f)
+            val second = RectF(350f, 300f, 450f, 200f)
+            assertNotNull(onMain { view.addShape(0, PDFView.SHAPE_RECT, first, Color.RED, 2f, Color.RED) })
+            assertNotNull(onMain { view.addShape(0, PDFView.SHAPE_RECT, second, Color.BLUE, 2f, Color.BLUE) })
+            val until = System.currentTimeMillis() + 10_000
+            while ((colorAt(first) != Color.RED || colorAt(second) != Color.BLUE) && System.currentTimeMillis() < until) Thread.sleep(100)
+            assertEquals(Color.RED, colorAt(first))
+            assertEquals(Color.BLUE, colorAt(second))
+            // undoing the second leaves the first as it is drawn
+            assertTrue(onMain { view.undoEdit() })
+            val again = System.currentTimeMillis() + 10_000
+            while (colorAt(second) == Color.BLUE && System.currentTimeMillis() < again) Thread.sleep(100)
+            assertEquals(Color.WHITE, colorAt(second))
+            assertEquals(Color.RED, colorAt(first))
+        }
+    }
+
+    /**
+     * A document of 300 pages: every edit returns to the main thread quickly, also right after
+     * another one, when the page is being drawn again. The times are logged (tag PdfEditPerf).
+     */
+    @Test
+    fun editsStayFastOnALargeDocument() {
+        val file = textPdf("view_large.pdf", 300)
+        val saved = File(context.cacheDir, "view_large_saved.pdf").also { it.delete() }
+        withView(file) { view ->
+            val times = LinkedHashMap<String, Double>()
+            /** Longest time [block] keeps the main thread, over [count] runs. */
+            fun <T> onMainTimed(label: String, count: Int = 1, block: (Int) -> T): T {
+                var result: T? = null
+                var longest = 0.0
+                repeat(count) { i ->
+                    val ms = onMain { val started = System.nanoTime(); result = block(i); (System.nanoTime() - started) / 1e6 }
+                    longest = maxOf(longest, ms)
+                }
+                times[label] = longest
+                @Suppress("UNCHECKED_CAST")
+                return result as T
+            }
+            val shape = onMainTimed("add shape (x10)", 10) { i ->
+                view.addShape(0, PDFView.SHAPE_RECT, RectF(60f + i * 40, 780f, 90f + i * 40, 750f), Color.RED, 2f)
+            }!!
+            onMainTimed("move shape (x10)", 10) { i -> view.moveAnnotation(shape, RectF(100f + i * 10, 600f, 200f + i * 10, 500f)) }
+            val page = onMain { view.pageViewRect(0) }!!
+            onMainTimed("ink stroke of 300 points (x5)", 5) { stroke ->
+                view.startInkStroke(page.left + 40, page.top + 200 + stroke * 30)
+                for (i in 1..300) view.addInkPoint(page.left + 40 + i * (page.width() - 80) / 300, page.top + 200 + stroke * 30 + (i % 20))
+                view.finishInkStroke()
+            }
+            val onShape = onMain { view.pageRectToView(0, view.movableBounds(shape)!!) }!!
+            assertNotNull(onMainTimed("find the annotation under a tap (x20)", 20) { view.findAnnotationAt(onShape.centerX(), onShape.centerY()) })
+            onMainTimed("undo, redo (x10)", 10) { view.undoEdit(); view.redoEdit() }
+
+            val photo = Bitmap.createBitmap(2000, 1500, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.DKGRAY) }
+            val added = CountDownLatch(1)
+            var picture: String? = null
+            val addStarted = System.nanoTime()
+            onMainTimed("add a 2000 x 1500 picture: main thread") { view.addImage(0, RectF(100f, 400f, 300f, 250f), photo) { picture = it; added.countDown() } }
+            assertTrue(added.await(30, TimeUnit.SECONDS))
+            times["add a 2000 x 1500 picture: until it is there"] = (System.nanoTime() - addStarted) / 1e6
+            onMainTimed("move the picture (x10)", 10) { i -> view.moveAnnotation(picture!!, RectF(100f + i * 5, 400f, 300f + i * 5, 250f)) }
+
+            val listed = CountDownLatch(1)
+            var count = 0
+            val listStarted = System.nanoTime()
+            onMainTimed("list the annotations: main thread") { view.loadAnnotations({ true }) { count = it.size; listed.countDown() } }
+            assertTrue(listed.await(60, TimeUnit.SECONDS))
+            times["list the annotations of 300 pages: until listed"] = (System.nanoTime() - listStarted) / 1e6
+            assertEquals("10 shapes, 5 strokes, 1 picture", 16, count)
+
+            val saveStarted = System.nanoTime()
+            assertTrue(view.saveDocument(saved))
+            times["save (off the main thread)"] = (System.nanoTime() - saveStarted) / 1e6
+
+            for ((label, ms) in times) android.util.Log.i("PdfEditPerf", "%-50s %8.1f ms".format(label, ms))
+            for ((label, ms) in times) if (!label.contains("until") && !label.startsWith("save"))
+                assertTrue("$label kept the main thread ${ms}ms", ms < 100)
+        }
+    }
+
     @Test
     fun documentWithoutFormHasNoFields() {
         withView(textPdf("view_noform.pdf", 1)) { view ->

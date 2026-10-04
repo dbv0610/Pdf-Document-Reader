@@ -282,7 +282,7 @@ class PdfTools(context: Context) {
             val doc = open(source)
             try {
                 val count = pdfium.getPageCount(doc)
-                var recognized = 0
+                val pages = ArrayList<PageWords>()
                 for (index in 0 until count) {
                     currentCoroutineContext().ensureActive()
                     val layer = pdfium.getPageTextLayout(doc, index)
@@ -290,11 +290,12 @@ class PdfTools(context: Context) {
                         val bitmap = renderForOcr(doc, index, layer.pageWidth, layer.pageHeight)
                         if (bitmap != null) {
                             val lines = try { ocr.recognize(bitmap) } finally { bitmap.recycle() }
-                            if (addWords(doc, index, lines, null)) recognized++
+                            pages += PageWords(index, lines, null)
                         }
                     }
                     onProgress(index + 1, count)
                 }
+                val recognized = addWords(doc, pages)
                 save(doc, output)
                 recognized
             } finally {
@@ -302,8 +303,27 @@ class PdfTools(context: Context) {
             }
         }
 
-    /** OCR words of page [index] (boxes relative to the page as shown) put in as invisible text, leaving out words in [skip]. */
-    private fun addWords(doc: PdfDocument, index: Int, lines: List<com.reader.pdfviewer.search.OcrLine>, skip: List<android.graphics.RectF>?): Boolean {
+    /** The OCR lines of page [index] to put in as invisible text, leaving out the words in [skip]. */
+    private class PageWords(val index: Int, val lines: List<com.reader.pdfviewer.search.OcrLine>, val skip: List<android.graphics.RectF>?) {
+        fun kept(word: com.reader.pdfviewer.search.OcrWord) = skip?.any { android.graphics.RectF.intersects(it, word.box) } != true
+    }
+
+    /**
+     * Puts the words of [pages] in as invisible text, all with one font that has just their
+     * characters (those of skipped words stay out of the file). Returns the number of pages that got text.
+     */
+    private fun addWords(doc: PdfDocument, pages: List<PageWords>): Int {
+        if (pages.isEmpty()) return 0
+        val text = StringBuilder()
+        for (page in pages) for (line in page.lines) for (word in line.words) if (page.kept(word)) text.append(line.text, word.start, word.end)
+        val font = unicodeFont(text.toString())
+        return pages.count { addWords(doc, it, font) }
+    }
+
+    /** OCR words of a page (boxes relative to the page as shown) put in as invisible text. */
+    private fun addWords(doc: PdfDocument, page: PageWords, font: String?): Boolean {
+        val index = page.index
+        val lines = page.lines
         val words = ArrayList<String>()
         val boxes = ArrayList<Float>()
         val size = pdfium.getPagePointSize(doc, index) ?: return false
@@ -314,7 +334,7 @@ class PdfTools(context: Context) {
         try {
             for (line in lines) for (word in line.words) {
                 val box = word.box
-                if (skip?.any { android.graphics.RectF.intersects(it, box) } == true) continue
+                if (!page.kept(word)) continue
                 val a = pdfium.deviceToPageCoords(doc, index, 0, 0, gw, gh, 0, (box.left * gw).toInt(), (box.top * gh).toInt()) ?: continue
                 val b = pdfium.deviceToPageCoords(doc, index, 0, 0, gw, gh, 0, (box.right * gw).toInt(), (box.bottom * gh).toInt()) ?: continue
                 words += line.text.substring(word.start, word.end)
@@ -324,7 +344,7 @@ class PdfTools(context: Context) {
             pdfium.closePage(doc, index)
         }
         if (words.isEmpty()) return false
-        return pdfium.addInvisibleWords(doc, index, words.toTypedArray(), boxes.toFloatArray(), unicodeFont(), pdfium.getPageRotation(doc, index))
+        return pdfium.addInvisibleWords(doc, index, words.toTypedArray(), boxes.toFloatArray(), font, pdfium.getPageRotation(doc, index))
     }
 
     /** How much [compress] shrinks pictures: those shown at more than [dpi] are scaled down, JPEG [quality]. */
@@ -403,7 +423,10 @@ class PdfTools(context: Context) {
         val doc = open(source)
         try {
             val count = pdfium.getPageCount(doc)
-            val font = unicodeFont()
+            // one font with just the characters of every text put on the pages
+            val all = StringBuilder()
+            for (index in 0 until count) if (pages == null || index in pages) for (stamp in stamps) all.append(stamp.text(index + 1, count))
+            val font = unicodeFont(all.toString())
             for (index in 0 until count) {
                 currentCoroutineContext().ensureActive()
                 if (pages != null && index !in pages) continue
@@ -455,6 +478,7 @@ class PdfTools(context: Context) {
         val dest = pdfium.newEmptyDocument()
         try {
             val count = pdfium.getPageCount(src)
+            val words = ArrayList<PageWords>()
             for (index in 0 until count) {
                 currentCoroutineContext().ensureActive()
                 val boxes = areas[index].orEmpty()
@@ -472,13 +496,14 @@ class PdfTools(context: Context) {
                         val jpeg = ByteArrayOutputStream().use { out -> bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out); out.toByteArray() }
                         if (!pdfium.addJpegPage(dest, jpeg, size.width.toFloat(), size.height.toFloat())) throw IOException("Cannot add page ${index + 1}")
                         val lines = try { ocr.recognize(bitmap) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
-                        addWords(dest, pdfium.getPageCount(dest) - 1, lines, boxes)
+                        words += PageWords(pdfium.getPageCount(dest) - 1, lines, boxes)
                     } finally {
                         bitmap.recycle()
                     }
                 }
                 onProgress(index + 1, count)
             }
+            addWords(dest, words)
             save(dest, output)
         } finally {
             pdfium.closeDocument(dest)
@@ -796,7 +821,7 @@ class PdfTools(context: Context) {
             }
         }
 
-    private fun unicodeFont(): String? = com.reader.pdfviewer.util.SystemFonts.unicode()
+    private fun unicodeFont(text: String): String? = com.reader.pdfviewer.util.SystemFonts.unicodeFor(appContext, text)
 
     /** Adds image pages to a PDF being created by [createFromImages]. */
     class ImagePageWriter internal constructor(private val pdfium: PdfiumCore, private val doc: PdfDocument) {

@@ -214,7 +214,7 @@ internal class PdfReaderTools(
                 askNoteText(text.orEmpty()) { changed -> if (pdfView.setAnnotationText(info, changed)) host.editsChanged() }
             }
             positive(str(R.string.pdf_delete)) {
-                if (pdfView.removeAnnotation(info)) { annotate.clearSelection(); host.editsChanged() }
+                pdfView.removeAnnotation(info) { removed -> if (removed) { annotate.clearSelection(); host.editsChanged() } }
             }
             negative(str(R.string.pdf_tool_close))
         }
@@ -234,20 +234,19 @@ internal class PdfReaderTools(
     /** Every annotation of the document: a tap goes to its page. */
     fun showAnnotationList() {
         if (!host.loaded) return
-        val all = (0 until pdfView.pageCount).flatMap { page -> pdfView.getAnnotations(page).filter { it.subtype != SUBTYPE_LINK && it.subtype != SUBTYPE_WIDGET && it.subtype != SUBTYPE_POPUP } }
-        if (all.isEmpty()) return toast(str(R.string.pdf_annot_none))
-        val labels = all.map { a ->
-            val text = pdfView.getAnnotationText(a)?.replace('\n', ' ')?.take(60)
-            str(R.string.pdf_page_n, a.page + 1) + " · " + typeName(a.subtype) + (text?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: "")
-        }
-        dialogs.show(str(R.string.pdf_annot_list)) {
-            labels.forEachIndexed { i, label ->
-                row(label, onClick = { dialog?.dismiss(); host.jumpTo(all[i].page) },
-                    actions = listOf(DialogKit.Action("✕", str(R.string.pdf_delete)) {
-                        if (pdfView.removeAnnotation(all[i])) { host.editsChanged(); dialog?.dismiss(); showAnnotationList() }
-                    }))
+        pdfView.loadAnnotations({ it.subtype != SUBTYPE_LINK && it.subtype != SUBTYPE_WIDGET && it.subtype != SUBTYPE_POPUP }) { all ->
+            if (all.isEmpty()) return@loadAnnotations toast(str(R.string.pdf_annot_none))
+            dialogs.show(str(R.string.pdf_annot_list)) {
+                for ((a, contents) in all) {
+                    val text = contents?.replace('\n', ' ')?.take(60)
+                    val label = str(R.string.pdf_page_n, a.page + 1) + " · " + typeName(a.subtype) + (text?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: "")
+                    row(label, onClick = { dialog?.dismiss(); host.jumpTo(a.page) },
+                        actions = listOf(DialogKit.Action("✕", str(R.string.pdf_delete)) {
+                            pdfView.removeAnnotation(a) { removed -> if (removed) { host.editsChanged(); dialog?.dismiss(); showAnnotationList() } }
+                        }))
+                }
+                negative(str(R.string.pdf_tool_close))
             }
-            negative(str(R.string.pdf_tool_close))
         }
     }
 
@@ -424,7 +423,7 @@ internal class PdfReaderTools(
                 val scale = minOf(w / bitmap.width, h / bitmap.height)
                 val bw = bitmap.width * scale; val bh = bitmap.height * scale
                 val cx = (r.left + r.right) / 2; val cy = (r.top + r.bottom) / 2
-                if (pdfView.addImage(field.page, RectF(cx - bw / 2, cy + bh / 2, cx + bw / 2, cy - bh / 2), bitmap) != null) host.editsChanged()
+                pdfView.addImage(field.page, RectF(cx - bw / 2, cy + bh / 2, cx + bw / 2, cy - bh / 2), bitmap) { name -> if (name != null) host.editsChanged() }
             }
             else -> dialogs.show(title) {
                 val input = input(title, field.value).apply {

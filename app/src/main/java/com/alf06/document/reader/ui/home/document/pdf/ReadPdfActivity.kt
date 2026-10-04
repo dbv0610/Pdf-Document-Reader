@@ -469,7 +469,7 @@ class ReadPdfActivity : BaseActivity<ActivityReadPdfBinding>(ActivityReadPdfBind
             })
         }
         binding.icInkClose.click { pdfTools.stopAnnotating() }
-        binding.icInkUndo.setOnClickListener { binding.pdfRead.undoInk() }
+        binding.icInkUndo.setOnClickListener { binding.pdfRead.undoEdit { } }
         binding.icInkRedo.setOnClickListener { binding.pdfRead.redoInk() }
         binding.icInkSave.setOnClickListener {
             binding.icInkSave.isEnabled = false

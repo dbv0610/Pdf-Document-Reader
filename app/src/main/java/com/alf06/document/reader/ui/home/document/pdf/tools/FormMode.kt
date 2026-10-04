@@ -26,7 +26,14 @@ internal class FormMode(private val overlay: PdfOverlayView, private val host: H
     fun refresh() { fields.clear(); overlay.invalidate() }
 
     override fun onDown(x: Float, y: Float): Boolean {
-        touched = overlay.pdfView.findFormFieldAt(x, y)?.takeIf { !it.readOnly }
+        // from the fields already read: a touch does not wait for pdfium
+        val pdf = overlay.pdfView
+        val slop = overlay.dp(4f)
+        touched = pdf.pageAt(x, y)?.let { page ->
+            fieldsOf(page).lastOrNull { field ->
+                pdf.pageRectToView(page, field.rect)?.apply { inset(-slop, -slop) }?.contains(x, y) == true
+            }
+        }?.takeIf { !it.readOnly }
         return touched != null
     }
 

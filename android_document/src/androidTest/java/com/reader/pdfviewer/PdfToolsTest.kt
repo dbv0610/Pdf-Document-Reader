@@ -116,6 +116,8 @@ class PdfToolsTest {
             assertTrue("header on $p: $t", t.contains("Header Co"))
             assertTrue("body kept on $p", t.contains("Body"))
         }
+        // only the glyphs of these texts are embedded, not the whole system font
+        assertTrue("grew by ${out.length() - src.length()} bytes", out.length() - src.length() < 150_000)
         // the number is at the bottom of the page, the header at the top
         withDoc(out) { doc ->
             val layout = pdfium.getPageTextLayout(doc, 0)!!

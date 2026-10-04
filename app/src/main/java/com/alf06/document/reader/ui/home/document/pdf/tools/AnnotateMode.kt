@@ -147,7 +147,7 @@ internal class AnnotateMode(private val overlay: PdfOverlayView, private val hos
                 }
             }
             Tool.ERASER -> if (tap) pdf.findAnnotationAt(x, y)?.let {
-                if (pdf.removeAnnotation(it)) host.changed()
+                pdf.removeAnnotation(it) { removed -> if (removed) host.changed() }
             }
             Tool.TEXT -> if (tap) pointAt(x, y)?.let { (page, p) ->
                 host.askText { text, size ->
@@ -203,9 +203,10 @@ internal class AnnotateMode(private val overlay: PdfOverlayView, private val hos
         val height = widthPt * bitmap.height / bitmap.width
         // centered on the tap
         val rect = RectF(p.x - widthPt / 2, p.y + height / 2, p.x + widthPt / 2, p.y - height / 2)
-        val name = pdf.addImage(page, rect, bitmap) ?: return host.message("✗")
         pending = null
-        placed(name, page)
+        pdf.addImage(page, rect, bitmap) { name ->
+            if (name == null) { pending = bitmap to widthPt; host.message("✗") } else placed(name, page)
+        }
     }
 
     /** A view point of [page] in PDF coordinates, kept inside the page. */

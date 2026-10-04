@@ -120,6 +120,8 @@ class PdfiumCore(ctx: Context) {
     private external fun nativeAddImageAnnot(docPtr: Long, pagePtr: Long, bitmap: Bitmap,
         left: Float, top: Float, right: Float, bottom: Float, name: String): Boolean
     private external fun nativeGetAnnots(pagePtr: Long): Array<String?>
+    private external fun nativeReadAnnots(docPtr: Long, pageIndex: Int): Array<String?>
+    private external fun nativeMoveImageAnnot(pagePtr: Long, name: String, left: Float, top: Float, right: Float, bottom: Float): Boolean
     private external fun nativeRemoveAnnotAt(pagePtr: Long, index: Int): Boolean
 
     private external fun nativeEditSnapshot(docPtr: Long): ByteArray?
@@ -432,11 +434,30 @@ class PdfiumCore(ctx: Context) {
     /** Read annotation metadata from an opened document page. */
     fun getAnnotations(doc: PdfDocument, page: Int): List<com.reader.pdfviewer.model.PdfAnnotationInfo> = synchronized(lock) {
         val ptr = doc.mNativePagesPtr[page] ?: return@synchronized emptyList()
-        nativeGetAnnots(ptr).toList().chunked(2).mapNotNull { row ->
-            val v = row[0]?.split(' ') ?: return@mapNotNull null
-            com.reader.pdfviewer.model.PdfAnnotationInfo(page, v[0].toInt(), v[1].toInt(),
-                RectF(v[2].toFloat(), v[3].toFloat(), v[4].toFloat(), v[5].toFloat()), row[1]?.takeIf { it.isNotEmpty() })
+        nativeGetAnnots(ptr).toList().chunked(2).mapNotNull { annotationInfo(page, it) }
+    }
+
+    private fun annotationInfo(page: Int, row: List<String?>): com.reader.pdfviewer.model.PdfAnnotationInfo? {
+        val v = row[0]?.split(' ') ?: return null
+        return com.reader.pdfviewer.model.PdfAnnotationInfo(page, v[0].toInt(), v[1].toInt(),
+            RectF(v[2].toFloat(), v[3].toFloat(), v[4].toFloat(), v[5].toFloat()), row[1]?.takeIf { it.isNotEmpty() })
+    }
+
+    /**
+     * The annotations of [page] with their text (a note's), without opening the page for the
+     * viewer: it is loaded and closed here. Empty once the document is closed. Any thread.
+     */
+    fun readAnnotations(doc: PdfDocument, page: Int): List<Pair<com.reader.pdfviewer.model.PdfAnnotationInfo, String?>> = synchronized(lock) {
+        if (doc.mNativeDocPtr == 0L) return@synchronized emptyList()
+        nativeReadAnnots(doc.mNativeDocPtr, page).toList().chunked(3).mapNotNull { row ->
+            annotationInfo(page, row)?.let { it to row[2]?.takeIf { text -> text.isNotEmpty() } }
         }
+    }
+
+    /** Puts the picture annotation [name] at [rect] without writing its pixels again. */
+    fun moveImage(doc: PdfDocument, page: Int, name: String, rect: RectF): Boolean = synchronized(lock) {
+        val ptr = doc.mNativePagesPtr[page] ?: return@synchronized false
+        nativeMoveImageAnnot(ptr, name, rect.left, rect.top, rect.right, rect.bottom)
     }
 
     /** Remove an annotation by its current index. */

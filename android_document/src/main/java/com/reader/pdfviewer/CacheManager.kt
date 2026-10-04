@@ -111,18 +111,20 @@ class CacheManager {
     /**
      * Keep the bitmaps of [page] rendered at [zoom] visible until freshly rendered parts replace them.
      * Parts of other zoom levels would never be replaced, they are dropped.
+     * With [area] (0..1 of the page) only the parts it touches are rendered again; the others
+     * are as the page is at [inkRevision] already.
      */
-    fun markPageStale(page: Int, zoom: Float) {
+    fun markPageStale(page: Int, zoom: Float, area: RectF? = null, inkRevision: Long = 0) {
         synchronized(passiveActiveLock) {
-            markStale(passiveCache, page, zoom)
-            markStale(activeCache, page, zoom)
+            markStale(passiveCache, page, zoom, area, inkRevision)
+            markStale(activeCache, page, zoom, area, inkRevision)
         }
         synchronized(thumbnails) {
             for (part in thumbnails) if (part.page == page) part.stale = true
         }
     }
 
-    private fun markStale(cache: PriorityQueue<PagePart>, page: Int, zoom: Float) {
+    private fun markStale(cache: PriorityQueue<PagePart>, page: Int, zoom: Float, area: RectF?, inkRevision: Long) {
         val iterator = cache.iterator()
         while (iterator.hasNext()) {
             val part = iterator.next()
@@ -130,7 +132,9 @@ class CacheManager {
                 continue
             }
             if (part.renderingZoom.compareTo(zoom) == 0) {
-                part.stale = true
+                val bounds = part.pageRelativeBounds
+                if (area == null || bounds == null || RectF.intersects(area, bounds)) part.stale = true
+                else if (!part.stale && part.inkRevision < inkRevision) part.inkRevision = inkRevision
             } else {
                 iterator.remove()
                 part.renderedBitmap?.recycle()

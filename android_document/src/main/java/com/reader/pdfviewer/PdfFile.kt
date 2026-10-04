@@ -552,6 +552,17 @@ class PdfFile(
         return pdfiumCore!!.getAnnotations(pdfDocument, docPage).map { it.copy(page = pageIndex) }
     }
 
+    /** The annotations of a page with their text, read without keeping the page open. Any thread. */
+    fun readAnnotations(pageIndex: Int): List<Pair<com.reader.pdfviewer.model.PdfAnnotationInfo, String?>> {
+        val docPage = documentPage(pageIndex)
+        if (docPage < 0) return emptyList()
+        return pdfiumCore?.readAnnotations(pdfDocument, docPage).orEmpty().map { (info, text) -> info.copy(page = pageIndex) to text }
+    }
+
+    /** Puts the picture annotation [name] at [rect] without writing its pixels again. */
+    fun moveImage(pageIndex: Int, name: String, rect: android.graphics.RectF): Boolean =
+        onPage(pageIndex, false) { pdfiumCore!!.moveImage(pdfDocument, it, name, rect) }
+
     /** removeAnnotAt: map the viewer page to its document page before accessing annotations. */
     fun removeAnnotAt(pageIndex: Int, index: Int): Boolean {
         val docPage = documentPage(pageIndex)

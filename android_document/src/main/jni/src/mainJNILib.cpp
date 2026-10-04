@@ -1125,11 +1125,19 @@ JNI_FUNC(jboolean, PdfiumCore, nativeAddImageAnnot)(JNI_ARGS, jlong docPtr, jlon
     return finishObjectAnnot(env, page, annot, rect, name, NULL, objects) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNI_FUNC(jobjectArray, PdfiumCore, nativeGetAnnots)(JNI_ARGS, jlong pagePtr) {
-    auto page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+static jstring annotString(JNIEnv* env, FPDF_ANNOTATION annot, const char* key) {
+    unsigned long bytes = FPDFAnnot_GetStringValue(annot, key, NULL, 0);
+    std::vector<unsigned short> value(std::max(1ul, (bytes+1)/2), 0);
+    if (bytes) FPDFAnnot_GetStringValue(annot, key, value.data(), bytes);
+    return env->NewString(reinterpret_cast<const jchar*>(value.data()), bytes >= 2 ? bytes/2-1 : 0);
+}
+
+/** For each annotation of [page]: its metadata and name, and with [contents] its /Contents text. */
+static jobjectArray readAnnots(JNIEnv* env, FPDF_PAGE page, bool contents) {
+    int stride = contents ? 3 : 2;
     int count = page ? FPDFPage_GetAnnotCount(page) : 0;
     auto cls = env->FindClass("java/lang/String");
-    auto result = env->NewObjectArray(std::max(0, count) * 2, cls, NULL);
+    auto result = env->NewObjectArray(std::max(0, count) * stride, cls, NULL);
     for (int i = 0; i < count; ++i) {
         auto annot = FPDFPage_GetAnnot(page, i);
         if (!annot) continue;
@@ -1139,18 +1147,70 @@ JNI_FUNC(jobjectArray, PdfiumCore, nativeGetAnnots)(JNI_ARGS, jlong pagePtr) {
             snprintf(values, sizeof(values), "%d %d %.9g %.9g %.9g %.9g", i,
                 FPDFAnnot_GetSubtype(annot), rect.left, rect.top, rect.right, rect.bottom);
             auto metadata = env->NewStringUTF(values);
-            env->SetObjectArrayElement(result, i * 2, metadata);
+            env->SetObjectArrayElement(result, i * stride, metadata);
             env->DeleteLocalRef(metadata);
-            unsigned long bytes = FPDFAnnot_GetStringValue(annot, "NM", NULL, 0);
-            std::vector<unsigned short> name(std::max(1ul, (bytes+1)/2), 0);
-            if (bytes) FPDFAnnot_GetStringValue(annot, "NM", name.data(), bytes);
-            auto nm = env->NewString(reinterpret_cast<const jchar*>(name.data()), bytes >= 2 ? bytes/2-1 : 0);
-            env->SetObjectArrayElement(result, i * 2 + 1, nm);
+            auto nm = annotString(env, annot, "NM");
+            env->SetObjectArrayElement(result, i * stride + 1, nm);
             env->DeleteLocalRef(nm);
+            if (contents) {
+                auto text = annotString(env, annot, "Contents");
+                env->SetObjectArrayElement(result, i * stride + 2, text);
+                env->DeleteLocalRef(text);
+            }
         }
         FPDFPage_CloseAnnot(annot);
     }
     return result;
+}
+
+JNI_FUNC(jobjectArray, PdfiumCore, nativeGetAnnots)(JNI_ARGS, jlong pagePtr) {
+    return readAnnots(env, reinterpret_cast<FPDF_PAGE>(pagePtr), false);
+}
+
+/**
+ * The annotations of page [pageIndex] with their text, read from the page loaded just for this
+ * and closed again: listing a whole document does not keep its pages open.
+ */
+JNI_FUNC(jobjectArray, PdfiumCore, nativeReadAnnots)(JNI_ARGS, jlong docPtr, jint pageIndex) {
+    auto doc = reinterpret_cast<DocumentFile*>(docPtr);
+    FPDF_PAGE page = doc && doc->pdfDocument ? FPDF_LoadPage(doc->pdfDocument, pageIndex) : NULL;
+    auto result = readAnnots(env, page, true);
+    if (page) FPDF_ClosePage(page);
+    return result;
+}
+
+/**
+ * Puts the picture of the stamp annotation [name] at new bounds by changing its rectangle only:
+ * the appearance stays as it is, a viewer fits its box (BBox) into the rectangle. The pixels are
+ * not written again. Not every viewer scales the box, so before saving the caller writes the
+ * picture again at its bounds.
+ */
+JNI_FUNC(jboolean, PdfiumCore, nativeMoveImageAnnot)(JNI_ARGS, jlong pagePtr, jstring name,
+        jfloat left, jfloat top, jfloat right, jfloat bottom) {
+    FPDF_PAGE page = reinterpret_cast<FPDF_PAGE>(pagePtr);
+    if (!page || !name || !std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right) ||
+        !std::isfinite(bottom) || right <= left || top <= bottom) return JNI_FALSE;
+    auto expected = annotName(env, name);
+    int count = FPDFPage_GetAnnotCount(page);
+    for (int i = 0; i < count; ++i) {
+        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(page, i);
+        if (!annot) continue;
+        unsigned long bytes = FPDFAnnot_GetStringValue(annot, "NM", NULL, 0);
+        bool matches = false;
+        if (bytes == expected.size() * sizeof(unsigned short)) {
+            std::vector<unsigned short> value(expected.size(), 0);
+            matches = FPDFAnnot_GetStringValue(annot, "NM", value.data(), bytes) == bytes && value == expected;
+        }
+        bool ok = false;
+        if (matches) {
+            auto obj = FPDFAnnot_GetObjectCount(annot) == 1 ? FPDFAnnot_GetObject(annot, 0) : NULL;
+            FS_RECTF rect = {left, top, right, bottom};
+            ok = obj && FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_IMAGE && FPDFAnnot_SetRect(annot, &rect);
+        }
+        FPDFPage_CloseAnnot(annot);
+        if (matches) return ok ? JNI_TRUE : JNI_FALSE;
+    }
+    return JNI_FALSE;
 }
 
 JNI_FUNC(jboolean, PdfiumCore, nativeRemoveAnnotAt)(JNI_ARGS, jlong pagePtr, jint index) {
