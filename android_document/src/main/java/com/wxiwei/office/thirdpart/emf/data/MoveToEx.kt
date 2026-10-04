@@ -39,8 +39,8 @@ class MoveToEx() : EMFTag(27, 1) {
         // The MoveToEx function updates the current position to the
         // specified point
         // and optionally returns the previous position.
-        val currentFigure = GeneralPath(renderer.getWindingRule())
+        val currentFigure = GeneralPath(renderer.windingRule)
         currentFigure.moveTo(point!!.x.toFloat(), point!!.y.toFloat())
-        renderer.setFigure(currentFigure)
+        renderer.figure = currentFigure
     }
 }

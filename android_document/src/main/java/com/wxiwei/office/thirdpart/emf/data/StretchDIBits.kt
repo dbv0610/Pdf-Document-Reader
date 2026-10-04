@@ -116,7 +116,7 @@ class StretchDIBits() : EMFTag(81, 1), EMFConstants {
         // than the source rectangle, this function compresses the rows and columns by using
         // the specified raster operation.
         if (image != null) {
-            renderer.drawImage(image, x, y, widthSrc, heightSrc)
+            renderer.drawImage(image!!, x, y, widthSrc, heightSrc)
         }
     }
 

@@ -35,6 +35,6 @@ class SetTextAlign() : EMFTag(22, 1), EMFConstants {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        renderer.setTextAlignMode(mode)
+        renderer.textAlignMode = mode
     }
 }

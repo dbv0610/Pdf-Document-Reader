@@ -13,7 +13,7 @@ class BeginPath : EMFTag(59, 1) {
     }
 
     override fun render(renderer: EMFRenderer) {
-        renderer.setPath(GeneralPath(renderer.getWindingRule()))
-        renderer.setPathTransform(AffineTransform())
+        renderer.path = GeneralPath(renderer.windingRule)
+        renderer.pathTransform = AffineTransform()
     }
 }

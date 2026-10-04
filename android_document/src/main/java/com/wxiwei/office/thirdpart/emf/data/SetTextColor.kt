@@ -36,6 +36,6 @@ class SetTextColor() : EMFTag(24, 1) {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        renderer.setTextColor(color)
+        renderer.setTextColor(color!!)
     }
 }

@@ -37,6 +37,6 @@ class SetArcDirection() : EMFTag(57, 1), EMFConstants {
     override fun render(renderer: EMFRenderer) {
         // The SetArcDirection sets the drawing direction to
         // be used for arc and rectangle functions.
-        renderer.setArcDirection(direction)
+        renderer.arcDirection = direction
     }
 }

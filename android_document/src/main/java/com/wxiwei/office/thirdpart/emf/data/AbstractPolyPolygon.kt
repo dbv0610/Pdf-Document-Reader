@@ -53,7 +53,7 @@ abstract class AbstractPolyPolygon
     protected fun render(renderer: EMFRenderer, closePath: Boolean) {
         // create a GeneralPath containing GeneralPathes
         val path = GeneralPath(
-            renderer.getWindingRule()
+            renderer.windingRule
         )
 
         // iterate the polgons
@@ -62,7 +62,7 @@ abstract class AbstractPolyPolygon
             // create a new member of path
 
             val gp = GeneralPath(
-                renderer.getWindingRule()
+                renderer.windingRule
             )
             for (point in 0..<numberOfPoints!![polygon]) {
                 // add a point to gp

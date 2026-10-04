@@ -52,7 +52,7 @@ open class Polyline : AbstractPolygon {
 
         if (points != null && points.size > 0) {
             val gp = GeneralPath(
-                renderer.getWindingRule()
+                renderer.windingRule
             )
             var p: Point
             for (point in 0..<numberOfPoints) {

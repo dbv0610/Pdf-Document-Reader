@@ -192,7 +192,7 @@ public class ChartReaderImplJava
         	renderer = ((XYChart)abstractChart).getRenderer();
         	
         	((XYMultipleSeriesRenderer)renderer).setSeriesBackgroundColor(plotAreaFill);
-        	((XYMultipleSeriesRenderer)renderer).setSeriesFrame(plotAreaFrame);
+        	((XYMultipleSeriesRenderer)renderer).seriesFrame = plotAreaFrame;
         }
         else if(abstractChart instanceof RoundChart)
         {
@@ -201,7 +201,7 @@ public class ChartReaderImplJava
         
         if(renderer != null)
         {
-        	renderer.setDefaultFontSize(defaultFontSize);
+        	renderer.defaultFontSize = defaultFontSize;
             renderer.setBackgroundAndFill(fill);
             renderer.setChartFrame(line);
         }
@@ -256,7 +256,7 @@ public class ChartReaderImplJava
     		abstractChart.setLegendPosition(legendPos);
     		
     		//legend text size
-    		float fontSize = renderer.getDefaultFontSize();
+    		float fontSize = renderer.defaultFontSize;
     		if(legend.element("txPr") != null)
     		{
     			fontSize = getTextSize(legend.element("txPr"));
@@ -386,7 +386,7 @@ public class ChartReaderImplJava
         
         if(abstractChart != null)
         {
-        	abstractChart.setCategoryAxisTextColor(schemeColor.get("tx1"));
+        	abstractChart.categoryAxisTextColor = schemeColor.get("tx1");
         }
         return abstractChart;
     }

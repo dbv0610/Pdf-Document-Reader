@@ -35,6 +35,6 @@ class EMFRectangle() : EMFTag(43, 1) {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        renderer.fillAndDrawOrAppend(bounds)
+        renderer.fillAndDrawOrAppend(bounds!!)
     }
 }

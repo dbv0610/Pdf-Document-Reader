@@ -37,44 +37,44 @@ abstract class AbstractClipPath protected constructor(id: Int, version: Int, val
             } else if (mode == EMFConstants.RGN_COPY) {
                 // rest the clip ...
 //                AffineTransform at = renderer.getTransform();
-                val matrix = renderer.getMatrix()
+                val matrix = renderer.matrix
                 // temporarly switch to the base transformation to
                 // aplly the base clipping area
                 renderer.resetTransformation()
                 // set the clip
-                renderer.setClip(renderer.getInitialClip())
+                renderer.clip = renderer.getInitialClip()
                 //                renderer.setTransform(at);
-                renderer.setMatrix(matrix)
+                renderer.matrix = matrix
                 renderer.clip(shape)
             } else if (mode == EMFConstants.RGN_DIFF) {
-                val clip = renderer.getClip()
+                val clip = renderer.clip
                 if (clip != null) {
                     val a = Area(shape)
                     a.subtract(Area(clip))
-                    renderer.setClip(a)
+                    renderer.clip = a
                 } else {
-                    renderer.setClip(shape)
+                    renderer.clip = shape
                 }
             } else if (mode == EMFConstants.RGN_OR) {
                 val path = GeneralPath(shape)
-                val clip = renderer.getClip()
+                val clip = renderer.clip
                 if (clip != null) {
                     path.append(clip, false)
                 }
-                renderer.setClip(path)
+                renderer.clip = path
             } else if (mode == EMFConstants.RGN_XOR) {
-                val clip = renderer.getClip()
+                val clip = renderer.clip
                 if (clip != null) {
                     val a = Area(shape)
                     a.exclusiveOr(Area(clip))
-                    renderer.setClip(a)
+                    renderer.clip = a
                 } else {
-                    renderer.setClip(shape)
+                    renderer.clip = shape
                 }
             }
         }
 
         // delete the current shape
-        renderer.setPath(null)
+        renderer.path = null
     }
 }

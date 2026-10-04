@@ -52,7 +52,7 @@ open class PolyBezier : AbstractPolygon {
 
         if (points != null && points.size > 0) {
             val gp = GeneralPath(
-                renderer.getWindingRule()
+                renderer.windingRule
             )
             val p = points[0]!!
             gp.moveTo(p.x.toFloat(), p.y.toFloat())

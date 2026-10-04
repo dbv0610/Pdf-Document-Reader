@@ -40,14 +40,14 @@ class LineTo() : EMFTag(54, 1) {
         // but not including, the specified point.
         // The line is drawn by using the current pen and, if the pen is a
         // geometric pen, the current brush.
-        var currentFigure = renderer.getFigure()
+        var currentFigure = renderer.figure
         if (currentFigure != null) {
             currentFigure.lineTo(point!!.x.toFloat(), point!!.y.toFloat())
             renderer.drawShape(currentFigure)
         } else {
-            currentFigure = GeneralPath(renderer.getWindingRule())
+            currentFigure = GeneralPath(renderer.windingRule)
             currentFigure.moveTo(point!!.x.toFloat(), point!!.y.toFloat())
-            renderer.setFigure(currentFigure)
+            renderer.figure = currentFigure
         }
     }
 }

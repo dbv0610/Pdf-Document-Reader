@@ -38,6 +38,6 @@ class SetBrushOrgEx() : EMFTag(13, 1) {
         // The SetBrushOrgEx function sets the brush origin that GDI assigns to
         // the next (only to the next!) brush an application selects into the specified
         // device context.
-        renderer.setBrushOrigin(point)
+        renderer.brushOrigin = point
     }
 }

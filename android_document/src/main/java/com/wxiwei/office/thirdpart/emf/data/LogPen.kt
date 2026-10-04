@@ -45,6 +45,6 @@ class LogPen : AbstractPen {
     override fun render(renderer: EMFRenderer) {
         renderer.setUseCreatePen(true)
         renderer.setPenPaint(color)
-        renderer.setPenStroke(createStroke(renderer, penStyle, null, width.toFloat()))
+        renderer.penStroke = createStroke(renderer, penStyle, null, width.toFloat())
     }
 }

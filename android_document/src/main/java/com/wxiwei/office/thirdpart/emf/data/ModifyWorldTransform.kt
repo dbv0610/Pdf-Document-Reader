@@ -43,17 +43,17 @@ class ModifyWorldTransform() : EMFTag(36, 1), EMFConstants {
         // the identity matrix. If this mode is specified, the XFORM structure
         // pointed to by lpXform is ignored.
         if (mode == EMFConstants.MWT_IDENTITY) {
-            if (renderer.getPath() != null) {
-                renderer.setPathTransform(AffineTransform())
+            if (renderer.path != null) {
+                renderer.pathTransform = AffineTransform()
             } else {
                 renderer.resetTransformation()
             }
         } else if (mode == EMFConstants.MWT_LEFTMULTIPLY) {
-            if (renderer.getPath() != null) {
-                renderer.getPathTransform().concatenate(transform!!)
-                renderer.transform(transform)
+            if (renderer.path != null) {
+                renderer.pathTransform!!.concatenate(transform!!)
+                renderer.transform(transform!!)
             } else {
-                renderer.transform(transform)
+                renderer.transform(transform!!)
             }
         } else if (mode != EMFConstants.MWT_RIGHTMULTIPLY) {
             // TODO expected that this should work but it doesn't

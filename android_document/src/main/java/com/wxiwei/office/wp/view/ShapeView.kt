@@ -214,7 +214,7 @@ class ShapeView : LeafView {
                 AutoShapeKit.instance().drawAutoShape(canvas, getControl(), getPageNumber(), wpShape, rect, zoom)
             } else if (wpShape.type.toInt() == AbstractShape.SHAPE_CHART.toInt()) {
                 val chart = (wpShape as WPChartShape).aChart
-                chart?.setZoomRate(zoom)
+                chart?.zoomRate = zoom
                 chart?.draw(canvas, getControl(), rect.left, rect.top, rect.width(), rect.height(), PaintKit.instance().getPaint())
             }
 
@@ -276,7 +276,7 @@ class ShapeView : LeafView {
                     AutoShapeKit.instance().drawAutoShape(canvas, getControl(), getPageNumber(), wpShape, rect, zoom)
                 } else if (wpShape.type.toInt() == AbstractShape.SHAPE_CHART.toInt()) {
                     val chart = (wpShape as WPChartShape).aChart
-                    chart?.setZoomRate(zoom)
+                    chart?.zoomRate = zoom
                     chart?.draw(canvas, getControl(), rect.left, rect.top, rect.width(), rect.height(), PaintKit.instance().getPaint())
                 }
             }

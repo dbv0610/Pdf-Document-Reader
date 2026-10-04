@@ -38,7 +38,7 @@ class SetPolyFillMode() : EMFTag(19, 1), EMFConstants {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        renderer.setWindingRule(getWindingRule(mode))
+        renderer.windingRule = getWindingRule(mode)
     }
 
     /**

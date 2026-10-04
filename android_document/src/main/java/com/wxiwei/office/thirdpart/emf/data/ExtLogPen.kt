@@ -88,6 +88,6 @@ class ExtLogPen : AbstractPen {
     override fun render(renderer: EMFRenderer) {
         renderer.setUseCreatePen(false)
         renderer.setPenPaint(color)
-        renderer.setPenStroke(createStroke(renderer, penStyle, style, width.toFloat()))
+        renderer.penStroke = createStroke(renderer, penStyle, style, width.toFloat())
     }
 }

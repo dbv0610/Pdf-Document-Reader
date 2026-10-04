@@ -52,7 +52,7 @@ open class EMFPolygon : AbstractPolygon {
         // Safety check.
         if (points.size > 1) {
             val path = GeneralPath(
-                renderer.getWindingRule()
+                renderer.windingRule
             )
             path.moveTo(points[0]!!.x.toFloat(), points[0]!!.y.toFloat())
             for (i in 1..<points.size) {

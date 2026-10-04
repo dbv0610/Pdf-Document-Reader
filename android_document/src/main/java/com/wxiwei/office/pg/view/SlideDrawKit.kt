@@ -399,7 +399,7 @@ open class SlideDrawKit {
                 rect.height = (rect.height * (rate * 2)).toInt()
                 val zoomT = zoom * rate * 2
                 processRotation(canvas, chart, zoomT)
-                chart.aChart!!.setZoomRate(zoomT)
+                chart.aChart!!.zoomRate = zoomT
                 chart.aChart!!.draw(
                     canvas, editor.getControl(), (rect.x * zoom).toInt(), (rect.y * zoom).toInt(),
                     (rect.width * zoom).toInt(), (rect.height * zoom).toInt(), paint
@@ -409,7 +409,7 @@ open class SlideDrawKit {
         }
 
         processRotation(canvas, chart, zoom)
-        chart.aChart!!.setZoomRate(zoom)
+        chart.aChart!!.zoomRate = zoom
         chart.aChart!!.draw(
             canvas, editor.getControl(), (rect.x * zoom).toInt(), (rect.y * zoom).toInt(),
             (rect.width * zoom).toInt(), (rect.height * zoom).toInt(), paint

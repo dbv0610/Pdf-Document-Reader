@@ -15,7 +15,7 @@ import java.io.IOException
  */
 class WidenPath : EMFTag(66, 1) {
     @Throws(IOException::class)
-    override fun read(tagID: Int, emf: EMFInputStream?, len: Int): EMFTag {
+    override fun read(tagID: Int, emf: EMFInputStream, len: Int): EMFTag {
         return this
     }
 
@@ -25,17 +25,17 @@ class WidenPath : EMFTag(66, 1) {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        val currentPath = renderer.getPath()
-        val currentPenStroke = renderer.getPenStroke()
+        val currentPath = renderer.path
+        val currentPenStroke = renderer.penStroke
         // The WidenPath function redefines the current path as the area
         // that would be painted if the path were stroked using the pen
         // currently selected into the given device context.
         if (currentPath != null && currentPenStroke != null) {
             val newPath = GeneralPath(
-                renderer.getWindingRule()
+                renderer.windingRule
             )
             newPath.append(currentPenStroke.createStrokedShape(currentPath)!!, false)
-            renderer.setPath(newPath)
+            renderer.path = newPath
         }
     }
 }

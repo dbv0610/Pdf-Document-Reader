@@ -38,6 +38,6 @@ class IntersectClipRect() : EMFTag(30, 1) {
         // The IntersectClipRect function creates a new clipping
         // region from the intersection of the current clipping
         // region and the specified rectangle.
-        renderer.clip(bounds)
+        renderer.clip(bounds!!)
     }
 }

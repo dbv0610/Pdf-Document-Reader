@@ -46,30 +46,28 @@ class SetMapMode() : EMFTag(17, 1), EMFConstants {
         } else if (mode == EMFConstants.MM_HIENGLISH) {
             // TODO not sure
             val scale = 0.001 * 25.4
-            renderer.setMapModeTransform(getScaleInstance(scale, scale))
+            renderer.mapModeTransform = getScaleInstance(scale, scale)
         } else if (mode == EMFConstants.MM_HIMETRIC) {
             // TODO not sure
             val scale = 0.01
-            renderer.setMapModeTransform(getScaleInstance(scale, scale))
+            renderer.mapModeTransform = getScaleInstance(scale, scale)
         } else if (mode == EMFConstants.MM_ISOTROPIC) {
             renderer.setMapModeIsotropic(true)
             renderer.fixViewportSize()
         } else if (mode == EMFConstants.MM_LOENGLISH) {
             // TODO not sure
             val scale = 0.01 * 25.4
-            renderer.setMapModeTransform(getScaleInstance(scale, scale))
+            renderer.mapModeTransform = getScaleInstance(scale, scale)
         } else if (mode == EMFConstants.MM_LOMETRIC) {
             // TODO not sure
             val scale = 0.1
-            renderer.setMapModeTransform(getScaleInstance(scale, scale))
+            renderer.mapModeTransform = getScaleInstance(scale, scale)
         } else if (mode == EMFConstants.MM_TEXT) {
-            renderer.setMapModeTransform(getScaleInstance(1.0, -1.0))
+            renderer.mapModeTransform = getScaleInstance(1.0, -1.0)
         } else if (mode == EMFConstants.MM_TWIPS) {
-            renderer.setMapModeTransform(
-                getScaleInstance(
-                    EMFRenderer.TWIP_SCALE,
-                    EMFRenderer.TWIP_SCALE
-                )
+            renderer.mapModeTransform = getScaleInstance(
+                EMFRenderer.TWIP_SCALE,
+                EMFRenderer.TWIP_SCALE
             )
         }
     }

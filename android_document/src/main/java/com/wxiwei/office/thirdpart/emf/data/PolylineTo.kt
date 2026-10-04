@@ -48,12 +48,12 @@ open class PolylineTo : AbstractPolygon {
     override fun render(renderer: EMFRenderer) {
         val points = this.points
         val numberOfPoints = this.numberOfPoints
-        val currentFigure = renderer.getFigure()
+        val currentFigure = renderer.figure
 
         if (points != null) {
             for (point in 0..<numberOfPoints) {
                 // add a point to gp
-                currentFigure.lineTo(
+                currentFigure!!.lineTo(
                     points[point]!!.x.toFloat(),
                     points[point]!!.y.toFloat()
                 )

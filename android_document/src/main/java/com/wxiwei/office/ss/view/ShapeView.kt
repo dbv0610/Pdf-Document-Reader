@@ -191,7 +191,7 @@ class ShapeView(sheetView: SheetView?) {
                     val achart = shape as AChart
                     if (achart.aChart != null) {
                         processRotation(canvas, shape, shapeRect)
-                        achart.aChart!!.setZoomRate(sheetView.getZoom()) //PictureKit.WMFZOOM
+                        achart.aChart!!.zoomRate = sheetView.getZoom() //PictureKit.WMFZOOM
                         achart.aChart!!.draw(canvas, control, shapeRect.left, shapeRect.top, shapeRect.width(), shapeRect.height(), PaintKit.instance().getPaint())
 //                        PictureKit.instance().drawPicture(canvas, control,
 //                            control.getSysKit().getPictureManage().getPicture(achart.getDrawingPicture(control)),

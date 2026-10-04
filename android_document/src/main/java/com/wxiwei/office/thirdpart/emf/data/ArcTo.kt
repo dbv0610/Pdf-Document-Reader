@@ -70,7 +70,7 @@ class ArcTo : AbstractArc {
         //
         // The arc is drawn using the current pen; it is not filled.
 
-        renderer.getFigure().append(
+        renderer.figure!!.append(
             getShape(renderer, Arc2D.OPEN), true
         )
     }

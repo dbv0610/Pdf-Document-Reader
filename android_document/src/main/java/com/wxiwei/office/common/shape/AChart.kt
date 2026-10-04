@@ -23,6 +23,7 @@ import com.wxiwei.office.system.IControl
 import com.wxiwei.office.thirdpart.achartengine.chart.AbstractChart
 import java.io.File
 import java.io.FileOutputStream
+import androidx.core.graphics.createBitmap
 
 /**
  * TODO: 文件注释
@@ -60,9 +61,9 @@ class AChart : AbstractShape() {
     private fun saveChartToPicture(control: IControl) {
         var bmp: Bitmap? = null
         try {
-            val width = (bounds!!.width * this.aChart!!.getZoomRate()).toInt()
-            val height = (bounds!!.height * this.aChart!!.getZoomRate()).toInt()
-            bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val width = (bounds!!.width * this.aChart!!.zoomRate).toInt()
+            val height = (bounds!!.height * this.aChart!!.zoomRate).toInt()
+            bmp = createBitmap(width, height)
             val canvas = Canvas(bmp)
 
 

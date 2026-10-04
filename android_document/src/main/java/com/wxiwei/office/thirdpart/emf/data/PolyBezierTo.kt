@@ -48,7 +48,7 @@ open class PolyBezierTo : AbstractPolygon {
     override fun render(renderer: EMFRenderer) {
         val points = this.points
         val numberOfPoints = this.numberOfPoints
-        val currentFigure = renderer.getFigure()
+        val currentFigure = renderer.figure
 
         if (points != null && points.size > 0) {
             var p1: Point
@@ -60,7 +60,7 @@ open class PolyBezierTo : AbstractPolygon {
                 p1 = points[point]!!
                 p2 = points[point + 1]!!
                 p3 = points[point + 2]!!
-                currentFigure.curveTo(
+                currentFigure!!.curveTo(
                     p1.x.toFloat(), p1.y.toFloat(),
                     p2.x.toFloat(), p2.y.toFloat(),
                     p3.x.toFloat(), p3.y.toFloat()

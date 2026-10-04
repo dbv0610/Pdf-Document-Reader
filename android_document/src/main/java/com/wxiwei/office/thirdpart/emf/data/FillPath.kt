@@ -35,11 +35,11 @@ class FillPath() : EMFTag(62, 1) {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        val currentPath = renderer.getPath()
+        val currentPath = renderer.path
         // fills the current path
         if (currentPath != null) {
             renderer.fillShape(currentPath)
-            renderer.setPath(null)
+            renderer.path = null
         }
     }
 }

@@ -35,11 +35,11 @@ class SetWorldTransform() : EMFTag(35, 1) {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        if (renderer.getPath() != null) {
-            renderer.setPathTransform(transform)
+        if (renderer.path != null) {
+            renderer.pathTransform = transform
         } else {
             renderer.resetTransformation()
-            renderer.transform(transform)
+            renderer.transform(transform!!)
         }
     }
 }

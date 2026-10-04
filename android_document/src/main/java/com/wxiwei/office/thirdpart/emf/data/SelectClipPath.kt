@@ -29,6 +29,6 @@ class SelectClipPath : AbstractClipPath {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        render(renderer, renderer.getPath())
+        render(renderer, renderer.path)
     }
 }

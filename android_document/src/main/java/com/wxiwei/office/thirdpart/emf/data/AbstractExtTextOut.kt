@@ -45,7 +45,7 @@ abstract class AbstractExtTextOut
     override fun render(renderer: EMFRenderer) {
         val text = getText()!!
         renderer.drawOrAppendText(
-            text.string,
+            text.string!!,
             text.pos!!.x.toFloat(),
             text.pos!!.y.toFloat()
         )

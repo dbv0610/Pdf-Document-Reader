@@ -121,14 +121,14 @@ class BitBlt() : EMFTag(76, 1), EMFConstants {
      */
     override fun render(renderer: EMFRenderer) {
         if (image != null) {
-            renderer.drawImage(image, transform)
+            renderer.drawImage(image!!, transform!!)
         } else if (!bounds!!.isEmpty() && dwROP == 0x00F00021) {
             bounds!!.x = x
             bounds!!.y = y
             //renderer.setTextBkColor();
-            renderer.fillShape(bounds)
+            renderer.fillShape(bounds!!)
         }
-        val currentFigure = renderer.getFigure()
+        val currentFigure = renderer.figure
         // fills the current path
         if (currentFigure != null) {
             renderer.fillAndDrawShape(currentFigure)

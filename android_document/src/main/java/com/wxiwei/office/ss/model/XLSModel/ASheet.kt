@@ -512,14 +512,14 @@ open class ASheet
             if (abstractChart != null) {
                 var renderer: DefaultRenderer? = null
                 if (abstractChart is XYChart) {
-                    renderer = abstractChart.getRenderer()
+                    renderer = abstractChart.renderer
                 } else if (abstractChart is RoundChart) {
-                    renderer = abstractChart.getRenderer()
+                    renderer = abstractChart.renderer
                 }
 
                 if (renderer != null) {
                     if (!chart.isNoBorder) {
-                        renderer.setChartFrame(chart.line)
+                        renderer.chartFrame = chart.line
                     }
 
 //                     if (!chart.isNoFill)
@@ -695,18 +695,18 @@ open class ASheet
                 if (abstractChart != null) {
                     var renderer: DefaultRenderer? = null
                     if (abstractChart is XYChart) {
-                        renderer = abstractChart.getRenderer()
+                        renderer = abstractChart.renderer
                     } else if (abstractChart is RoundChart) {
-                        renderer = abstractChart.getRenderer()
+                        renderer = abstractChart.renderer
                     }
 
                     if (renderer != null) {
                         if (!chart.isNoBorder) {
-                            renderer.setChartFrame(chart.line)
+                            renderer.chartFrame = chart.line
                         }
 
                         if (!chart.isNoFill) {
-                            renderer.setBackgroundAndFill(converFill(chart, control))
+                            renderer.backgroundAndFill = converFill(chart, control)
                         }
                     }
 

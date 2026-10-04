@@ -78,7 +78,7 @@ abstract class AbstractArc protected constructor(
 
         val alpha0: Double
         val alpha1: Double
-        if (renderer.getArcDirection() == EMFConstants.AD_CLOCKWISE) {
+        if (renderer.arcDirection == EMFConstants.AD_CLOCKWISE) {
 //            alpha0 = Math.acos(nx0);
 //            alpha1 = Math.acos(nx1);
             alpha0 = getAngle(end!!)

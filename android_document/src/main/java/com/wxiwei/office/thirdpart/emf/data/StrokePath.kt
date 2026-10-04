@@ -35,11 +35,11 @@ class StrokePath() : EMFTag(64, 1) {
      * @param renderer EMFRenderer storing the drawing session data
      */
     override fun render(renderer: EMFRenderer) {
-        val currentPath = renderer.getPath()
+        val currentPath = renderer.path
         // fills the current path
         if (currentPath != null) {
             renderer.drawShape(currentPath)
-            renderer.setPath(null)
+            renderer.path = null
         }
     }
 }

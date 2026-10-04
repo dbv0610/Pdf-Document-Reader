@@ -115,7 +115,7 @@ class AlphaBlend() : EMFTag(114, 1), EMFConstants {
     override fun render(renderer: EMFRenderer) {
         // This function displays bitmaps that have transparent or semitransparent pixels.
         if (image != null) {
-            renderer.drawImage(image, x, y, width, height)
+            renderer.drawImage(image!!, x, y, width, height)
         }
     }
 
