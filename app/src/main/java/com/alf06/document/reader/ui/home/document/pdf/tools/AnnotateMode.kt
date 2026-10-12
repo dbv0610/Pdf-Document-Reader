@@ -129,8 +129,13 @@ internal class AnnotateMode(private val overlay: PdfOverlayView, private val hos
         when (drag) {
             Drag.SHAPE -> pdf.pageViewRect(dragPage)?.let { now.set(x.coerceIn(it.left, it.right), y.coerceIn(it.top, it.bottom)) }
             Drag.MOVE, Drag.RESIZE -> now.set(x, y)
-            Drag.NONE -> {}
+            Drag.NONE -> if (tool == Tool.ERASER) eraseAt(x, y)
         }
+    }
+
+    /** The eraser takes off what is under the finger, on a tap and while it rubs. */
+    private fun eraseAt(x: Float, y: Float) {
+        pdf.findAnnotationAt(x, y)?.let { pdf.removeAnnotation(it) { removed -> if (removed) host.changed() } }
     }
 
     override fun onUp(x: Float, y: Float, tap: Boolean) {
@@ -146,9 +151,7 @@ internal class AnnotateMode(private val overlay: PdfOverlayView, private val hos
                     else host.annotationTapped(hit, false)
                 }
             }
-            Tool.ERASER -> if (tap) pdf.findAnnotationAt(x, y)?.let {
-                pdf.removeAnnotation(it) { removed -> if (removed) host.changed() }
-            }
+            Tool.ERASER -> if (tap) eraseAt(x, y)
             Tool.TEXT -> if (tap) pointAt(x, y)?.let { (page, p) ->
                 host.askText { text, size ->
                     pdf.addText(page, p.x, p.y, text, size, host.color)?.let { name -> placed(name, page) }

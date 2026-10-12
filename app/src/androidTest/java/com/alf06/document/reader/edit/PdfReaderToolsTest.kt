@@ -223,6 +223,36 @@ class PdfReaderToolsTest {
 
     /** Every dialog of the tools menu opens (no text of it is broken), then is closed. */
     @Test
+    fun eraserRubsOutAPenStroke() {
+        val file = pdf("tools-eraser.pdf", 3)
+        launchReader(file) { scenario, view ->
+            scenario.onActivity { it.findViewById<View>(R.id.icAppEdit).performClick() } // the pen
+            Thread.sleep(400)
+            var page = android.graphics.RectF()
+            scenario.onActivity { page = view.pageViewRect(0)!! }
+            val x1 = page.left + page.width() * 0.2f; val x2 = page.left + page.width() * 0.7f
+            val y = page.top + page.height() * 0.4f
+            drag(scenario, x1, y, x2, y, steps = 12)
+            Thread.sleep(500)
+            var count = 0
+            scenario.onActivity { count = view.getAnnotations(0).size }
+            assertEquals("a stroke drawn", 1, count)
+
+            chip(scenario, R.string.pdf_annot_eraser)
+            var offset = 0f
+            scenario.onActivity { offset = view.currentYOffset }
+            // rubbing across the stroke, not a tap
+            drag(scenario, (x1 + x2) / 2, y - page.height() * 0.1f, (x1 + x2) / 2, y + page.height() * 0.1f, steps = 12)
+            Thread.sleep(1000)
+            scenario.onActivity { count = view.getAnnotations(0).size }
+            assertEquals("the stroke rubbed out", 0, count)
+            var now = 0f
+            scenario.onActivity { now = view.currentYOffset }
+            assertEquals("the page stays", offset, now, 1f)
+        }
+    }
+
+    @Test
     fun everyToolDialogOpens() {
         launchReader(pdf("tools-dialogs.pdf", 2)) { scenario, _ ->
             val dialogs = listOf(R.string.pdf_page_numbers, R.string.pdf_watermark, R.string.pdf_compress, R.string.pdf_password,

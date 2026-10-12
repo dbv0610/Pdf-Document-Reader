@@ -75,6 +75,7 @@ open class APageListView : AdapterView<Adapter> {
             OpenTrace.mark("pageList.onLayout.skipNotInit")
             return
         }
+        boundsChanged = changed
         if (pageListViewListener!!.getPageListViewMovingPosition() == IPageListViewListener.Moving_Horizontal) layoutHorizontal() else layoutVertical()
         invalidate()
         if (isConfigurationChanged) {
@@ -83,6 +84,10 @@ open class APageListView : AdapterView<Adapter> {
         }
         OpenTrace.mark("pageList.onLayout.end current=$currentIndex childCount=$childCount")
     }
+
+    // The list itself was moved or resized (the keyboard came up, say): the pages are still where
+    // the old bounds put them, which is not the user scrolling to another page
+    private var boundsChanged = false
 
     private fun removeUnusedViews() {
         val indexes = IntArray(childViewsCache.size()) { childViewsCache.keyAt(it) }
@@ -100,7 +105,7 @@ open class APageListView : AdapterView<Adapter> {
     private fun layoutHorizontal() {
         var currentView = childViewsCache.get(currentIndex)
         if (!isResetLayout) {
-            if (currentView != null && kotlin.math.abs(currentView.left) < currentView.width) {
+            if (currentView != null && !boundsChanged && kotlin.math.abs(currentView.left) < currentView.width) {
             val offset = getScreenSizeOffset(currentView)
             if (currentView.left + currentView.measuredWidth + offset.x + GAP / 2 + eventManage!!.getScrollX() < width / 2 && currentIndex + 1 < pageAdapter!!.count && !eventManage!!.isOnFling()) { postUnRepaint(currentView); post(eventManage); currentIndex++ }
             else if (currentView.left - offset.x - GAP / 2 + eventManage!!.getScrollX() >= width / 2 && currentIndex > 0 && !eventManage!!.isOnFling()) { postUnRepaint(currentView); post(eventManage); currentIndex-- }
@@ -139,7 +144,7 @@ open class APageListView : AdapterView<Adapter> {
     private fun layoutVertical() {
         var currentView = childViewsCache.get(currentIndex)
         if (!isResetLayout) {
-            if (currentView != null) {
+            if (currentView != null && !boundsChanged) {
             val offset = getScreenSizeOffset(currentView)
             if (currentView.top + currentView.measuredHeight + offset.y + GAP / 2 + eventManage!!.getScrollY() < height / 2 && currentIndex + 1 < pageAdapter!!.count && !eventManage!!.isOnFling()) { postUnRepaint(currentView); post(eventManage); currentIndex++; Log.e("current ++", currentIndex.toString()) }
             else if (currentView.top - offset.y - GAP / 2 + eventManage!!.getScrollY() >= height / 2 && currentIndex > 0 && !eventManage!!.isOnFling()) { postUnRepaint(currentView); post(eventManage); currentIndex--; Log.e("current --", currentIndex.toString()) }
