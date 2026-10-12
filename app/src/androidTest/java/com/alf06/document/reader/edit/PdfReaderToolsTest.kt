@@ -223,7 +223,7 @@ class PdfReaderToolsTest {
 
     /** Every dialog of the tools menu opens (no text of it is broken), then is closed. */
     @Test
-    fun eraserRubsOutAPenStroke() {
+    fun eraserRubsOutPartOfAPenStroke() {
         val file = pdf("tools-eraser.pdf", 3)
         launchReader(file) { scenario, view ->
             scenario.onActivity { it.findViewById<View>(R.id.icAppEdit).performClick() } // the pen
@@ -244,8 +244,14 @@ class PdfReaderToolsTest {
             // rubbing across the stroke, not a tap
             drag(scenario, (x1 + x2) / 2, y - page.height() * 0.1f, (x1 + x2) / 2, y + page.height() * 0.1f, steps = 12)
             Thread.sleep(1000)
-            scenario.onActivity { count = view.getAnnotations(0).size }
-            assertEquals("the stroke rubbed out", 0, count)
+            var strokes = emptyList<android.graphics.RectF>()
+            scenario.onActivity { strokes = view.getAnnotations(0).map { view.pageRectToView(0, it.rect)!! } }
+            assertEquals("only the part rubbed is gone, a piece is left on each side: $strokes", 2, strokes.size)
+            val middle = (x1 + x2) / 2
+            assertTrue("pieces left and right of the rub: $strokes", strokes.minOf { it.right } < middle && strokes.maxOf { it.left } > middle)
+            assertTrue("the ends of the stroke stay: $strokes", strokes.minOf { it.left } < x1 + 20 && strokes.maxOf { it.right } > x2 - 20)
+            scenario.onActivity { assertTrue(view.undoEdit()); count = view.getAnnotations(0).size }
+            assertEquals("undo brings the whole stroke back", 1, count)
             var now = 0f
             scenario.onActivity { now = view.currentYOffset }
             assertEquals("the page stays", offset, now, 1f)

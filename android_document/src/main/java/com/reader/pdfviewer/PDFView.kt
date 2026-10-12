@@ -61,6 +61,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * It supports animations, zoom, cache, and swipe.
@@ -2582,6 +2583,114 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         inkRevisions[info.page] = (inkRevisions[info.page] ?: 0) + 1
         inkChanged(info.page, area)
         return true
+    }
+
+    /**
+     * The eraser: takes off the part of the pen strokes drawn in this session that lies within
+     * [radius] view pixels of a view point, leaving the rest of each stroke as strokes of their
+     * own. True when something was erased. With [sameRub] what is erased joins the erasing before
+     * it as one undo step (the finger is still rubbing). Call on the main thread.
+     */
+    fun eraseInkAt(viewX: Float, viewY: Float, radius: Float, sameRub: Boolean = false): Boolean {
+        requireEditThread()
+        val file = pdfFile ?: return false
+        if (restoring) return false
+        val (page, center) = viewToPagePoint(viewX, viewY) ?: return false
+        val mapping = pageMapping(page) ?: return false
+        val widthPoints = pageWidthPoints.getOrPut(page) { file.getPageWidthPoint(page) }
+        if (widthPoints <= 0) return false
+        val reach = radius * widthPoints / file.getScaledPageSize(page, zoom).width
+        val alive = getAnnotations(page).mapNotNullTo(HashSet()) { it.name }
+        var erased = false
+        for (stroke in sessionInk.values.filter { it.page == page && it.name in alive }) {
+            val pieces = cutStroke(stroke.points, center.x, center.y, reach + stroke.width / 2) ?: continue
+            if (!file.removeAnnotByName(page, stroke.name)) continue
+            val revision = (inkRevisions[page] ?: 0) + 1
+            inkRevisions[page] = revision
+            val parts = pieces.map { points ->
+                val shown = points.copyOf().also { mapping.toShown.mapPoints(it) }
+                InkStroke(page, points, List(points.size / 2) { PointF(shown[it * 2], shown[it * 2 + 1]) },
+                    stroke.color, stroke.width, "pdfview-ink-" + java.util.UUID.randomUUID(), revision)
+            }
+            fun add(part: InkStroke) = file.addInk(page, part.points, part.width, part.color, part.name)
+            pendingInk.removeAll { it.name == stroke.name }
+            for (part in parts) {
+                if (!add(part)) continue
+                sessionInk[part.name] = part
+                sessionAnnotations[part.name] = EditRecord(page, part.name, { add(part) }, { file.removeAnnotByName(page, part.name) })
+                pendingInk.add(part)
+            }
+            val bounds = RectF(stroke.points[0], stroke.points[1], stroke.points[0], stroke.points[1])
+            for (i in stroke.points.indices step 2) bounds.union(stroke.points[i], stroke.points[i + 1])
+            val area = shownArea(page, bounds, AREA_PAD + stroke.width)
+            val record = EditRecord(page, stroke.name,
+                apply = {
+                    file.removeAnnotByName(page, stroke.name).also { if (it) parts.forEach { part -> add(part) } }
+                },
+                revert = {
+                    parts.forEach { part -> file.removeAnnotByName(page, part.name) }
+                    pendingInk.removeAll { pending -> parts.any { it.name == pending.name } }
+                    add(stroke)
+                }, area = area)
+            val before = editUndo.lastOrNull()
+            if ((sameRub || erased) && before != null && before === lastErase && before.page == page) {
+                editUndo[editUndo.lastIndex] = EditRecord(page, before.name, { before.apply() && record.apply() },
+                    { record.revert() && before.revert() }, area = union(before.area, area))
+            } else {
+                editUndo.add(record)
+            }
+            lastErase = editUndo.last()
+            editRedo.clear()
+            inkChanged(page, area)
+            erased = true
+        }
+        return erased
+    }
+
+    // the undo step of the latest erasing, which the next one of the same rub joins
+    private var lastErase: EditRecord? = null
+
+    /**
+     * What is left of the line through [points] (x, y pairs) outside the circle of radius [r]
+     * around ([cx], [cy]), piece by piece; null when the circle does not touch the line.
+     */
+    private fun cutStroke(points: FloatArray, cx: Float, cy: Float, r: Float): List<FloatArray>? {
+        val pieces = ArrayList<FloatArray>()
+        // the piece being followed: it ends at the last point seen when that one is outside the circle
+        var piece = ArrayList<Float>()
+        var cut = false
+        fun close() {
+            if (piece.size >= 4) pieces.add(piece.toFloatArray())
+            piece = ArrayList()
+        }
+        var ax = points[0]
+        var ay = points[1]
+        if ((ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) < r * r) cut = true else { piece.add(ax); piece.add(ay) }
+        for (i in 2 until points.size step 2) {
+            val bx = points[i]
+            val by = points[i + 1]
+            val dx = bx - ax
+            val dy = by - ay
+            val a = dx * dx + dy * dy
+            val b = 2 * ((ax - cx) * dx + (ay - cy) * dy)
+            val c = (ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) - r * r
+            val root = b * b - 4 * a * c
+            // the segment is inside the circle from t1 to t2 of its length
+            val t1 = if (a > 0 && root > 0) (-b - sqrt(root)) / (2 * a) else 1f
+            val t2 = if (a > 0 && root > 0) (-b + sqrt(root)) / (2 * a) else 0f
+            if (t1 < 1 && t2 > 0) {
+                cut = true
+                if (t1 > 0) { piece.add(ax + t1 * dx); piece.add(ay + t1 * dy) }
+                close()
+                if (t2 < 1) { piece.add(ax + t2 * dx); piece.add(ay + t2 * dy); piece.add(bx); piece.add(by) }
+            } else if (a > 0 || piece.isNotEmpty()) {
+                piece.add(bx); piece.add(by)
+            }
+            ax = bx
+            ay = by
+        }
+        close()
+        return if (cut) pieces else null
     }
 
     /**
