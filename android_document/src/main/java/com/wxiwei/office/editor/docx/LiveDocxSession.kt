@@ -4,6 +4,8 @@
  * Proprietary and confidential. Unauthorized copying, modification or distribution of this
  * file, via any medium, is strictly prohibited without the written permission of dongb2002.
  */
+@file:Suppress("UNNECESSARY_NOT_NULL_ASSERTION", "UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
+
 package com.wxiwei.office.editor.docx
 
 import com.wxiwei.office.constant.wp.WPModelConstant
