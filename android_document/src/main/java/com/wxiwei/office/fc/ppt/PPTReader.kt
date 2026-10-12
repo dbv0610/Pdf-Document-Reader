@@ -11,6 +11,8 @@
  * 编译器:             android2.2
  * 时间:               下午4:23:51
  */
+@file:Suppress("UNNECESSARY_NOT_NULL_ASSERTION", "SENSELESS_COMPARISON")
+
 package com.wxiwei.office.fc.ppt
 
 import android.graphics.PointF
@@ -201,7 +203,8 @@ class PPTReader @JvmOverloads constructor(
      */
     @Throws(Exception::class)
     override fun backReader() {
-        processSlide(requireNotNull(poiSlideShow!!.getSlide(currentReaderIndex++)))
+        // the slide counts as read only once it is: the reading thread disposes a finished reader
+        try { processSlide(requireNotNull(poiSlideShow!!.getSlide(currentReaderIndex))) } finally { currentReaderIndex++ }
         //control.actionEvent(EventConstant.PG_REPAINT_ID, null);
         if (!isGetThumbnail) {
             control!!.actionEvent(EventConstant.APP_COUNT_PAGES_CHANGE_ID, null)

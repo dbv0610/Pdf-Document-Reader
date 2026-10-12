@@ -4,6 +4,8 @@
  * Proprietary and confidential. Unauthorized copying, modification or distribution of this
  * file, via any medium, is strictly prohibited without the written permission of dongb2002.
  */
+@file:Suppress("UNNECESSARY_NOT_NULL_ASSERTION", "UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
+
 package com.wxiwei.office.editor.docx
 
 import com.wxiwei.office.constant.wp.WPModelConstant
@@ -505,6 +507,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             (undoStack.lastOrNull() as? SplitStep)?.let { if (it.at == start && end == start + 1) return undo() }
             editTyping(start, end, "")?.let { return it }
             val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
+            if (doc.getLeaf(start) == null) return refuse("No text to delete there")
             val removedAll = doc.getText(start, end)
             // text inserted in this session, paragraph marks, or several paragraphs: piece by piece
             if (touchesTyped(start, end) || (removedAll.length > 1 && removedAll.contains('\n'))) return deletePieces(doc, start, end)
@@ -544,6 +547,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
             if (text.isEmpty()) return deleteText(start, end)
             ownError = null
             if (end <= start) return refuse("Empty range")
+            if (word.getDocument().getLeaf(start) == null) return refuse("No text to replace there")
             val nl = text.indexOf('\n')
             if (nl >= 0) {
                 // several lines: the first replaces the range, the rest is inserted after it

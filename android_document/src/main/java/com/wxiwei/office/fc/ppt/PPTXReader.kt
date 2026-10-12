@@ -11,6 +11,8 @@
  * 编译器:            android2.2
  * 时间:              下午2:35:29
  */
+@file:Suppress("UNNECESSARY_NOT_NULL_ASSERTION", "UNCHECKED_CAST")
+
 package com.wxiwei.office.fc.ppt
 
 import com.wxiwei.office.fc.ppt.reader.pptXmlBoolean
@@ -545,7 +547,8 @@ class PPTXReader(control: IControl?, filePath: String?) : AbstractReader() {
     @Throws(Exception::class)
     override fun backReader() {
         try {
-            processSlide(sldIds!!.get(currentReaderIndex++))
+            // the slide counts as read only once it is: the reading thread disposes a finished reader
+            try { processSlide(sldIds!!.get(currentReaderIndex)) } finally { currentReaderIndex++ }
             //control.actionEvent(EventConstant.PG_REPAINT_ID, null);
             control!!.actionEvent(EventConstant.APP_COUNT_PAGES_CHANGE_ID, null)
         } catch (e: Error) {

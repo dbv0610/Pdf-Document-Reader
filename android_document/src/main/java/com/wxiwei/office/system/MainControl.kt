@@ -5,6 +5,8 @@
  * The modifications are proprietary to dongb2002. The original copyright and license notice
  * of this file, where present below, remains in effect for the original portions.
  */
+@file:Suppress("DEPRECATION", "USELESS_ELVIS", "UNNECESSARY_SAFE_CALL", "UNCHECKED_CAST")
+
 package com.wxiwei.office.system
 
 import android.app.Activity
@@ -126,7 +128,7 @@ open class MainControl(frameValue: IMainFrame?) : AbstractControl() {
         dismissProgressDialog()
         customDialog?.dismissDialog(ICustomDialog.DIALOGTYPE_LOADING)
         OpenTrace.e("open failed reason=${error.reason} path=${error.filePath}", error)
-        sysKit.getErrorKit().writerLog(cause, true, !handled)
+        sysKit.getErrorKit().writerLog(cause, true, !handled, askHost = false)
         if (handled) actionEvent(EventConstant.APP_ABORTREADING, true)
     }
 
@@ -267,6 +269,8 @@ open class MainControl(frameValue: IMainFrame?) : AbstractControl() {
     fun switchViewMode() { appControl?.actionEvent(EventConstant.WP_SWITCH_VIEW, null) }
     fun switchViewMode(control: IControl?, viewModeValue: Int) { if (control != null) control.actionEvent(EventConstant.WP_SWITCH_VIEW, viewModeValue.coerceIn(0, 2)) }
     fun setOpenFileListener(listener: OnOpenFileListener?) { onOpenFileListener = listener }
+    /** Main thread. True when the host shows [cause] itself, in place of the library dialog. */
+    internal fun hostShowsError(cause: Throwable) = !isDispose && onOpenFileListener?.onOpenFileFailure(OpenFileErrors.wrap(cause, filePath)) == true
     override fun isEndFile() = appControl?.isEndFile() ?: false
 
     override fun dispose() {

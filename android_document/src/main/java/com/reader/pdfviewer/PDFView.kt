@@ -699,6 +699,12 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         pendingInk.clear()
         inkRevisions.clear()
         pageWidthPoints.clear()
+        pageMappings.clear()
+        annotationCache.clear()
+        snapshotFiles.forEach { it.delete() }
+        snapshotFiles.clear()
+        movedImages.clear()
+        restoring = false
         isDrawingMode = false
         waitingDocumentConfigurator = null
         dismissSelectionActionPopup()
@@ -1975,6 +1981,26 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     private val inkRevisions = HashMap<Int, Long>()
     // Page widths in PDF points, cached so onDraw never waits for the pdfium lock
     private val pageWidthPoints = HashMap<Int, Int>()
+
+    /** [toPage] maps a point of the page as shown (0..1 from its top left) to PDF coordinates, [toShown] back. */
+    private class PageMapping(val toPage: Matrix, val toShown: Matrix)
+    // Asked from pdfium once per page: mapping a point then takes no pdfium call, so the main
+    // thread never waits for its lock, which another thread holds while it renders or saves
+    private val pageMappings = HashMap<Int, PageMapping>()
+
+    private fun pageMapping(page: Int): PageMapping? {
+        pageMappings[page]?.let { return it }
+        val file = pdfFile ?: return null
+        val side = 16384
+        val origin = file.deviceToPageCoords(page, side, side, 0, 0) ?: return null
+        val right = file.deviceToPageCoords(page, side, side, side, 0) ?: return null
+        val bottom = file.deviceToPageCoords(page, side, side, 0, side) ?: return null
+        val toPage = Matrix()
+        val toShown = Matrix()
+        if (!toPage.setPolyToPoly(floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f), 0,
+                floatArrayOf(origin.x, origin.y, right.x, right.y, bottom.x, bottom.y), 0, 3) || !toPage.invert(toShown)) return null
+        return PageMapping(toPage, toShown).also { pageMappings[page] = it }
+    }
     private var inkPage = -1
     private val inkPoints = ArrayList<PointF>()
     private var strokeColor = Color.BLACK
@@ -2029,14 +2055,19 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     fun redoInk(): Boolean = redoEdit()
 
     /** [snapshot]: undoing it restores a copy of the whole document (it would also undo later form values). */
+    /**
+     * [area]: the part of the page (0..1 as shown) that changes, null for the whole page.
+     * [restore] and [restored]: the two halves of [revert] of a snapshot, the first may run on any thread.
+     */
     private data class EditRecord(val page: Int, val name: String, val apply: () -> Boolean, val revert: () -> Boolean,
-                                  val snapshot: Boolean = false)
+                                  val snapshot: Boolean = false, val area: RectF? = null,
+                                  val restore: (() -> Boolean)? = null, val restored: (() -> Unit)? = null)
     private val editUndo = ArrayList<EditRecord>()
     private val editRedo = ArrayList<EditRecord>()
     private val sessionAnnotations = HashMap<String, EditRecord>()
 
-    private fun recordAddition(page: Int, name: String, apply: () -> Boolean) {
-        val record = EditRecord(page, name, apply, revert = { pdfFile?.removeAnnotByName(page, name) == true })
+    private fun recordAddition(page: Int, name: String, area: RectF? = null, apply: () -> Boolean) {
+        val record = EditRecord(page, name, apply, revert = { pdfFile?.removeAnnotByName(page, name) == true }, area = area)
         sessionAnnotations[name] = record
         editUndo.add(record)
         editRedo.clear()
@@ -2061,6 +2092,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     /** Undo the latest recorded edit. Saving does not clear this history. */
     fun undoEdit(): Boolean {
         requireEditThread()
+        if (restoring) return false
         val record = editUndo.lastOrNull() ?: return false
         if (!record.revert()) return false
         editUndo.removeAt(editUndo.lastIndex)
@@ -2072,6 +2104,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     /** Reapply the latest undone edit. Call on the main thread. */
     fun redoEdit(): Boolean {
         requireEditThread()
+        if (restoring) return false
         val record = editRedo.lastOrNull() ?: return false
         if (!record.apply()) return false
         editRedo.removeAt(editRedo.lastIndex)
@@ -2080,7 +2113,37 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         return true
     }
 
+    /**
+     * [undoEdit] for the main thread that never blocks it for long: bringing back a deleted
+     * annotation of the file reloads a snapshot of the document, done here off the main
+     * thread (no edit is taken meanwhile). [done] runs on the main thread.
+     */
+    fun undoEdit(done: (Boolean) -> Unit) {
+        requireEditThread()
+        val record = editUndo.lastOrNull()
+        val restore = record?.restore
+        val file = pdfFile
+        if (record == null || restore == null || file == null || restoring) return done(undoEdit())
+        restoring = true
+        viewScope.launch {
+            val ok = withContext(Dispatchers.IO) { restore() }
+            restoring = false
+            if (isRecycled || pdfFile !== file) return@launch
+            if (ok) {
+                record.restored?.invoke()
+                editUndo.remove(record)
+                editRedo.add(record)
+                finishHistoryChange(record)
+            }
+            done(ok)
+        }
+    }
+
+    // a snapshot is being loaded off the main thread: the document takes no edit until it is
+    private var restoring = false
+
     private fun finishHistoryChange(record: EditRecord) {
+        annotationCache.clear()
         cancelInkStroke()
         pendingInk.removeAll { it.name == record.name }
         val revision = (inkRevisions[record.page] ?: 0) + 1
@@ -2090,8 +2153,22 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
                 pendingInk.add(stroke.copy(revision = revision))
             }
         }
-        inkChanged(record.page)
+        inkChanged(record.page, record.area)
     }
+
+    /**
+     * The part of [page] (0..1 as shown) covered by PDF bounds [rect] (two opposite corners)
+     * with [pad] points around: what an edit there needs drawn again. Null: the whole page.
+     */
+    private fun shownArea(page: Int, rect: RectF, pad: Float = AREA_PAD): RectF? {
+        val mapping = pageMapping(page) ?: return null
+        val corners = floatArrayOf(min(rect.left, rect.right) - pad, max(rect.top, rect.bottom) + pad,
+            max(rect.left, rect.right) + pad, min(rect.top, rect.bottom) - pad)
+        mapping.toShown.mapPoints(corners)
+        return RectF(corners[0], corners[1], corners[2], corners[3]).apply { sort() }
+    }
+
+    private fun union(a: RectF?, b: RectF?): RectF? = if (a == null || b == null) null else RectF(a).apply { union(b) }
 
     /** Map a view point to a viewer page and PDF coordinates, or null in page gaps. Main thread only. */
     fun viewToPagePoint(viewX: Float, viewY: Float): Pair<Int, PointF>? {
@@ -2104,10 +2181,10 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         val x = viewX - currentXOffset - offset.x
         val y = viewY - currentYOffset - offset.y
         if (size.width <= 0 || size.height <= 0 || x < 0 || y < 0 || x > size.width || y > size.height) return null
-        val w = 16384
-        val h = max(1, (w * size.height / size.width).toInt())
-        return file.deviceToPageCoords(page, w, h, kotlin.math.round(x / size.width * w).toInt(),
-            kotlin.math.round(y / size.height * h).toInt())?.let { page to it }
+        val mapping = pageMapping(page) ?: return null
+        val point = floatArrayOf(x / size.width, y / size.height)
+        mapping.toPage.mapPoints(point)
+        return page to PointF(point[0], point[1])
     }
 
     /** Where [page] is drawn, in view pixels (it may be partly off screen), or null. */
@@ -2134,11 +2211,13 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         requireEditThread()
         val file = pdfFile ?: return null
         if (page !in 0 until file.pagesCount) return null
-        try { file.openPage(page) } catch (ignored: PageRenderingException) { return null }
         val size = file.getScaledPageSize(page, zoom)
         if (size.width <= 0 || size.height <= 0) return null
         val offset = computePageOffsets(page)
-        val mapped = file.mapRectToDevice(page, 0, 0, size.width.toInt(), size.height.toInt(), pageRect) ?: return null
+        val mapping = pageMapping(page) ?: return null
+        val corners = floatArrayOf(pageRect.left, pageRect.top, pageRect.right, pageRect.bottom)
+        mapping.toShown.mapPoints(corners)
+        val mapped = RectF(corners[0] * size.width, corners[1] * size.height, corners[2] * size.width, corners[3] * size.height)
         mapped.sort()
         mapped.offset(currentXOffset + offset.x, currentYOffset + offset.y)
         return mapped
@@ -2152,8 +2231,8 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         @ColorInt color: Int = Color.BLACK, fontPath: String? = null): String? {
         requireEditThread()
         val file = pdfFile ?: return null
-        if (text.isBlank() || !sizePt.isFinite() || sizePt <= 0 || !pageX.isFinite() || !pageY.isFinite()) return null
-        val font = fontPath ?: com.reader.pdfviewer.util.SystemFonts.unicode()
+        if (restoring || text.isBlank() || !sizePt.isFinite() || sizePt <= 0 || !pageX.isFinite() || !pageY.isFinite()) return null
+        val font = fontPath ?: com.reader.pdfviewer.util.SystemFonts.unicodeFor(context, text)
         val name = "pdfview-text-" + java.util.UUID.randomUUID()
         val first = file.addFreeText(page, text, font, sizePt, pageX, pageY, color, name) ?: return null
         // moved or resized: the text keeps its lines, its size follows the height of the bounds
@@ -2162,24 +2241,46 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             val size = sizePt * (r.top - r.bottom) / (origin.top - origin.bottom)
             file.addFreeText(page, text, font, size, pageX + (r.left - origin.left), pageY + (r.top - origin.top), color, name) != null
         }
-        val item = Placed(page, RectF(origin), place)
-        placed[name] = item
-        recordAddition(page, name) { place(item.bounds) }
-        inkChanged(page)
-        return name
+        return registerPlaced(page, name, origin, AREA_PAD, place)
     }
 
     /** Add an image in PDF bounds (right > left, top > bottom). Retains a private bitmap for redo. */
     fun addImage(page: Int, pageRect: RectF, bitmap: Bitmap): String? {
         requireEditThread()
         val file = pdfFile ?: return null
-        if (bitmap.isRecycled || !listOf(pageRect.left, pageRect.top, pageRect.right, pageRect.bottom).all { it.isFinite() }
-            || pageRect.right <= pageRect.left || pageRect.top <= pageRect.bottom) return null
+        if (restoring || !validImage(pageRect, bitmap)) return null
         val copy = bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return null
         val rect = RectF(pageRect)
         val name = "pdfview-image-" + java.util.UUID.randomUUID()
-        return addPlaced(page, name, rect) { r -> file.addImage(page, r, copy, name) } ?: run { copy.recycle(); null }
+        if (!file.addImage(page, rect, copy, name)) { copy.recycle(); return null }
+        return registerImage(file, page, name, rect, copy)
     }
+
+    /**
+     * [addImage] that writes the pixels into the document off the main thread (a large picture
+     * takes a while). Call on the main thread; [done] runs there with the name, or null.
+     */
+    fun addImage(page: Int, pageRect: RectF, bitmap: Bitmap, done: (String?) -> Unit) {
+        requireEditThread()
+        val file = pdfFile ?: return done(null)
+        if (restoring || !validImage(pageRect, bitmap)) return done(null)
+        val rect = RectF(pageRect)
+        val name = "pdfview-image-" + java.util.UUID.randomUUID()
+        viewScope.launch {
+            val copy = withContext(Dispatchers.IO) {
+                bitmap.copy(Bitmap.Config.ARGB_8888, false)?.let { if (file.addImage(page, rect, it, name)) it else { it.recycle(); null } }
+            }
+            if (isRecycled || pdfFile !== file) return@launch
+            done(copy?.let { registerImage(file, page, name, rect, it) })
+        }
+    }
+
+    private fun validImage(rect: RectF, bitmap: Bitmap) = !bitmap.isRecycled &&
+        listOf(rect.left, rect.top, rect.right, rect.bottom).all { it.isFinite() } && rect.right > rect.left && rect.top > rect.bottom
+
+    /** A picture already in the document: moving it keeps its pixels, only adding it again (redo, saving) writes them. */
+    private fun registerImage(file: PdfFile, page: Int, name: String, rect: RectF, copy: Bitmap): String =
+        registerPlaced(page, name, rect, AREA_PAD, { r -> file.addImage(page, r, copy, name) }) { r -> file.moveImage(page, name, r) }
 
     /** Add a sticky note whose icon's top left is at a PDF point. Returns its NM name, or null. */
     fun addNote(page: Int, pageX: Float, pageY: Float, text: String, @ColorInt color: Int = NOTE_COLOR): String? {
@@ -2201,19 +2302,36 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         if (!widthPt.isFinite() || widthPt <= 0) return null
         val name = "pdfview-shape-" + java.util.UUID.randomUUID()
         val place = { r: RectF -> file.addShape(page, kind, floatArrayOf(r.left, r.top, r.right, r.bottom), stroke, widthPt, fill, name) }
-        return addPlaced(page, name, RectF(pageRect), place)
+        // an arrow head reaches past the end of its line
+        return addPlaced(page, name, RectF(pageRect), place, AREA_PAD + widthPt + max(8f, widthPt * 4))
     }
 
-    /** An annotation added in this session that can be moved and resized, see [moveAnnotation]. */
-    private class Placed(val page: Int, var bounds: RectF, val place: (RectF) -> Boolean)
+    /**
+     * An annotation added in this session that can be moved and resized, see [moveAnnotation]:
+     * [place] adds it at bounds, [move] (when it has one) changes the bounds of the one there.
+     * [pad]: how far, in points, it may draw outside its bounds.
+     */
+    private class Placed(val page: Int, var bounds: RectF, val pad: Float, val place: (RectF) -> Boolean, val move: ((RectF) -> Boolean)?)
     private val placed = HashMap<String, Placed>()
 
-    private fun addPlaced(page: Int, name: String, bounds: RectF, place: (RectF) -> Boolean): String? {
-        if (!place(bounds)) return null
-        val item = Placed(page, RectF(bounds), place)
+    // Pictures whose rectangle alone was changed by a move (see PdfiumCore.moveImage): their
+    // appearance is still at the old place, which pdfium fits into the rectangle but some viewers
+    // (Apple's) do not. [saveDocument] writes them again at their bounds. Read on the saving thread.
+    private val movedImages = java.util.concurrent.ConcurrentHashMap<String, Placed>()
+
+    private fun addPlaced(page: Int, name: String, bounds: RectF, place: (RectF) -> Boolean, pad: Float = AREA_PAD): String? {
+        if (restoring || !place(bounds)) return null
+        return registerPlaced(page, name, bounds, pad, place)
+    }
+
+    /** Records an annotation that is in the document at [bounds] already. */
+    private fun registerPlaced(page: Int, name: String, bounds: RectF, pad: Float, place: (RectF) -> Boolean,
+                               move: ((RectF) -> Boolean)? = null): String {
+        val item = Placed(page, RectF(bounds), pad, place, move)
         placed[name] = item
-        recordAddition(page, name) { place(item.bounds) }
-        inkChanged(page)
+        val area = shownArea(page, bounds, pad)
+        recordAddition(page, name, area) { place(item.bounds) }
+        inkChanged(page, area)
         return name
     }
 
@@ -2228,18 +2346,22 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         requireEditThread()
         val file = pdfFile ?: return false
         val item = placed[name] ?: return false
+        if (restoring) return false
         val from = RectF(item.bounds)
         val to = RectF(bounds)
         fun put(r: RectF): Boolean {
+            annotationCache.clear()
+            item.move?.let { move -> return move(r).also { moved -> if (moved) { item.bounds = RectF(r); movedImages[name] = item } } }
             if (!file.removeAnnotByName(item.page, name)) return false
             if (item.place(r)) { item.bounds = RectF(r); return true }
             item.place(item.bounds) // put it back where it was
             return false
         }
         if (!put(to)) return false
-        editUndo.add(EditRecord(item.page, name, { put(to) }, { put(from) }))
+        val area = union(shownArea(item.page, from, item.pad), shownArea(item.page, to, item.pad))
+        editUndo.add(EditRecord(item.page, name, { put(to) }, { put(from) }, area = area))
         editRedo.clear()
-        inkChanged(item.page)
+        inkChanged(item.page, area)
         return true
     }
 
@@ -2254,6 +2376,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     fun setAnnotationText(info: PdfAnnotationInfo, text: String): Boolean {
         requireEditThread()
         val file = pdfFile ?: return false
+        if (restoring) return false
         val before = getAnnotationText(info) ?: ""
         fun set(value: String): Boolean = currentIndex(info)?.let { file.setAnnotContents(info.page, it, value) } == true
         if (!set(text)) return false
@@ -2304,7 +2427,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
 
     private fun formEdit(field: com.reader.pdfviewer.pdfium.PdfFormField, edit: () -> Boolean): Boolean {
         requireEditThread()
-        if (field.readOnly || !edit()) return false
+        if (restoring || field.readOnly || !edit()) return false
         // form values are not in the history; an undo that restores a copy of the document would lose them
         editUndo.removeAll { it.snapshot }
         editRedo.removeAll { it.snapshot }
@@ -2339,8 +2462,12 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     /** List annotation metadata in stacking order. Call on the main thread. */
     fun getAnnotations(page: Int): List<PdfAnnotationInfo> {
         requireEditThread()
-        return pdfFile?.getAnnotations(page) ?: emptyList()
+        val file = pdfFile ?: return emptyList()
+        return annotationCache.getOrPut(page) { file.getAnnotations(page) }
     }
+
+    // Annotations of the pages as last read, dropped on every edit: a tap does not wait for pdfium
+    private val annotationCache = HashMap<Int, List<PdfAnnotationInfo>>()
 
     /** Find the topmost annotation; small bounds get a minimum 16dp touch target. */
     fun findAnnotationAt(viewX: Float, viewY: Float): PdfAnnotationInfo? {
@@ -2354,41 +2481,98 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     }
 
     /** Delete an annotation on the main thread. Named imported annotations use a document
-     * snapshot for undo, which can take time and memory proportional to document size.
+     * snapshot for undo, which takes time proportional to document size: prefer the variant
+     * with a callback, which makes it off the main thread.
      * Deleting an imported unnamed annotation cannot be undone and starts a new history.
      * Refresh metadata after edits: indices of unnamed annotations can change.
      */
     fun removeAnnotation(info: PdfAnnotationInfo): Boolean {
         requireEditThread()
         val file = pdfFile ?: return false
-        val current = getAnnotations(info.page).firstOrNull {
-            if (!info.name.isNullOrEmpty()) it.name == info.name
-            else it.index == info.index && it.subtype == info.subtype && it.rect == info.rect
-        } ?: return false
+        if (restoring) return false
+        val current = currentAnnotation(info) ?: return false
+        return removeAnnotation(file, info, current, if (needsSnapshot(current)) takeSnapshot(file) else null)
+    }
+
+    /**
+     * [removeAnnotation] whose document snapshot (see there) is made off the main thread.
+     * Call on the main thread; [done] runs there with whether the annotation was deleted.
+     */
+    fun removeAnnotation(info: PdfAnnotationInfo, done: (Boolean) -> Unit) {
+        requireEditThread()
+        val file = pdfFile ?: return done(false)
+        if (restoring) return done(false)
+        val current = currentAnnotation(info) ?: return done(false)
+        if (!needsSnapshot(current)) return done(removeAnnotation(file, info, current, null))
+        val revision = editRevision
+        viewScope.launch {
+            val snapshot = withContext(Dispatchers.IO) { takeSnapshot(file) }
+            if (isRecycled || pdfFile !== file) {
+                snapshot?.delete()
+                return@launch
+            }
+            if (editRevision != revision || restoring) {
+                // edited meanwhile: the snapshot lacks that edit, take it again
+                snapshot?.delete()
+                removeAnnotation(info, done)
+                return@launch
+            }
+            done(removeAnnotation(file, info, current, snapshot))
+        }
+    }
+
+    private fun currentAnnotation(info: PdfAnnotationInfo): PdfAnnotationInfo? = getAnnotations(info.page).firstOrNull {
+        if (!info.name.isNullOrEmpty()) it.name == info.name
+        else it.index == info.index && it.subtype == info.subtype && it.rect == info.rect
+    }
+
+    /** Only a named annotation that came with the file needs a copy of the document to come back. */
+    private fun needsSnapshot(current: PdfAnnotationInfo) = sessionAnnotations[current.name] == null && !current.name.isNullOrEmpty()
+
+    // Snapshots are kept on disk: each is as large as the document, and every deletion keeps one
+    private val snapshotFiles = ArrayList<File>()
+
+    /** The document as it is now in a cache file, or null (the deletion then cannot be undone). Any thread. */
+    private fun takeSnapshot(file: PdfFile): File? = try {
+        file.editSnapshot()?.let { bytes ->
+            val folder = File(context.cacheDir, "pdfview-undo").apply { mkdirs() }
+            File(folder, java.util.UUID.randomUUID().toString()).also { it.writeBytes(bytes) }
+        }
+    } catch (e: OutOfMemoryError) {
+        null
+    } catch (e: java.io.IOException) {
+        null
+    }
+
+    private fun removeAnnotation(file: PdfFile, info: PdfAnnotationInfo, current: PdfAnnotationInfo, snapshot: File?): Boolean {
         val original = sessionAnnotations[current.name]
-        val snapshot = if (original == null && !current.name.isNullOrEmpty())
-            try { file.editSnapshot() } catch (e: OutOfMemoryError) { null } else null // null: delete without undo
         val removed = if (!current.name.isNullOrEmpty()) file.removeAnnotByName(info.page, current.name)
             else file.removeAnnotAt(info.page, current.index)
-        if (!removed) return false
+        if (!removed) {
+            snapshot?.delete()
+            return false
+        }
+        val area = shownArea(info.page, current.rect)
         if (original != null) {
-            editUndo.add(EditRecord(info.page, original.name, original.revert, original.apply))
+            editUndo.add(EditRecord(info.page, original.name, original.revert, original.apply, area = area))
         } else if (snapshot != null) {
             val name = current.name!!
-            editUndo.add(EditRecord(info.page, name,
-                { file.removeAnnotByName(info.page, name) },
-                {
-                    if (!file.restoreEditSnapshot(snapshot)) false else {
-                        clearTextSelection()
-                        pendingInk.clear()
-                        pageRenderer?.cancelAllTasks()
-                        for (page in 0 until pageCount) {
-                            inkRevisions[page] = (inkRevisions[page] ?: 0) + 1
-                            cacheManager.markPageStale(page, zoom)
-                        }
-                        true
-                    }
-                }, snapshot = true))
+            snapshotFiles.add(snapshot)
+            val restore = {
+                val bytes = try { snapshot.readBytes() } catch (e: java.io.IOException) { null } catch (e: OutOfMemoryError) { null }
+                bytes != null && file.restoreEditSnapshot(bytes)
+            }
+            val restored = {
+                clearTextSelection()
+                pendingInk.clear()
+                pageRenderer?.cancelAllTasks()
+                for (page in 0 until pageCount) {
+                    inkRevisions[page] = (inkRevisions[page] ?: 0) + 1
+                    cacheManager.markPageStale(page, zoom)
+                }
+            }
+            editUndo.add(EditRecord(info.page, name, { file.removeAnnotByName(info.page, name) },
+                { restore().also { if (it) restored() } }, snapshot = true, restore = restore, restored = restored))
         } else {
             // An unrecorded deletion is a history boundary so an older snapshot cannot resurrect it.
             editUndo.clear()
@@ -2396,19 +2580,44 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         editRedo.clear()
         pendingInk.removeAll { it.name == current.name }
         inkRevisions[info.page] = (inkRevisions[info.page] ?: 0) + 1
-        inkChanged(info.page)
+        inkChanged(info.page, area)
         return true
+    }
+
+    /**
+     * The annotations of every page that [keep] accepts, each with its text (a note's), read off
+     * the main thread: it goes through every page. [done] runs on the main thread.
+     */
+    fun loadAnnotations(keep: (PdfAnnotationInfo) -> Boolean, done: (List<Pair<PdfAnnotationInfo, String?>>) -> Unit) {
+        requireEditThread()
+        val file = pdfFile ?: return done(emptyList())
+        viewScope.launch {
+            val all = withContext(Dispatchers.Default) {
+                val result = ArrayList<Pair<PdfAnnotationInfo, String?>>()
+                for (page in 0 until file.pagesCount) {
+                    ensureActive()
+                    if (isRecycled) break
+                    file.readAnnotations(page).filterTo(result) { keep(it.first) }
+                }
+                result
+            }
+            if (!isRecycled && pdfFile === file) done(all)
+        }
     }
 
     /** Grows with every edit, undo and redo: what depends on the annotations can tell they changed. */
     var editRevision = 0L
         private set
 
-    private fun inkChanged(page: Int) {
+    /** [area]: the part of the page (0..1 as shown) that changed, null when all of it may have. */
+    private fun inkChanged(page: Int, area: RectF? = null) {
+        annotationCache.clear()
         editRevision++
         hasUnsavedChanges = true
-        if (!isAnnotationRendering) enableAnnotationRendering(true)
-        reloadPage(page)
+        // parts drawn without annotations are all out of date
+        val all = !isAnnotationRendering
+        if (all) enableAnnotationRendering(true)
+        reloadPage(page, if (all) null else area)
         invalidate()
         callbacks.onEditChangeListener?.onEditChanged(canUndoEdit(), canRedoEdit())
         callbacks.onInkChangeListener?.onInkChanged(canUndoInk(), canRedoInk())
@@ -2458,28 +2667,29 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     internal fun finishInkStroke() {
         val file = pdfFile ?: return
         val page = inkPage
+        if (restoring) { cancelInkStroke(); return }
         if (page < 0 || inkPoints.isEmpty()) return
         if (inkPoints.size == 1) inkPoints.add(PointF(inkPoints[0].x, inkPoints[0].y))
-        val size = file.getScaledPageSize(page, zoom)
-        val mappingWidth = 16384
-        val mappingHeight = max(1, (mappingWidth * size.height / size.width).toInt())
+        val mapping = pageMapping(page)
+        if (mapping == null) { cancelInkStroke(); return }
         val points = FloatArray(inkPoints.size * 2)
         for ((index, point) in inkPoints.withIndex()) {
-            val mapped = file.deviceToPageCoords(page, mappingWidth, mappingHeight,
-                kotlin.math.round(point.x * mappingWidth).toInt(), kotlin.math.round(point.y * mappingHeight).toInt())
-            if (mapped == null) { cancelInkStroke(); return }
-            points[index * 2] = mapped.x
-            points[index * 2 + 1] = mapped.y
+            points[index * 2] = point.x
+            points[index * 2 + 1] = point.y
         }
+        mapping.toPage.mapPoints(points)
+        var bounds: RectF? = null
+        for (i in points.indices step 2) bounds = (bounds ?: RectF(points[i], points[i + 1], points[i], points[i + 1])).apply { union(points[i], points[i + 1]) }
+        val area = shownArea(page, bounds!!, AREA_PAD + strokeWidth)
         val stroke = InkStroke(page, points, inkPoints.toList(), strokeColor, strokeWidth,
             "pdfview-ink-" + java.util.UUID.randomUUID(), (inkRevisions[page] ?: 0) + 1)
         cancelInkStroke()
         if (!file.addInk(page, points, stroke.width, stroke.color, stroke.name)) return
         inkRevisions[page] = stroke.revision
         sessionInk[stroke.name] = stroke
-        recordAddition(page, stroke.name) { file.addInk(page, points, stroke.width, stroke.color, stroke.name) }
+        recordAddition(page, stroke.name, area) { file.addInk(page, points, stroke.width, stroke.color, stroke.name) }
         pendingInk.add(stroke)
-        inkChanged(page)
+        inkChanged(page, area)
     }
 
     // Canvas uses document-strip coordinates here; normalized points follow pan and zoom.
@@ -2520,19 +2730,25 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         val offset = computePageOffsets(page)
         inkPaint.color = color
         inkPaint.strokeWidth = widthPt * size.width / widthPoints
-        val path = Path()
-        var last = points.first()
+        // called on every frame while a stroke is drawn: one path reused, no list copied
+        val path = inkPath
+        path.rewind()
+        var last = points[0]
+        var dot = true
         path.moveTo(offset.x + last.x * size.width, offset.y + last.y * size.height)
-        for (point in points.drop(1)) {
+        for (i in 1 until points.size) {
+            val point = points[i]
+            if (point.x != last.x || point.y != last.y) dot = false
             path.quadTo(offset.x + last.x * size.width, offset.y + last.y * size.height,
                 offset.x + (last.x + point.x) * size.width / 2, offset.y + (last.y + point.y) * size.height / 2)
             last = point
         }
         path.lineTo(offset.x + last.x * size.width, offset.y + last.y * size.height)
-        if (points.all { it.x == last.x && it.y == last.y }) {
-            canvas.drawPoint(offset.x + last.x * size.width, offset.y + last.y * size.height, inkPaint)
-        } else canvas.drawPath(path, inkPaint)
+        if (dot) canvas.drawPoint(offset.x + last.x * size.width, offset.y + last.y * size.height, inkPaint)
+        else canvas.drawPath(path, inkPaint)
     }
+
+    private val inkPath = Path()
 
     /**
      * Show a loupe when long pressing where there is no text to select, it follows the finger until it is lifted
@@ -2639,7 +2855,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     fun addTextMarkupToSelection(type: TextMarkupType, @ColorInt color: Int? = null): Boolean {
         requireEditThread()
         val file = pdfFile ?: return false
-        if (!hasTextSelection()) {
+        if (restoring || !hasTextSelection()) {
             return false
         }
         val page = selectionPage
@@ -2704,9 +2920,9 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     /**
      * Render [page] again, after its content changed
      */
-    private fun reloadPage(page: Int) {
+    private fun reloadPage(page: Int, area: RectF? = null) {
         pageRenderer?.cancelAllTasks()
-        cacheManager.markPageStale(page, zoom)
+        cacheManager.markPageStale(page, zoom, area, inkRevisions[page] ?: 0)
         loadPages()
     }
 
@@ -2723,6 +2939,13 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             val file = pdfFile ?: return false
             val folder = target.absoluteFile.parentFile ?: return false
             val temp = File(folder, ".${target.name}.saving")
+            // moved pictures go in again at their bounds, so that every viewer shows them there
+            val moved = movedImages.entries.toList()
+            for ((name, item) in moved) {
+                movedImages.remove(name, item)
+                if (file.removeAnnotByName(item.page, name)) item.place(RectF(item.bounds))
+            }
+            if (moved.isNotEmpty()) post { annotationCache.clear() }
             val saved = try {
                 file.saveAsCopy(temp.absolutePath) && temp.length() > 0 && temp.renameTo(target)
             } catch (e: Exception) {
@@ -4243,6 +4466,8 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         const val SHAPE_LINE = 2
         const val SHAPE_ARROW = 3
         const val NOTE_COLOR = 0xFFFFC107.toInt()
+        // points around the bounds of an edit that are drawn again with it (anti-aliasing, line ends)
+        private const val AREA_PAD = 16f
         private const val SEPIA_BACKGROUND = 0xFFF4ECD8.toInt()
         private val TAG: String = PDFView::class.java.simpleName
         private val INVALID_CHAR_INDEX = -1

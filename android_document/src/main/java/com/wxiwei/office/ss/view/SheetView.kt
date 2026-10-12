@@ -735,6 +735,17 @@ class SheetView(spreadsheet: Spreadsheet?, sheet: Sheet?) {
      */
     fun drawSheet(canvas: Canvas) = drawSheet(canvas, false)
 
+    /** Only the row numbers and column letters, at the zoom and scroll of now (the pinch preview draws the cells). */
+    fun drawHeaders(canvas: Canvas) {
+        synchronized(this) {
+            val rowHeader = this.rowHeader!!
+            val columnHeader = this.columnHeader!!
+            // the grid lines the headers draw across the cells stop at the headers
+            rowHeader.draw(canvas, rowHeader.getRowHeaderWidth(), zoom)
+            columnHeader.draw(canvas, columnHeader.getColumnHeaderHeight(), zoom)
+        }
+    }
+
     /**
      * @param useTiles draw the cell area from [SheetTileCache]; only for the on-screen view,
      * snapshots and pictures draw live
