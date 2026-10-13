@@ -72,7 +72,12 @@ class WordEditPanel @JvmOverloads constructor(
                 (base and (WPModelConstant.AREA_MASK or WPModelConstant.TEXTBOX_MASK).inv()) > 0 &&
                 selectionStart == 0 && selectionEnd == 0) {
                 val s = session() ?: return@setOnKeyListener true
-                if (s.deleteText(base - 1, base)) { base -= 1; caret.touch(); pagesChangedFrom(base) }
+                val shown = !s.needsReopen
+                if (s.deleteText(base - 1, base)) {
+                    base -= 1; caret.touch(); pagesChangedFrom(base)
+                    // deleted in the file only: the view is read again, the caret stays there
+                    if (shown && s.needsReopen) base.let { at -> reloadWorking { startTyping(at) } }
+                }
                 else toast(s.lastError?.message ?: str(R.string.docsdk_edit_delete_failed))
                 true
             } else false
@@ -492,19 +497,25 @@ class WordEditPanel @JvmOverloads constructor(
         dialog.window?.setDimAmount(0f)
     }
 
+    /** The table goes after the paragraph at [at]; text typed there is saved first ([flushed] once it was). */
+    private fun insertTable(at: Long, rows: Int, columns: Int, flushed: Boolean) {
+        val s = session() ?: return
+        stopTyping()
+        val shown = !s.needsReopen
+        if (!s.insertTable(at, rows, columns)) {
+            if (s.needsFlush && !flushed) return reloadWorking { insertTable(at, rows, columns, flushed = true) }
+            return toast(s.lastError?.message ?: str(R.string.docsdk_edit_table_insert_failed))
+        }
+        if (shown && s.needsReopen) return reloadWorking()
+        // shown at once: the caret in its first cell, right after the paragraph
+        pagesChangedFrom(at)
+        ((docView() as? com.wxiwei.office.wp.control.Word)?.getDocument()?.getParagraph(at)?.getEndOffset())?.let { startTyping(it) }
+    }
+
     private fun askTable() {
         val at = here()
         if (at < 0) return toast(str(R.string.docsdk_edit_tap_table_place_first))
-        askTableSize { size ->
-            val s = session() ?: return@askTableSize
-            stopTyping()
-            val shown = !s.needsReopen
-            if (!s.insertTable(at, size.rows, size.columns)) return@askTableSize toast(s.lastError?.message ?: str(R.string.docsdk_edit_table_insert_failed))
-            if (shown && s.needsReopen) return@askTableSize reloadWorking()
-            // shown at once: the caret in its first cell, right after the paragraph
-            pagesChangedFrom(at)
-            ((docView() as? com.wxiwei.office.wp.control.Word)?.getDocument()?.getParagraph(at)?.getEndOffset())?.let { startTyping(it) }
-        }
+        askTableSize { size -> insertTable(at, size.rows, size.columns, flushed = false) }
     }
 
     /** Writes every edit to a working copy in the cache and shows it; the original waits for Save. Then [then], once the view is back where it was. */

@@ -446,6 +446,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
             if (!editor.insertText(original, text)) return false
             if (!doc.insertMainText(offset, text)) {
                 // a paragraph break or a non text position: saved, shown after reopening
+                // not shown at once: taken only when the file can take it (not across a table or cell boundary)
+                if (!checked(true)) return false
                 needsReopen = true
                 undoStack.add(Step({ editor.undoLast() }, { editor.insertText(original, text) })); redoStack.clear()
                 return true
@@ -463,6 +465,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
     private fun splitParagraph(doc: WPDocument, offset: Long, original: Long): Boolean {
         if (!editor.insertText(original, "\n")) return false
         if (!doc.splitMainParagraph(offset)) {
+            // not shown at once: taken only when the file can take it (not across a table or cell boundary)
+            if (!checked(true)) return false
             needsReopen = true
             undoStack.add(Step({ editor.undoLast() }, { editor.insertText(original, "\n") })); redoStack.clear()
             return true
@@ -482,6 +486,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
     private fun joinParagraphs(doc: WPDocument, mark: Long, os: Long, oe: Long): Boolean {
         if (!editor.deleteText(os, oe)) return false
         if (!doc.joinMainParagraph(mark)) {
+            // not shown at once: taken only when the file can take it (not across a table or cell boundary)
+            if (!checked(true)) return false
             needsReopen = true
             undoStack.add(Step({ editor.undoLast() }, { editor.deleteText(os, oe) })); redoStack.clear()
             return true
@@ -518,6 +524,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
             if (removed == "\n") return joinParagraphs(doc, start, os, oe)
             if (!editor.deleteText(os, oe)) return false
             if (!doc.deleteMainText(start, end)) {
+                // not shown at once: taken only when the file can take it (not across a table or cell boundary)
+                if (!checked(true)) return false
                 needsReopen = true
                 undoStack.add(Step({ editor.undoLast() }, { editor.deleteText(os, oe) })); redoStack.clear()
                 return true
@@ -567,6 +575,8 @@ class LiveDocxSession(control: IControl, private val source: File) {
             if (!editor.replaceText(os, oe, text)) return false
             // the new text goes into the run of the replaced text: insert first, then delete the old
             if (!doc.insertMainText(start, text) ) {
+                // not shown at once: taken only when the file can take it (not across a table or cell boundary)
+                if (!checked(true)) return false
                 needsReopen = true
                 undoStack.add(Step({ editor.undoLast() }, { editor.replaceText(os, oe, text) })); redoStack.clear()
                 return true
@@ -1001,7 +1011,7 @@ class LiveDocxSession(control: IControl, private val source: File) {
         return cellRef(table, r, k)
     }
 
-    /** True after an edit was refused because it needs the document saved first ([touchesNewCells]). */
+    /** True after an edit was refused because it needs the document saved first ([touchesNewCells], [insertTable]). */
     var needsFlush = false
         private set
 
@@ -1354,12 +1364,20 @@ class LiveDocxSession(control: IControl, private val source: File) {
     /**
      * A [rows] x [cols] table with thin borders after the body paragraph at [offset], shown at once
      * (with an empty paragraph after it when a table or the end follows, as in the file); otherwise
-     * after the file is read again ([needsReopen]).
+     * after the file is read again ([needsReopen]). Refused with [needsFlush] after a paragraph typed
+     * in this session.
      */
     fun insertTable(offset: Long, rows: Int, cols: Int): Boolean = synchronized(layoutLock) {
         ownError = null
+        needsFlush = false
         val doc = word.getDocument() as? WPDocument
         val para = doc?.getParagraph(offset) as? ParagraphElement
+        // after a paragraph typed in this session: the file has no place for it yet (it would land
+        // where the typing started), saving the working copy first gives it one
+        if (para != null && (offset and WPModelConstant.AREA_MASK) == WPModelConstant.MAIN && touchesTyped(para.getEndOffset() - 1, para.getEndOffset())) {
+            needsFlush = true
+            return refuse("Lưu đoạn vừa gõ trước")
+        }
         // live: a body paragraph whose mark is in the file (the table goes after that paragraph there)
         val live = doc != null && para != null && (offset and WPModelConstant.AREA_MASK) == WPModelConstant.MAIN &&
             am.getParaLevel(para.getAttribute()) < 0 && !touchesTyped(para.getEndOffset() - 1, para.getEndOffset())
