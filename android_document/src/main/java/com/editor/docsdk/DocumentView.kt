@@ -166,6 +166,19 @@ class DocumentView @JvmOverloads constructor(
     }
 
     /**
+     * Gets the slideshow of the presentation shown ready for a [SlideShowView]: [ready] runs on the
+     * main thread with it, or with null when this view shows no presentation (or it has not loaded).
+     * While editing, the show plays the edits not saved yet. It starts at slide [startAt] (0 based,
+     * the one on screen by default). Keep this view open while the show runs.
+     */
+    @MainThread
+    @JvmOverloads
+    fun prepareSlideShow(startAt: Int = currentPage, ready: (SlideShowView.Source?) -> Unit) {
+        val view = officeView?.takeIf { loaded } ?: return ready(null)
+        SlideShowView.prepare(view, file, editPanel as? com.wxiwei.office.editor.ui.SlideEditPanel, startAt, ready)
+    }
+
+    /**
      * Starts editing with [features] (every one by default) and returns the editor, or null when
      * the document cannot be edited (see [canEdit]). With [showToolbar] the SDK's bar shows at the
      * bottom of the view; without it, run the commands from your own buttons ([DocumentEditor]).

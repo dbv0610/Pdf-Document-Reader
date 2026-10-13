@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.compile.JavaCompile
-
 plugins {
     alias(libs.plugins.androidLibrary)
     `maven-publish`
@@ -7,7 +5,7 @@ plugins {
 
 // Coordinates of the SDK as integrators add it: implementation("com.editor:docsdk:<version>")
 group = "com.editor"
-version = "1.1.1"
+version = "1.1.3"
 
 android {
     namespace = "com.wxiwei.office"
@@ -82,15 +80,28 @@ publishing {
             name = "sdk"
             url = uri(rootProject.layout.projectDirectory.dir("sdk-repo"))
         }
-        // optional private GitHub Packages: -Pdocsdk.githubRepo=<owner>/<repo>, with GITHUB_ACTOR and GITHUB_TOKEN
-        (findProperty("docsdk.githubRepo") as String?)?.let { repo ->
-            maven {
-                name = "github"
-                url = uri("https://maven.pkg.github.com/$repo")
-                credentials {
-                    username = System.getenv("GITHUB_ACTOR") ?: findProperty("gpr.user") as String?
-                    password = System.getenv("GITHUB_TOKEN") ?: findProperty("gpr.key") as String?
-                }
+        // GitHub Packages repository (publish with: -Pdocsdk.githubRepo=<owner>/<repo>, GITHUB_ACTOR and GITHUB_TOKEN)
+        maven {
+            name = "github"
+            val repo = (findProperty("docsdk.githubRepo") as String?).takeIf { !it.isNullOrBlank() }
+                ?: System.getenv("GITHUB_REPOSITORY")
+                ?: "owner/repo"
+            url = uri("https://maven.pkg.github.com/$repo")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR") ?: findProperty("gpr.user") as String?
+                password = System.getenv("GITHUB_TOKEN") ?: findProperty("gpr.key") as String?
+            }
+        }
+    }
+}
+
+tasks.withType<PublishToMavenRepository>().configureEach {
+    if (repository.name == "github") {
+        doFirst {
+            val repoProp = (findProperty("docsdk.githubRepo") as String?).takeIf { !it.isNullOrBlank() }
+                ?: System.getenv("GITHUB_REPOSITORY")
+            if (repoProp == null) {
+                error("Missing docsdk.githubRepo property or GITHUB_REPOSITORY environment variable. Example: ./gradlew :android_document:publishReleasePublicationToGithubRepository -Pdocsdk.githubRepo=owner/repo")
             }
         }
     }
