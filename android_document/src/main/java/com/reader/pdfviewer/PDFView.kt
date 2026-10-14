@@ -1911,6 +1911,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
      * Called when a handle starts being dragged, so the finger keeps its distance to the text it points to
      */
     fun startSelectionHandleDrag(isStart: Boolean, x: Float, y: Float) {
+        pressedWord = null
         val anchor = if (isStart) selectionStartAnchor else selectionEndAnchor
         handleDragOffsetX = if (anchor != null) anchor.x - x else 0f
         handleDragOffsetY = if (anchor != null) anchor.y - y else 0f
@@ -3476,12 +3477,31 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         }
 
         selectionPage = hit.page
-        selectionStart = hit.charIndex
-        selectionEnd = hit.charIndex
+        // a long press selects the word under the finger, not one letter
+        val word = wordAt(hit.page, hit.charIndex)
+        selectionStart = word.first
+        selectionEnd = word.last
+        pressedWord = word
         selectedText = computeSelectedText()
         callbacks.callOnSelectionChanged(true)
         redraw()
         return true
+    }
+
+    // the word a long press selected: dragging on from it keeps it selected, whichever way
+    private var pressedWord: IntRange? = null
+
+    /** Char indexes of the word holding [charIndex] on [page] (letters, digits and their marks); the char alone when it is not in a word. */
+    private fun wordAt(page: Int, charIndex: Int): IntRange {
+        val text = pdfFile?.getPageText(page).orEmpty()
+        fun inWord(i: Int) = i in text.indices && text[i].let { c ->
+            c.isLetterOrDigit() || Character.getType(c).let { it == Character.NON_SPACING_MARK.toInt() || it == Character.COMBINING_SPACING_MARK.toInt() }
+        }
+        if (!inWord(charIndex)) return charIndex..charIndex
+        var a = charIndex; var b = charIndex
+        while (inWord(a - 1)) a--
+        while (inWord(b + 1)) b++
+        return a..b
     }
 
     fun updateTextSelection(x: Float, y: Float): Boolean {
@@ -3494,6 +3514,8 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             return false
         }
 
+        // from a pressed word, the selection keeps the whole word on the side it starts from
+        pressedWord?.let { w -> selectionStart = if (hit.charIndex < w.first) w.last else w.first }
         if (selectionEnd != hit.charIndex) {
             selectionEnd = hit.charIndex
             selectedText = computeSelectedText()
@@ -3504,6 +3526,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     }
 
     fun finishTextSelection() {
+        pressedWord = null
         if (hasTextSelection()) {
             selectedText = computeSelectedText()
             if (selectionPopupEnabled) {
@@ -3514,6 +3537,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
     }
 
     private fun clearTextSelectionInternal(redraw: Boolean) {
+        pressedWord = null
         allowSelectionActionPopupAutoShow = false
         dismissSelectionActionPopup()
         val hadSelection = hasTextSelection()

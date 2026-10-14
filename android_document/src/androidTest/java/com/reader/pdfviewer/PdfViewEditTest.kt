@@ -470,4 +470,43 @@ class PdfViewEditTest {
             assertTrue("frame hugs the text: $margins (left, right, top, bottom)", margins.all { it <= 5f })
         }
     }
+
+    /** A long press on a word selects the whole word (Vietnamese marks included), not one letter. */
+    @Test
+    fun longPressSelectsTheWord() {
+        val file = File(context.cacheDir, "view_long_press.pdf").also { it.delete() }
+        android.graphics.pdf.PdfDocument().also { doc ->
+            val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create())
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 40f }
+            page.canvas.drawText("Hello wonderful world", 60f, 200f, paint)
+            page.canvas.drawText("Xin chào các bạn", 60f, 300f, paint)
+            doc.finishPage(page)
+            file.outputStream().use { doc.writeTo(it) }
+            doc.close()
+        }
+        val bounds = PdfiumCore(context).let { core ->
+            val doc = core.newDocument(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+            try { core.getPageTextLayout(doc, 0)!!.let { l -> listOf("wonderful", "chào").associateWith { w -> l.words.first { it.text == w }.bounds to l.pageHeight } } }
+            finally { core.closeDocument(doc) }
+        }
+        withView(file) { view ->
+            onMain { view.enableTextSelection(true) }
+            for ((word, place) in bounds) {
+                val (b, height) = place
+                // shown bounds (y down) to PDF bounds (y up), then to the view, then to the screen
+                val v = onMain { view.pageRectToView(0, RectF(b.left, height - b.top, b.right, height - b.bottom)) }!!
+                val at = IntArray(2).also { a -> onMain { view.getLocationOnScreen(a) } }
+                val x = at[0] + v.left + v.width() * 0.4f; val y = at[1] + v.centerY()
+                val automation = instrumentation.uiAutomation
+                val t0 = android.os.SystemClock.uptimeMillis()
+                for ((action, time) in listOf(android.view.MotionEvent.ACTION_DOWN to t0, android.view.MotionEvent.ACTION_UP to t0 + 900)) {
+                    if (action == android.view.MotionEvent.ACTION_UP) Thread.sleep(900)
+                    android.view.MotionEvent.obtain(t0, time, action, x, y, 0).also { it.source = android.view.InputDevice.SOURCE_TOUCHSCREEN; automation.injectInputEvent(it, true); it.recycle() }
+                }
+                Thread.sleep(600)
+                assertEquals("long press on '$word'", word, onMain { view.selectedText })
+                onMain { view.clearTextSelection() }
+            }
+        }
+    }
 }

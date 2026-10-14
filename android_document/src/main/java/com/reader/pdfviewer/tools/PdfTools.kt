@@ -319,6 +319,8 @@ class PdfTools(context: Context) {
         if (pages.isEmpty()) return 0
         val text = StringBuilder()
         for (page in pages) for (line in page.lines) for (word in line.words) if (page.kept(word)) text.append(line.text, word.start, word.end)
+        // the spaces between the words
+        text.append(' ')
         val font = unicodeFont(text.toString())
         return pages.count { addWords(doc, it, font) }
     }
@@ -335,13 +337,17 @@ class PdfTools(context: Context) {
         val gh = size.height * 100
         pdfium.openPage(doc, index)
         try {
-            for (line in lines) for (word in line.words) {
+            for (line in lines) {
+                val kept = line.words.filter { page.kept(it) }
+                for ((i, word) in kept.withIndex()) {
                 val box = word.box
-                if (!page.kept(word)) continue
                 val a = pdfium.deviceToPageCoords(doc, index, 0, 0, gw, gh, 0, (box.left * gw).toInt(), (box.top * gh).toInt()) ?: continue
                 val b = pdfium.deviceToPageCoords(doc, index, 0, 0, gw, gh, 0, (box.right * gw).toInt(), (box.bottom * gh).toInt()) ?: continue
-                words += line.text.substring(word.start, word.end)
+                // a space after each word but the last of its line: readers take the words apart
+                // (search, copy, read aloud); the word itself still fills its box
+                words += line.text.substring(word.start, word.end) + if (i < kept.lastIndex) " " else ""
                 boxes += minOf(a.x, b.x); boxes += minOf(a.y, b.y); boxes += maxOf(a.x, b.x); boxes += maxOf(a.y, b.y)
+                }
             }
         } finally {
             pdfium.closePage(doc, index)
