@@ -1354,6 +1354,70 @@ class LiveDocxSession(control: IControl, private val source: File) {
         true
     }
 
+    /** A table copied by [copyTable]: the table for [pasteTable], and [text] for other apps (a tab between cells, a line per row). */
+    class TableClip internal constructor(internal val table: com.wxiwei.office.fc.dom4j.Element, val text: String)
+
+    /** The body table holding [offset] with every edit made to it so far; null (see [lastError]) when there is none. */
+    fun copyTable(offset: Long): TableClip? = synchronized(layoutLock) {
+        ownError = null
+        val doc = word.getDocument() as? WPDocument ?: return null.also { refuse("Not a Word document") }
+        val table = doc.getParagraph0(offset) as? com.wxiwei.office.wp.model.TableElement ?: return null.also { refuse("No table here") }
+        val made = newTables[table]
+        val os = made?.anchor ?: toOriginal(table.getStartOffset(), char = true)
+        val ref = made?.let { DocxEditor.CellRef(0, 0, 0, 0, it.op) }
+        val element = editor.copyTable(os, ref, overrides(), cellFills()) ?: return null
+        // the cells' text as shown: paragraphs of a cell joined by spaces
+        val rows = (0 until table.rowCount()).mapNotNull { table.getElementForIndex(it) as? com.wxiwei.office.wp.model.RowElement }
+        val text = rows.joinToString("\n") { row ->
+            (0 until row.getCellNumber()).mapNotNull { row.getElementForIndex(it) }.joinToString("\t") { cell ->
+                doc.getText(cell.getStartOffset(), cell.getEndOffset()).replace('\r', '\n').trim('\n', ' ', '\u0007').replace('\n', ' ').replace('\t', ' ')
+            }
+        }
+        TableClip(element, text)
+    }
+
+    /**
+     * Puts the table of [clip] after the body paragraph (or table) holding [offset], or before it
+     * when [offset] starts it; shown after the document is read again ([needsReopen]). Refused with
+     * [needsFlush] after a paragraph typed in this session.
+     */
+    fun pasteTable(offset: Long, clip: TableClip): Boolean = synchronized(layoutLock) {
+        ownError = null
+        needsFlush = false
+        val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
+        if ((offset and WPModelConstant.AREA_MASK) != WPModelConstant.MAIN) return refuse("Tables go in the body")
+        if (touchesNewCells(offset)) return refuseInNewCells()
+        val block = doc.getParagraph0(offset) ?: return refuse("No paragraph here")
+        val inTable = block is com.wxiwei.office.wp.model.TableElement
+        val para = doc.getParagraph(offset) as? ParagraphElement
+        if (!inTable && para != null && touchesTyped(para.getStartOffset(), para.getEndOffset())) {
+            needsFlush = true
+            return refuse("Lưu đoạn vừa gõ trước")
+        }
+        // at the start of a non-empty paragraph it goes before it, like Word; else after the block
+        val after = inTable || offset > block.getStartOffset() || block.getEndOffset() - block.getStartOffset() <= 1
+        val to = toOriginal(if (inTable) block.getStartOffset() else offset, char = true)
+        if (!checked(editor.pasteTable(to, after, clip.table))) return false
+        needsReopen = true
+        undoStack.add(Step({ editor.undoLast() }, { editor.pasteTable(to, after, clip.table) })); redoStack.clear()
+        true
+    }
+
+    /** Removes the body table holding [offset]; shown after the document is read again ([needsReopen]). */
+    fun deleteTable(offset: Long): Boolean = synchronized(layoutLock) {
+        ownError = null
+        needsFlush = false
+        val doc = word.getDocument() as? WPDocument ?: return refuse("Not a Word document")
+        val table = doc.getParagraph0(offset) as? com.wxiwei.office.wp.model.TableElement ?: return refuse("No table here")
+        val made = newTables[table]
+        val os = made?.anchor ?: toOriginal(table.getStartOffset(), char = true)
+        val ref = made?.let { DocxEditor.CellRef(0, 0, 0, 0, it.op) }
+        if (!checked(editor.deleteTable(os, ref))) return false
+        needsReopen = true
+        undoStack.add(Step({ editor.undoLast() }, { editor.deleteTable(os, ref) })); redoStack.clear()
+        true
+    }
+
     /** Offsets of the table holding [offset], or null when it is not in a table. */
     fun tableAt(offset: Long): LongRange? {
         val doc = word.getDocument() as? com.wxiwei.office.wp.model.WPDocument ?: return null

@@ -65,6 +65,8 @@ enum class EditAction(@DrawableRes val icon: Int, @StringRes val label: Int) {
     // ---- Word: selection and clipboard ----
     SELECT_WORD(R.drawable.docsdk_ic_text_select_start, R.string.docsdk_edit_select_word),
     SELECT_PARAGRAPH(R.drawable.docsdk_ic_segment, R.string.docsdk_edit_select_paragraph),
+    /** The whole table at the caret: then COPY copies the table, and PASTE puts it back as a table. */
+    SELECT_TABLE(R.drawable.docsdk_ic_table, R.string.docsdk_edit_select_table),
     SELECT_ALL(R.drawable.docsdk_ic_select_all, R.string.docsdk_edit_select_all),
     DESELECT(R.drawable.docsdk_ic_deselect, R.string.docsdk_edit_deselect),
     COPY(R.drawable.docsdk_ic_content_copy, R.string.docsdk_edit_copy),

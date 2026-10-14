@@ -225,6 +225,7 @@
     <string name="docsdk_edit_select_all">Select all</string>
     <string name="docsdk_edit_select_cell_first">Select a cell first</string>
     <string name="docsdk_edit_select_paragraph">Select paragraph</string>
+    <string name="docsdk_edit_select_table">Select table</string>
     <string name="docsdk_edit_select_shape_first">Select a shape first</string>
     <string name="docsdk_edit_select_shape_first_hint">Select a shape first (tap it, or use List)</string>
     <string name="docsdk_edit_select_text_first">Select text first</string>

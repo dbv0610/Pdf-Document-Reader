@@ -224,6 +224,7 @@
     <string name="docsdk_edit_select_all">Chọn hết</string>
     <string name="docsdk_edit_select_cell_first">Chọn một ô trước</string>
     <string name="docsdk_edit_select_paragraph">Chọn đoạn</string>
+    <string name="docsdk_edit_select_table">Chọn bảng</string>
     <string name="docsdk_edit_select_shape_first">Chọn shape trước</string>
     <string name="docsdk_edit_select_shape_first_hint">Chọn hình trước (chạm vào hình hoặc dùng Danh sách)</string>
     <string name="docsdk_edit_select_text_first">Chọn chữ trước</string>

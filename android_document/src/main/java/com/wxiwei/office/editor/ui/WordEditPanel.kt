@@ -93,14 +93,30 @@ class WordEditPanel @JvmOverloads constructor(
         Tab(R.string.docsdk_edit_tab_insert, listOf(EditAction.INSERT_PICTURE, EditAction.INSERT_TABLE, EditAction.NEW_LINE)),
         Tab(R.string.docsdk_edit_tab_table, listOf(EditAction.ROW_ABOVE, EditAction.ROW_BELOW, EditAction.COLUMN_LEFT, EditAction.COLUMN_RIGHT,
             EditAction.DELETE_ROW, EditAction.DELETE_COLUMN)),
-        Tab(R.string.docsdk_edit_tab_select, listOf(EditAction.SELECT_WORD, EditAction.SELECT_PARAGRAPH, EditAction.SELECT_ALL, EditAction.DESELECT,
+        Tab(R.string.docsdk_edit_tab_select, listOf(EditAction.SELECT_WORD, EditAction.SELECT_PARAGRAPH, EditAction.SELECT_TABLE, EditAction.SELECT_ALL, EditAction.DESELECT,
             EditAction.COPY, EditAction.CUT, EditAction.PASTE, EditAction.DELETE, EditAction.FIND_REPLACE)),
     )
 
     init {
         status = str(R.string.docsdk_edit_word_hint)
-        action(EditAction.UNDO, EditFeature.UNDO_REDO) { stopTyping(); session?.let { if (!it.undo()) toast(str(R.string.docsdk_edit_nothing_to_undo)) } }
-        action(EditAction.REDO, EditFeature.UNDO_REDO) { stopTyping(); session?.let { if (!it.redo()) toast(str(R.string.docsdk_edit_nothing_to_redo)) } }
+        action(EditAction.UNDO, EditFeature.UNDO_REDO) {
+            stopTyping()
+            val s = session
+            when {
+                s != null && s.canUndo() -> if (!s.undo()) toast(str(R.string.docsdk_edit_nothing_to_undo))
+                undoPoints.isNotEmpty() -> goTo(undoPoints, redoPoints)
+                else -> toast(str(R.string.docsdk_edit_nothing_to_undo))
+            }
+        }
+        action(EditAction.REDO, EditFeature.UNDO_REDO) {
+            stopTyping()
+            val s = session
+            when {
+                s != null && s.canRedo() -> if (!s.redo()) toast(str(R.string.docsdk_edit_nothing_to_redo))
+                canRedoPoint() -> goTo(redoPoints, undoPoints)
+                else -> toast(str(R.string.docsdk_edit_nothing_to_redo))
+            }
+        }
         action(EditAction.SAVE) { save() }
         action(EditAction.SAVE_COPY, EditFeature.SAVE_COPY) { stopTyping(); saveCopy() }
         action(EditAction.BOLD, EditFeature.FORMAT) { toggle(str(R.string.docsdk_edit_bold), { e, a -> e.isBold(a) }) { e, a, b, on -> e.setBold(a, b, on) } }
@@ -137,12 +153,13 @@ class WordEditPanel @JvmOverloads constructor(
         action(EditAction.LINE_SPACING, EditFeature.PARAGRAPH) { askLineSpacing() }
         action(EditAction.SELECT_WORD) { selectAround { sel, at -> sel.wordAt(at) } }
         action(EditAction.SELECT_PARAGRAPH) { selectAround { _, at -> paragraphAt(at) } }
+        action(EditAction.SELECT_TABLE) { selectAround { _, at -> session()?.tableAt(at) ?: LongRange.EMPTY } }
         action(EditAction.SELECT_ALL) { selectAround { _, _ -> wholeDocument() } }
         action(EditAction.DESELECT) { clearSelection() }
         action(EditAction.COPY, EditFeature.CLIPBOARD) { copy() }
-        action(EditAction.CUT, EditFeature.CLIPBOARD, EditFeature.TEXT) { copy(); op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } }
+        action(EditAction.CUT, EditFeature.CLIPBOARD, EditFeature.TEXT) { if (copy()) { if (wholeTable() != null) deleteTable() else op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } } }
         action(EditAction.PASTE, EditFeature.CLIPBOARD, EditFeature.TEXT) { paste() }
-        action(EditAction.DELETE, EditFeature.TEXT) { op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } }
+        action(EditAction.DELETE, EditFeature.TEXT) { if (wholeTable() != null) deleteTable() else op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } }
         action(EditAction.NEW_LINE, EditFeature.TEXT) { op({ it.first + 1 }) { e, r -> e.insertText(r.first, "\n") } }
         action(EditAction.INSERT_TEXT, EditFeature.TEXT) { insert() }
         action(EditAction.REPLACE_TEXT, EditFeature.TEXT) { replace() }
@@ -524,19 +541,8 @@ class WordEditPanel @JvmOverloads constructor(
         val next = workingCopy()
         val result = s.save(next)
         if (result !is com.wxiwei.office.editor.EditResult.Ok) return report(result, "")
-        val previous = working
-        working = next
-        workingChanged = true
-        session = null
-        anchor = null
-        status = str(R.string.docsdk_edit_word_hint)
-        // the reopened document starts at page 1: bring back the place the edit was made
-        val w = docView() as? com.wxiwei.office.wp.control.Word
-        val place = w?.let { Triple(it.scrollX, it.scrollY, it.getZoom()) }
-        reopen(next) {
-            if (previous != file) previous.delete()
-            if (place != null) restoreScroll(place.first, place.second, place.third, then) else then?.invoke()
-        }
+        // the reopened document starts at page 1: show() brings back the place the edit was made
+        show(next, then)
     }
 
     /** Scrolls the reopened document to ([x], [y]) at [zoom], once its pages are laid out that far. */
@@ -611,8 +617,12 @@ class WordEditPanel @JvmOverloads constructor(
         menu = {
             // Paste only with something to paste
             val clip = clipboard.hasPrimaryClip()
-            listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.SELECT_ALL)
-                .filter { isAvailable(it) && (it != EditAction.PASTE || clip) }
+            // in a table not selected whole yet: select it, to copy it as a table
+            val range = selection()?.selection()
+            val table = range?.let { session()?.tableAt(it.first) }
+            val partOfTable = table != null && (range.first != table.first || range.last < table.last - 1)
+            listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.SELECT_TABLE, EditAction.SELECT_ALL)
+                .filter { isAvailable(it) && (it != EditAction.PASTE || clip) && (it != EditAction.SELECT_TABLE || partOfTable) }
                 .map { action -> str(action.label) to { run(action, null, false); Unit } }
         },
     )
@@ -664,6 +674,9 @@ class WordEditPanel @JvmOverloads constructor(
 
     override fun close() {
         super.close()
+        val points = undoPoints + redoPoints
+        undoPoints.clear(); redoPoints.clear()
+        points.forEach { drop(it) }
         reader.onDocumentGesture = null
         reader.touchCapture = null
         stopTyping()
@@ -992,14 +1005,72 @@ class WordEditPanel @JvmOverloads constructor(
     /** What was last copied from this document, with its formatting (see [paste]). */
     private var formattedClip: com.wxiwei.office.editor.docx.LiveDocxSession.FormattedText? = null
 
-    private fun copy() {
+    /** What was last copied as a whole table (see [SELECT_TABLE][EditAction.SELECT_TABLE]): pasted back as a table. */
+    private var tableClip: com.wxiwei.office.editor.docx.LiveDocxSession.TableClip? = null
+
+    /** Copies the selection: a whole table as a table (other apps get its cells, a tab between them); false when nothing was. */
+    private fun copy(): Boolean {
         val sel = selection()
         val range = sel?.selection()
         val t = if (range != null) sel.selectedText() else null
-        if (t.isNullOrEmpty()) return toast(str(R.string.docsdk_edit_select_text_first))
-        formattedClip = session()?.copyFormatted(range!!.first, range.last + 1)
-        clipboard.setPrimaryClip(ClipData.newPlainText("text", t))
+        if (t.isNullOrEmpty()) { toast(str(R.string.docsdk_edit_select_text_first)); return false }
+        val s = session()
+        val table = wholeTable()
+        tableClip = null
+        formattedClip = null
+        if (s != null && table != null) {
+            val clip = s.copyTable(table.first) ?: run { toast(s.lastError?.message ?: str(R.string.docsdk_edit_failed)); return false }
+            tableClip = clip
+            clipboard.setPrimaryClip(ClipData.newPlainText("table", clip.text))
+        } else {
+            formattedClip = s?.copyFormatted(range!!.first, range.last + 1)
+            clipboard.setPrimaryClip(ClipData.newPlainText("text", t))
+        }
         toast(str(R.string.docsdk_edit_copied))
+        return true
+    }
+
+    /** The table the selection covers whole, or null. */
+    private fun wholeTable(): LongRange? {
+        val range = selection()?.selection() ?: return null
+        val table = session()?.tableAt(range.first) ?: return null
+        return table.takeIf { it.first == range.first && it.last >= range.last - 1 && it.last <= range.last }
+    }
+
+    /** Removes the table the selection covers, shown by reading the document again; Undo brings it back. */
+    private fun deleteTable() {
+        val s = session() ?: return
+        val table = wholeTable() ?: return
+        stopTyping()
+        val before = pointNow() ?: return toast(str(R.string.docsdk_edit_failed))
+        if (!s.deleteTable(table.first)) {
+            drop(before)
+            return toast(s.lastError?.message ?: str(R.string.docsdk_edit_failed))
+        }
+        undoPoints += before
+        redoPoints.toList().also { redoPoints.clear() }.forEach { drop(it) }
+        clearSelection()
+        reloadWorking()
+    }
+
+    /**
+     * Pastes the copied table after the paragraph at [at] (before it at its start), shown by reading
+     * the document again; Undo goes back to the document as it was.
+     */
+    private fun pasteTable(at: Long, clip: com.wxiwei.office.editor.docx.LiveDocxSession.TableClip) {
+        val s = session() ?: return
+        stopTyping()
+        val before = pointNow() ?: return toast(str(R.string.docsdk_edit_paste_failed))
+        if (!s.pasteTable(at, clip)) {
+            drop(before)
+            // after a paragraph typed in this session: save the working copy first, then paste
+            if (s.needsFlush) return reloadWorking { pasteTable(at, clip) }
+            return toast(s.lastError?.message ?: str(R.string.docsdk_edit_paste_failed))
+        }
+        undoPoints += before
+        redoPoints.toList().also { redoPoints.clear() }.forEach { drop(it) }
+        clearSelection()
+        reloadWorking()
     }
 
     /** The formatted copy when the clipboard still holds its text (nothing else was copied since). */
@@ -1012,6 +1083,12 @@ class WordEditPanel @JvmOverloads constructor(
     private fun paste() {
         val t = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
         if (t.isNullOrEmpty()) return toast(str(R.string.docsdk_edit_clipboard_empty))
+        // a table copied here and still on the clipboard: pasted as a table
+        tableClip?.takeIf { it.text == t }?.let { clip ->
+            val at = selection()?.selection()?.first ?: here()
+            if (at < 0) return toast(str(R.string.docsdk_edit_tap_text_first))
+            return pasteTable(at, clip)
+        }
         val formatted = formattedFor(t)
         if (formatted != null) {
             val s = session() ?: return
@@ -1065,8 +1142,59 @@ class WordEditPanel @JvmOverloads constructor(
 
     private fun pendingText() = if (session?.needsReopen == true) "  ·  " + str(R.string.docsdk_edit_some_after_save) else ""
 
-    override fun canUndo() = session?.canUndo() == true
-    override fun canRedo() = session?.canRedo() == true
+    override fun canUndo() = session?.canUndo() == true || undoPoints.isNotEmpty()
+    override fun canRedo() = session?.canRedo() == true || canRedoPoint()
+
+    // ---- undo of what reopens the document (a pasted table) ----
+
+    // a pasted table is shown by reopening the document with a new session, which starts without
+    // history: it is undone by going back to the document as it was before (edits made in one
+    // session before it go back together)
+    private val undoPoints = ArrayList<File>()
+    private val redoPoints = ArrayList<File>()
+
+    // an edit made after going back to a point replaces what was undone
+    private fun canRedoPoint() = redoPoints.isNotEmpty() && session?.canUndo() != true
+
+    /** [f] kept as an undo point: the original is copied, Save writes over it. */
+    private fun keep(f: File): File = if (f != file) f else workingCopy().also { file.copyTo(it, overwrite = true) }
+
+    /** Deletes [f] unless it is still shown, the original, or an undo/redo point. */
+    private fun drop(f: File) {
+        if (f == working || f == file || f in undoPoints || f in redoPoints) return
+        f.delete()
+    }
+
+    /** The document as it is now, as a file to come back to; null when it cannot be written. */
+    private fun pointNow(): File? {
+        val s = session
+        if (s == null || !s.canUndo()) return keep(working)
+        return workingCopy().takeIf { s.save(it) is com.wxiwei.office.editor.EditResult.Ok }
+    }
+
+    /** Undo or redo of a pasted table: back to the last point of [from]; the document now goes to [to]. */
+    private fun goTo(from: MutableList<File>, to: MutableList<File>) {
+        val target = from.removeAt(from.lastIndex)
+        // no edit since the document was opened (see canRedoPoint), so the opened file is the state now
+        to += keep(working)
+        show(target)
+    }
+
+    /** Shows [next], a working copy, with a new session on it, at the same place. */
+    private fun show(next: File, then: (() -> Unit)? = null) {
+        val previous = working
+        working = next
+        workingChanged = true
+        session = null
+        anchor = null
+        status = str(R.string.docsdk_edit_word_hint)
+        val w = docView() as? com.wxiwei.office.wp.control.Word
+        val place = w?.let { Triple(it.scrollX, it.scrollY, it.getZoom()) }
+        reopen(next) {
+            drop(previous)
+            if (place != null) restoreScroll(place.first, place.second, place.third, then) else then?.invoke()
+        }
+    }
 
     private fun session(): LiveDocxSession? {
         session?.let { return it }
@@ -1158,9 +1286,10 @@ class WordEditPanel @JvmOverloads constructor(
         anchor = null
         stopTyping()
         status = str(R.string.docsdk_edit_word_hint)
-        if (working != file) working.delete()
+        val previous = working
         working = file
         workingChanged = false
+        drop(previous)
         // show the saved text: reopen the document (the panel stays open)
         reopen(file) {}
     }
