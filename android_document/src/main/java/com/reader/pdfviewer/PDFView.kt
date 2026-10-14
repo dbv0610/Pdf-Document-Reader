@@ -2243,13 +2243,16 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         val font = fontPath ?: com.reader.pdfviewer.util.SystemFonts.unicodeFor(context, text)
         val name = "pdfview-text-" + java.util.UUID.randomUUID()
         val first = file.addFreeText(page, text, font, sizePt, pageX, pageY, color, name) ?: return null
-        // moved or resized: the text keeps its lines, its size follows the height of the bounds
+        // moved or resized: the text keeps its lines, its size follows the height of the bounds; its
+        // frame is then where the text really is (a frame made wider or narrower does not stretch it)
         val origin = RectF(first)
+        var landed: RectF? = null
         val place = { r: RectF ->
             val size = sizePt * (r.top - r.bottom) / (origin.top - origin.bottom)
-            file.addFreeText(page, text, font, size, pageX + (r.left - origin.left), pageY + (r.top - origin.top), color, name) != null
+            landed = file.addFreeText(page, text, font, size, pageX + (r.left - origin.left), pageY + (r.top - origin.top), color, name)
+            landed != null
         }
-        return registerPlaced(page, name, origin, AREA_PAD, place)
+        return registerPlaced(page, name, origin, AREA_PAD, place, landedAt = { landed })
     }
 
     /** Add an image in PDF bounds (right > left, top > bottom). Retains a private bitmap for redo. */
@@ -2288,7 +2291,7 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
 
     /** A picture already in the document: moving it keeps its pixels, only adding it again (redo, saving) writes them. */
     private fun registerImage(file: PdfFile, page: Int, name: String, rect: RectF, copy: Bitmap): String =
-        registerPlaced(page, name, rect, AREA_PAD, { r -> file.addImage(page, r, copy, name) }) { r -> file.moveImage(page, name, r) }
+        registerPlaced(page, name, rect, AREA_PAD, { r -> file.addImage(page, r, copy, name) }, move = { r -> file.moveImage(page, name, r) })
 
     /** Add a sticky note whose icon's top left is at a PDF point. Returns its NM name, or null. */
     fun addNote(page: Int, pageX: Float, pageY: Float, text: String, @ColorInt color: Int = NOTE_COLOR): String? {
@@ -2319,7 +2322,9 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
      * [place] adds it at bounds, [move] (when it has one) changes the bounds of the one there.
      * [pad]: how far, in points, it may draw outside its bounds.
      */
-    private class Placed(val page: Int, var bounds: RectF, val pad: Float, val place: (RectF) -> Boolean, val move: ((RectF) -> Boolean)?)
+    /** [landedAt]: where the last [place] really put it, when that differs from the bounds asked for (text). */
+    private class Placed(val page: Int, var bounds: RectF, val pad: Float, val place: (RectF) -> Boolean, val move: ((RectF) -> Boolean)?,
+                         val landedAt: (() -> RectF?)? = null)
     private val placed = HashMap<String, Placed>()
 
     // Pictures whose rectangle alone was changed by a move (see PdfiumCore.moveImage): their
@@ -2334,8 +2339,8 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
 
     /** Records an annotation that is in the document at [bounds] already. */
     private fun registerPlaced(page: Int, name: String, bounds: RectF, pad: Float, place: (RectF) -> Boolean,
-                               move: ((RectF) -> Boolean)? = null): String {
-        val item = Placed(page, RectF(bounds), pad, place, move)
+                               move: ((RectF) -> Boolean)? = null, landedAt: (() -> RectF?)? = null): String {
+        val item = Placed(page, RectF(bounds), pad, place, move, landedAt)
         placed[name] = item
         val area = shownArea(page, bounds, pad)
         recordAddition(page, name, area) { place(item.bounds) }
@@ -2361,12 +2366,12 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
             annotationCache.clear()
             item.move?.let { move -> return move(r).also { moved -> if (moved) { item.bounds = RectF(r); movedImages[name] = item } } }
             if (!file.removeAnnotByName(item.page, name)) return false
-            if (item.place(r)) { item.bounds = RectF(r); return true }
+            if (item.place(r)) { item.bounds = RectF(item.landedAt?.invoke() ?: r); return true }
             item.place(item.bounds) // put it back where it was
             return false
         }
         if (!put(to)) return false
-        val area = union(shownArea(item.page, from, item.pad), shownArea(item.page, to, item.pad))
+        val area = union(union(shownArea(item.page, from, item.pad), shownArea(item.page, to, item.pad)), shownArea(item.page, item.bounds, item.pad))
         editUndo.add(EditRecord(item.page, name, { put(to) }, { put(from) }, area = area))
         editRedo.clear()
         inkChanged(item.page, area)

@@ -127,6 +127,25 @@ class DocumentEditor internal constructor(val panel: OfficeEditPanel) {
             sizePt = format.sizePt, rgbHex = format.color?.removePrefix("#"), font = format.font))
     }
 
+    /**
+     * PowerPoint: shows the SDK's format bar over the keyboard while text is typed in a shape (true
+     * by default). Set it to false to use your own buttons: [Listener.onStateChanged] is called as
+     * the selection moves; read [textSelection] and [isActive], then run the format commands or
+     * [formatText]. Takes effect the next time a shape's text is edited.
+     */
+    var textFormatBar: Boolean
+        get() = (panel as? SlideEditPanel)?.textBar ?: false
+        set(value) { (panel as? SlideEditPanel)?.textBar = value }
+
+    /**
+     * PowerPoint: the buttons of that bar, in order (hide one by leaving it out). [EditAction.FONT]
+     * shows the font's name, [EditAction.FONT_SIZE] shows − size +. Colors and icons follow
+     * [EditStyle] like the SDK's other bars.
+     */
+    var textFormatBarActions: List<EditAction>
+        get() = (panel as? SlideEditPanel)?.textBarActions ?: emptyList()
+        set(value) { (panel as? SlideEditPanel)?.textBarActions = value }
+
     /** True when there are edits not saved yet. */
     fun hasUnsavedChanges(): Boolean = panel.hasChanges()
 

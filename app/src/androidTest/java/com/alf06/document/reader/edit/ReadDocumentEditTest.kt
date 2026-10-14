@@ -768,11 +768,8 @@ class ReadDocumentEditTest {
             instrumentation.runOnMainSync {
                 val edit = find<EditText>(viewer) { it is EditText }!!
                 edit.setSelection(0, 3)
-                // the selection menu the user gets on a long-press, with its "Đậm" item
-                val callback = edit.customSelectionActionModeCallback!!
-                val mode = edit.startActionMode(callback)!!
-                val bold = (0 until mode.menu.size()).map { mode.menu.getItem(it) }.first { it.title == edit.context.getString(com.wxiwei.office.R.string.docsdk_edit_bold) }
-                assertTrue(callback.onActionItemClicked(mode, bold))
+                // the "Đậm" button of the format bar over the keyboard
+                find<View>(viewer) { it.tag == "BOLD" && it.isShown }!!.performClick()
             }
             Thread.sleep(1500)
             // the editor stays open on the same part, for another format

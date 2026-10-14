@@ -67,7 +67,7 @@ class ExcelEditPanel @JvmOverloads constructor(
     val cellInput: String get() = value.text.toString()
 
     override val tabs = listOf(
-        Tab(R.string.docsdk_edit_tab_home, listOf(EditAction.BOLD, EditAction.ITALIC, EditAction.UNDERLINE, EditAction.STRIKETHROUGH,
+        Tab(R.string.docsdk_edit_tab_home, listOf(EditAction.COPY, EditAction.CUT, EditAction.PASTE, EditAction.BOLD, EditAction.ITALIC, EditAction.UNDERLINE, EditAction.STRIKETHROUGH,
             EditAction.TEXT_COLOR, EditAction.FILL_COLOR, EditAction.FONT_SIZE, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER,
             EditAction.ALIGN_RIGHT, EditAction.WRAP_TEXT, EditAction.CELL_ALIGNMENT)),
         Tab(R.string.docsdk_edit_tab_cells, listOf(EditAction.NUMBER_FORMAT, EditAction.BORDERS, EditAction.MERGE_CELLS,
@@ -94,6 +94,9 @@ class ExcelEditPanel @JvmOverloads constructor(
             }
         }
         action(EditAction.GO_TO_CELL) { askRange() }
+        action(EditAction.COPY, EditFeature.CLIPBOARD) { copyCells() }
+        action(EditAction.CUT, EditFeature.CLIPBOARD, EditFeature.TEXT) { if (copyCells()) clearCells() }
+        action(EditAction.PASTE, EditFeature.CLIPBOARD, EditFeature.TEXT) { pasteCells() }
         action(EditAction.BOLD, EditFeature.FORMAT) { toggleFont { CellFormat(bold = !it.isBold()) } }
         action(EditAction.ITALIC, EditFeature.FORMAT) { toggleFont { CellFormat(italic = !it.isItalic()) } }
         action(EditAction.UNDERLINE, EditFeature.FORMAT) { toggleFont { CellFormat(underline = it.getUnderline() == 0) } }
@@ -150,6 +153,7 @@ class ExcelEditPanel @JvmOverloads constructor(
             val sv = ss.getSheetView() ?: return@gesture false
             when (type) {
                 com.wxiwei.office.system.IMainFrame.ON_DOWN -> {
+                    showCellMenu(false)
                     if (grabPicture(event)) return@gesture true
                     if (sv.getCurrentSheet()?.getSelectionRange() == null) return@gesture false
                     val h = sv.selectionHandle()
@@ -188,6 +192,7 @@ class ExcelEditPanel @JvmOverloads constructor(
         super.close()
         reader.onDocumentGesture = null
         reader.touchCapture = null
+        showCellMenu(false)
         excel.getSpreadsheet()?.getSheetView()?.selectedShape = null
         excel.getSpreadsheet()?.getSheetView()?.getCurrentSheet()?.let { it.setActiveCellRowCol(it.getActiveCellRow(), it.getActiveCellColumn()) }
         watcher.cancel()
@@ -414,6 +419,8 @@ class ExcelEditPanel @JvmOverloads constructor(
     private fun dragSelection(e: android.view.MotionEvent) {
         val ss = excel.getSpreadsheet() ?: return
         val sv = ss.getSheetView() ?: return
+        // the finger is lifted: the cells are chosen, offer what to do with them
+        if (e.actionMasked == android.view.MotionEvent.ACTION_UP) return showCellMenu(true)
         val p = sheetPoint(e.rawX, e.rawY)
         val edge = dp(32).toFloat()
         val dx = when { p.x > ss.width - edge -> dp(12).toFloat(); p.x < sv.getRowHeaderWidth() + edge / 2 -> -dp(12).toFloat(); else -> 0f }
@@ -538,7 +545,99 @@ class ExcelEditPanel @JvmOverloads constructor(
             else toast(session.lastError?.message ?: str(R.string.docsdk_edit_picture_delete_failed))
             return
         }
-        if (sheet >= 0 && session.clearCell(sheet, row, col)) refresh(true)
+        clearCells()
+    }
+
+    // ---- copy and paste ----
+
+    private val clipboard get() = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+
+    /** What was last copied from this workbook: pasted with its formulas and look while the clipboard still holds its text. */
+    private var copied: SheetEditSession.CellBlock? = null
+
+    /** The selected range, or the cell: first row, first column, last row, last column. */
+    private fun selectedCells(): IntArray {
+        val r = range() ?: return intArrayOf(row, col, row, col)
+        return intArrayOf(r.getFirstRow(), r.getFirstColumn(), r.getLastRow(), r.getLastColumn())
+    }
+
+    /** Copies the selected cells; false when nothing could be copied. */
+    private fun copyCells(): Boolean {
+        if (sheet < 0) { toast(str(R.string.docsdk_edit_select_cell_first)); return false }
+        commitTyped()
+        val (r1, c1, r2, c2) = selectedCells()
+        val block = session.copyRange(sheet, r1, c1, r2, c2) ?: run { toast(session.lastError?.message ?: str(R.string.docsdk_edit_failed)); return false }
+        copied = block
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("cells", block.text))
+        toast(str(R.string.docsdk_edit_copied))
+        return true
+    }
+
+    /** Empties the selected cells. */
+    private fun clearCells() {
+        if (sheet < 0) return
+        val (r1, c1, r2, c2) = selectedCells()
+        if (!session.clearRange(sheet, r1, c1, r2, c2)) toast(session.lastError?.message ?: str(R.string.docsdk_edit_failed))
+        refresh(true)
+    }
+
+    /**
+     * Pastes at the selected cell: cells copied here keep their formulas (moved like Excel) and look;
+     * text from another app fills a cell per tab-separated value, a row per line. The pasted cells
+     * are then selected.
+     */
+    private fun pasteCells() {
+        if (sheet < 0) return toast(str(R.string.docsdk_edit_select_cell_first))
+        commitTyped()
+        val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+        if (text.isNullOrEmpty()) return toast(str(R.string.docsdk_edit_clipboard_empty))
+        val (r1, c1) = selectedCells()
+        val block = copied?.takeIf { it.text == text }
+        val ok = if (block != null) session.pasteBlock(sheet, r1, c1, block) else session.pasteText(sheet, r1, c1, text)
+        if (!ok) return toast(session.lastError?.message ?: str(R.string.docsdk_edit_paste_failed))
+        val rows = block?.rows ?: text.trimEnd('\n', '\r').lines().size
+        val cols = block?.cols ?: text.trimEnd('\n', '\r').lines().maxOf { it.split('\t').size }
+        val current = excel.getSpreadsheet()?.getSheetView()?.getCurrentSheet()
+        current?.setActiveCellRowCol(r1, c1)
+        if (rows > 1 || cols > 1) current?.setSelectionEnd(r1 + rows - 1, c1 + cols - 1)
+        session.warnings.firstOrNull()?.let { toast(it) }
+        refresh(true)
+    }
+
+    // the floating menu over the selected cells, while it shows
+    private var cellMenu: android.view.ActionMode? = null
+
+    /** Shows (or takes down) Cut / Copy / Paste / Clear over the selected cells. */
+    private fun showCellMenu(on: Boolean) {
+        cellMenu?.finish()
+        cellMenu = null
+        if (!on || sheet < 0) return
+        val ss = excel.getSpreadsheet() ?: return
+        val items = listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.CLEAR_CELLS)
+            .filter { isAvailable(it) && (it != EditAction.PASTE || clipboard.hasPrimaryClip()) }
+        if (items.isEmpty()) return
+        cellMenu = ss.startActionMode(object : android.view.ActionMode.Callback2() {
+            override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+                items.forEachIndexed { i, a -> menu.add(android.view.Menu.NONE, i, i, str(a.label)) }
+                return true
+            }
+            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
+            override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+                val action = items.getOrNull(item.itemId) ?: return false
+                mode.finish()
+                run(action, null, false)
+                return true
+            }
+            override fun onDestroyActionMode(mode: android.view.ActionMode) { if (cellMenu === mode) cellMenu = null }
+            override fun onGetContentRect(mode: android.view.ActionMode, view: View, outRect: android.graphics.Rect) {
+                val sv = ss.getSheetView() ?: return
+                val sheetModel = sv.getCurrentSheet() ?: return
+                val r = sheetModel.getSelectionRange()
+                val box = if (r != null) com.wxiwei.office.ss.util.ModelUtil.instance().getCellRangeAddressAnchor(sv, r)
+                    else com.wxiwei.office.ss.util.ModelUtil.instance().getCellAnchor(sv, sheetModel.getActiveCellRow(), sheetModel.getActiveCellColumn())
+                outRect.set(box.left.toInt(), box.top.toInt(), box.right.toInt(), box.bottom.toInt())
+            }
+        }, android.view.ActionMode.TYPE_FLOATING)
     }
 
     /** A picture taken off by an undo/redo is no longer selected. */

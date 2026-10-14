@@ -431,4 +431,43 @@ class PdfViewEditTest {
             assertEquals("a@b.vn", pd.documentCatalog.acroForm.getField("email").valueAsString)
         }
     }
+
+    /** The frame of added text hugs its glyphs: no more than a few points around them on each side. */
+    @Test
+    fun textFrameFitsItsText() {
+        val file = textPdf("view_text_frame.pdf", 1)
+        val saved = File(context.cacheDir, "view_text_frame_saved.pdf").also { it.delete() }
+        val frames = ArrayList<RectF>()
+        withView(file) { view ->
+            for ((y, text) in listOf(600f to "Xin chào Việt Nam", 400f to "Dòng một\nDòng hai dài hơn")) {
+                val name = onMain { view.addText(0, 60f, y, text, 13f, Color.RED) }!!
+                frames += onMain { view.movableBounds(name) }!!
+            }
+            // a frame dragged wider (same height), and one made taller: the frame stays on the text
+            val wide = onMain { view.addText(0, 60f, 250f, "Kéo rộng khung", 13f, Color.RED) }!!
+            val w = onMain { view.movableBounds(wide) }!!
+            assertTrue(onMain { view.moveAnnotation(wide, RectF(w.left, w.top, w.right + 120f, w.bottom)) })
+            frames += onMain { view.movableBounds(wide) }!!
+            val tall = onMain { view.addText(0, 60f, 150f, "Phóng to chữ", 13f, Color.RED) }!!
+            val t = onMain { view.movableBounds(tall) }!!
+            assertTrue(onMain { view.moveAnnotation(tall, RectF(t.left, t.top, t.right, t.top - (t.top - t.bottom) * 1.5f)) })
+            frames += onMain { view.movableBounds(tall) }!!
+            assertTrue(view.saveDocument(saved))
+        }
+        // 1 px = 1 pt; PDF y goes up
+        val page = renderPage(saved, 595)
+        for (frame in frames) {
+            var l = Int.MAX_VALUE; var r = -1; var t = Int.MAX_VALUE; var b = -1
+            for (y in (842 - frame.top - 20).toInt().coerceAtLeast(0) until (842 - frame.bottom + 20).toInt().coerceAtMost(841))
+                for (x in (frame.left - 20).toInt().coerceAtLeast(0) until (frame.right + 20).toInt().coerceAtMost(594)) {
+                    val c = page.getPixel(x, y)
+                    if (Color.red(c) > 150 && Color.green(c) < 120) { l = minOf(l, x); r = maxOf(r, x); t = minOf(t, y); b = maxOf(b, y) }
+                }
+            val ink = RectF(l.toFloat(), (842 - t).toFloat(), (r + 1).toFloat(), (842 - b - 1).toFloat())
+            val margins = listOf(ink.left - frame.left, frame.right - ink.right, frame.top - ink.top, ink.bottom - frame.bottom)
+            android.util.Log.i("TEXTFRAME", "frame $frame ink $ink margins $margins")
+            assertTrue("text inside its frame: $margins", margins.all { it >= -1f })
+            assertTrue("frame hugs the text: $margins (left, right, top, bottom)", margins.all { it <= 5f })
+        }
+    }
 }

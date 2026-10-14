@@ -6,6 +6,7 @@
  */
 package com.wxiwei.office.editor
 
+import android.view.View
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.editor.docsdk.DocumentView
@@ -251,5 +252,50 @@ class DocumentViewSlidesTest {
             assertTrue(props, props.indexOf("<a:latin") < props.indexOf("<a:cs"))
         }
         assertTrue("the rest keeps its font", runs.filter { it !in styled }.none { it.groupValues[2].contains("Courier New") })
+    }
+
+    @Test
+    fun formatBarOverKeyboard() {
+        val file = OpenDocument.copySample("sample.pptx", "format-bar.pptx")
+        var shapeId = 0
+        var part = ""
+        edit(file) {
+            settle(0, 10)
+            delay(500)
+            val shape = doubleTapText(file)
+            shapeId = shape.id
+            part = shape.text.substring(0, 4)
+            fun find(v: View, match: (View) -> Boolean): View? = if (match(v)) v else (v as? android.view.ViewGroup)?.let { g ->
+                (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it), match) } }
+            val edit = onMain { find(view) { it is android.widget.EditText } as android.widget.EditText }
+            // the bar is up, over the keyboard, under the editor
+            assertTrue("format bar shown", onMain { find(view) { it.tag == "UNDERLINE" }?.isShown == true })
+            onMain { edit.setSelection(0, 4) }
+            delay(300)
+            onMain { find(view) { it.tag == "UNDERLINE" }!!.performClick() }
+            delay(300)
+            // the editor stays open, same part selected, the bar lit
+            assertEquals(0 until 4, onMain { editor.textSelection })
+            assertTrue(onMain { editor.isActive(EditAction.UNDERLINE) })
+            // + steps the size up; the size shows the new value
+            val before = onMain { (find(view) { it.tag == "FONT_SIZE" } as android.widget.TextView).text.toString() }
+            onMain { find(view) { (it as? android.widget.TextView)?.text == "+" }!!.performClick() }
+            delay(300)
+            val after = onMain { (find(view) { it.tag == "FONT_SIZE" } as android.widget.TextView).text.toString() }
+            assertTrue("size $before -> $after", after.toFloat() > before.toFloat())
+            // a caret without a selection: the word at the caret
+            onMain { edit.setSelection(shape.text.length - 1) }
+            onMain { find(view) { it.tag == "ITALIC" }!!.performClick() }
+            delay(300)
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("screencap -p /data/local/tmp/pptx-bar.png").close()
+            delay(1000)
+            assertTrue(onMain { editor.save() })
+        }
+        val xml = ZipFile(file).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide1.xml")).readBytes().toString(Charsets.UTF_8) }
+        val sp = xml.substring(Regex("<p:cNvPr[^>]*\\bid=\"$shapeId\"").find(xml)!!.range.first).substringBefore("</p:sp>")
+        val runs = Regex("<a:r><a:rPr([^>]*)>.*?<a:t>([^<]*)</a:t></a:r>").findAll(sp).toList()
+        assertEquals(sp, part, runs.filter { it.groupValues[1].contains("u=\"sng\"") }.joinToString("") { it.groupValues[2] })
+        val lastWord = runs.filter { it.groupValues[1].contains("i=\"1\"") }.joinToString("") { it.groupValues[2] }
+        assertTrue("italic word: '$lastWord'", lastWord.isNotBlank() && part !in lastWord)
     }
 }
