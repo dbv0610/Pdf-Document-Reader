@@ -254,6 +254,7 @@
     <string name="docsdk_edit_shown_after_save">Done; it will show after Save</string>
     <string name="docsdk_edit_slide_add_failed">Could not add the slide</string>
     <string name="docsdk_edit_slide_delete_failed">Could not delete the slide</string>
+    <string name="docsdk_edit_slide_delete_last">A presentation needs at least one slide</string>
     <string name="docsdk_edit_slide_down">Move slide down</string>
     <string name="docsdk_edit_slide_duplicate_failed">Could not duplicate the slide</string>
     <string name="docsdk_edit_slide_hint">Tap a shape on the slide to select it</string>

@@ -2207,6 +2207,13 @@ class PDFView(context: Context, set: AttributeSet?) : RelativeLayout(context, se
         return page.takeIf { pageViewRect(it)?.contains(viewX, viewY) == true }
     }
 
+    /** True when [page] has no usable text to select (a scanned page): it needs OCR first. */
+    fun isScannedPage(page: Int): Boolean {
+        val file = pdfFile ?: return false
+        if (page !in 0 until file.pagesCount) return false
+        return DocumentTextIndex.needsOcr(file.getPageText(page).orEmpty())
+    }
+
     /** Map PDF bounds (top > bottom) to normalized view bounds, respecting rotation and zoom. */
     fun pageRectToView(page: Int, pageRect: RectF): RectF? {
         requireEditThread()

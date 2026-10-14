@@ -73,6 +73,19 @@ abstract class OfficeEditPanel(
     fun isAvailable(action: EditAction): Boolean =
         entries[action]?.let { e -> e.needs.all { has(it) } } == true
 
+    /**
+     * Whether [action] can run now: available, the document not reopening, and for Undo and Redo
+     * something to undo or redo.
+     */
+    fun isEnabled(action: EditAction): Boolean = isAvailable(action) && !isBusy && when (action) {
+        EditAction.UNDO -> canUndo()
+        EditAction.REDO -> canRedo()
+        else -> true
+    }
+
+    protected open fun canUndo(): Boolean = true
+    protected open fun canRedo(): Boolean = true
+
     /** The available commands, in the order they were registered. */
     fun actions(): List<EditAction> = entries.keys.filter { isAvailable(it) }
 
@@ -85,8 +98,10 @@ abstract class OfficeEditPanel(
     private var preset: Any? = null
     private var hasPreset = false
 
-    /** Runs [action], with [value] when [withValue]; false when it is not available. */
+    /** Runs [action], with [value] when [withValue]; false when it is not available or the document is reopening. */
     fun run(action: EditAction, value: Any?, withValue: Boolean): Boolean {
+        // a command would act on the document being replaced (a slide index read from its reset page)
+        if (isBusy) return false
         val entry = entries[action]?.takeIf { isAvailable(action) } ?: return false
         running = action
         preset = value
@@ -400,23 +415,44 @@ abstract class OfficeEditPanel(
     var reopening = false
         private set
 
+    // reopens not finished yet, [then] included
+    private var pendingReopens = 0
+
+    /**
+     * True from [reopen] until its [then] has finished: the page and page count the viewer reports
+     * meanwhile are those of a document half shown, and commands are refused.
+     */
+    val isBusy: Boolean get() = pendingReopens > 0
+
+    /** Called when a reopen is done: the pages may all have changed (added, removed, reordered). */
+    var onReopened: (() -> Unit)? = null
+
     /**
      * Shows [path] in the viewer (a working copy in the cache, or the saved file) and calls [then]
      * once it is open again, with the new document in reader.control.
      */
-    protected fun reopen(path: File, then: () -> Unit) {
+    protected fun reopen(path: File, then: suspend () -> Unit) {
         reopening = true
+        pendingReopens++
         reader.open(path.absolutePath)
         activity.lifecycleScope.launch {
-            // the viewer leaves Ready while it opens, then comes back to it
-            kotlinx.coroutines.withTimeoutOrNull(5_000) { reader.state.first { it.status != com.wxiwei.office.reader.ReaderState.Status.Ready } }
-            val state = reader.state.first {
-                it.status == com.wxiwei.office.reader.ReaderState.Status.Ready || it.status == com.wxiwei.office.reader.ReaderState.Status.Failed
+            try {
+                // the viewer leaves Ready while it opens, then comes back to it
+                kotlinx.coroutines.withTimeoutOrNull(5_000) { reader.state.first { it.status != com.wxiwei.office.reader.ReaderState.Status.Ready } }
+                val state = reader.state.first {
+                    it.status == com.wxiwei.office.reader.ReaderState.Status.Ready || it.status == com.wxiwei.office.reader.ReaderState.Status.Failed
+                }
+                reopening = false
+                // the new document's frame was added on top of the caret, handles, selection frame
+                overlays.forEach { it.bringToFront() }
+                if (state.status == com.wxiwei.office.reader.ReaderState.Status.Ready) then() else toast(str(R.string.docsdk_edit_reopen_failed))
+            } finally {
+                pendingReopens--
+                if (!isBusy) {
+                    onReopened?.invoke()
+                    stateChanged()
+                }
             }
-            reopening = false
-            // the new document's frame was added on top of the caret, handles, selection frame
-            overlays.forEach { it.bringToFront() }
-            if (state.status == com.wxiwei.office.reader.ReaderState.Status.Ready) then() else toast(str(R.string.docsdk_edit_reopen_failed))
         }
     }
 

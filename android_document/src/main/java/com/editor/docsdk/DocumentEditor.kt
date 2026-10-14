@@ -76,6 +76,12 @@ class DocumentEditor internal constructor(val panel: OfficeEditPanel) {
     /** Whether [action] can run on this document. */
     fun isAvailable(action: EditAction): Boolean = panel.isAvailable(action)
 
+    /**
+     * Whether [action] can run now: false for Undo or Redo with nothing to undo or redo, and for
+     * every command while the document reopens after an edit. Grey your button out when false.
+     */
+    fun isEnabled(action: EditAction): Boolean = panel.isEnabled(action)
+
     /** Whether [action] is on where the caret or selection is (bold text, wrapped cell...). */
     fun isActive(action: EditAction): Boolean = panel.isActive(action)
 

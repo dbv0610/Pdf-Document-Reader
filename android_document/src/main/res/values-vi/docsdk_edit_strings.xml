@@ -253,6 +253,7 @@
     <string name="docsdk_edit_shown_after_save">Đã ghi nhận, sẽ hiện sau khi Lưu</string>
     <string name="docsdk_edit_slide_add_failed">Không thêm được slide</string>
     <string name="docsdk_edit_slide_delete_failed">Không xóa được slide</string>
+    <string name="docsdk_edit_slide_delete_last">Bài trình chiếu cần ít nhất một slide</string>
     <string name="docsdk_edit_slide_down">Chuyển slide xuống</string>
     <string name="docsdk_edit_slide_duplicate_failed">Không nhân bản được slide</string>
     <string name="docsdk_edit_slide_hint">Chạm vào shape trên slide để chọn</string>

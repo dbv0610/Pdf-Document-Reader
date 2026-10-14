@@ -78,6 +78,9 @@ class ExcelEditPanel @JvmOverloads constructor(
         Tab(R.string.docsdk_edit_tab_insert, listOf(EditAction.INSERT_PICTURE, EditAction.ADD_SHEET)),
     )
 
+    override fun canUndo() = session.canUndo()
+    override fun canRedo() = session.canRedo()
+
     init {
         action(EditAction.UNDO, EditFeature.UNDO_REDO) { if (!session.undo()) toast(str(R.string.docsdk_edit_nothing_to_undo)) else { syncSheets(); dropStalePicture(); refresh(true) } }
         action(EditAction.REDO, EditFeature.UNDO_REDO) { if (!session.redo()) toast(str(R.string.docsdk_edit_nothing_to_redo)) else { syncSheets(); dropStalePicture(); refresh(true) } }

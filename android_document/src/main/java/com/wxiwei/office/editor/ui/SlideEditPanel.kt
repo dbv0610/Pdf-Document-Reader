@@ -23,6 +23,7 @@ import com.wxiwei.office.editor.slide.SlideGeometry
 import com.wxiwei.office.pg.control.Presentation
 import com.wxiwei.office.reader.OfficeDocumentView
 import com.wxiwei.office.system.IMainFrame
+import kotlinx.coroutines.flow.first
 import java.io.File
 
 /**
@@ -87,10 +88,17 @@ class SlideEditPanel @JvmOverloads constructor(
         action(EditAction.DUPLICATE_SLIDE, EditFeature.SLIDES) { slideOp(R.string.docsdk_edit_slide_duplicate_failed, { it + 1 }) { session.duplicateSlide(slide()) } }
         action(EditAction.SLIDE_UP, EditFeature.SLIDES) { slideOp(R.string.docsdk_edit_slide_move_failed, { it - 1 }) { slide() > 0 && session.moveSlide(slide(), slide() - 1) } }
         action(EditAction.SLIDE_DOWN, EditFeature.SLIDES) { slideOp(R.string.docsdk_edit_slide_move_failed, { it + 1 }) { slide() < session.slideCount() - 1 && session.moveSlide(slide(), slide() + 1) } }
-        action(EditAction.DELETE_SLIDE, EditFeature.SLIDES) { slideOp(R.string.docsdk_edit_slide_delete_failed, { it - 1 }) { session.deleteSlide(slide()) } }
+        action(EditAction.DELETE_SLIDE, EditFeature.SLIDES) {
+            // a presentation keeps at least one slide
+            if (session.slideCount() <= 1) return@action toast(str(R.string.docsdk_edit_slide_delete_last))
+            slideOp(R.string.docsdk_edit_slide_delete_failed, { it - 1 }) { session.deleteSlide(slide()) }
+        }
         action(EditAction.EXPORT_PNG, EditFeature.EXPORT) { exportSlide(pdf = false) }
         action(EditAction.EXPORT_PDF, EditFeature.EXPORT) { exportSlide(pdf = true) }
     }
+
+    override fun canUndo() = session.canUndo()
+    override fun canRedo() = session.canRedo()
 
     override fun isActive(action: EditAction): Boolean {
         if (shapeId < 0) return false
@@ -107,8 +115,12 @@ class SlideEditPanel @JvmOverloads constructor(
         addOverlay(overlay)
         keepAboveKeyboard(true)
         reader.onDocumentGesture = gesture@{ type, event ->
-            if (type != IMainFrame.ON_SINGLE_TAP_CONFIRMED) return@gesture false
-            tapAt(event.rawX, event.rawY) || shapeId >= 0
+            when (type) {
+                IMainFrame.ON_SINGLE_TAP_CONFIRMED -> tapAt(event.rawX, event.rawY) || shapeId >= 0
+                // a double tap never confirms its first tap: it selects a text shape and edits it at once
+                IMainFrame.ON_DOUBLE_TAP -> editAt(event.rawX, event.rawY)
+                else -> false
+            }
         }
         overlay.onTap = { x, y -> tapAt(x, y) }
         overlay.movable = has(EditFeature.SHAPES)
@@ -218,13 +230,27 @@ class SlideEditPanel @JvmOverloads constructor(
         }
     }
 
-    /** Selects the top shape under a screen point, or clears the selection. */
-    private fun tapAt(rawX: Float, rawY: Float): Boolean {
-        val p = docView() as? Presentation ?: return false
+    /** The top shape under a screen point, or null. */
+    private fun shapeAt(rawX: Float, rawY: Float): PptxShapeInfo? {
+        val p = docView() as? Presentation ?: return null
         val origin = IntArray(2)
         p.getLocationOnScreen(origin)
-        val point = SlideGeometry.viewToEmu(p, rawX - origin[0], rawY - origin[1])
-        val hit = point?.let { SlideGeometry.hitTest(session.listShapes(slide()), it) }
+        val point = SlideGeometry.viewToEmu(p, rawX - origin[0], rawY - origin[1]) ?: return null
+        return SlideGeometry.hitTest(session.listShapes(slide()), point)
+    }
+
+    /** Selects the text shape under a screen point and edits its text in place; false when there is none. */
+    private fun editAt(rawX: Float, rawY: Float): Boolean {
+        val hit = shapeAt(rawX, rawY)?.takeIf { it.kind == ShapeKind.TEXT && has(EditFeature.TEXT) } ?: return false
+        stopInline(commit = true)
+        select(hit)
+        startInline(hit)
+        return true
+    }
+
+    /** Selects the top shape under a screen point, or clears the selection. */
+    private fun tapAt(rawX: Float, rawY: Float): Boolean {
+        val hit = shapeAt(rawX, rawY)
         val editing = inline != null
         stopInline(commit = true)
         // a second tap on the selected text shape edits its text in place
@@ -622,8 +648,13 @@ class SlideEditPanel @JvmOverloads constructor(
         reopen(next) {
             session = LivePptxSession(reader.control!!, next)
             if (previous != file) previous.delete()
+            // the slides are read in the background and a jump past those read yet is dropped
+            kotlinx.coroutines.withTimeoutOrNull(10_000) { reader.state.first { it.pageNumber >= 1 && it.pageCount > slideIndex } }
             (docView() as? Presentation)?.showSlide(slideIndex, false)
-            reader.invalidateThumbnail(slideIndex + 1)
+            // the viewer reports the slide once it draws it
+            kotlinx.coroutines.withTimeoutOrNull(2_000) { reader.state.first { it.pageNumber == slideIndex + 1 } }
+            // slides were added, removed or reordered: every thumbnail may show another slide now
+            reader.invalidateThumbnails()
         }
     }
 

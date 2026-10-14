@@ -275,15 +275,18 @@ class PdfTools(context: Context) {
     /**
      * A copy of [source] whose scanned pages (pages without a text layer) get their text, found
      * by OCR, as invisible words over the picture: the text can then be found, selected and
-     * copied in any PDF reader. Returns the number of pages recognized.
+     * copied in any PDF reader. Only [only] (page indexes) are looked at when given: OCR of a long
+     * document takes long. Returns the number of pages recognized.
      */
-    suspend fun addTextLayer(source: PdfSource, output: File, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): Int =
+    suspend fun addTextLayer(source: PdfSource, output: File, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
+                             only: Collection<Int>? = null): Int =
         withContext(dispatcher) {
             val doc = open(source)
             try {
                 val count = pdfium.getPageCount(doc)
+                val indexes = only?.filter { it in 0 until count }?.distinct()?.sorted() ?: (0 until count).toList()
                 val pages = ArrayList<PageWords>()
-                for (index in 0 until count) {
+                for ((done, index) in indexes.withIndex()) {
                     currentCoroutineContext().ensureActive()
                     val layer = pdfium.getPageTextLayout(doc, index)
                     if (layer != null && DocumentTextIndex.needsOcr(layer.text)) {
@@ -293,7 +296,7 @@ class PdfTools(context: Context) {
                             pages += PageWords(index, lines, null)
                         }
                     }
-                    onProgress(index + 1, count)
+                    onProgress(done + 1, indexes.size)
                 }
                 val recognized = addWords(doc, pages)
                 save(doc, output)

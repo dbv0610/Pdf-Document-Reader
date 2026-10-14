@@ -140,10 +140,10 @@ class WordEditPanel @JvmOverloads constructor(
         action(EditAction.SELECT_ALL) { selectAround { _, _ -> wholeDocument() } }
         action(EditAction.DESELECT) { clearSelection() }
         action(EditAction.COPY, EditFeature.CLIPBOARD) { copy() }
-        action(EditAction.CUT, EditFeature.CLIPBOARD, EditFeature.TEXT) { copy(); op { e, r -> e.deleteText(r.first, r.last + 1) } }
+        action(EditAction.CUT, EditFeature.CLIPBOARD, EditFeature.TEXT) { copy(); op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } }
         action(EditAction.PASTE, EditFeature.CLIPBOARD, EditFeature.TEXT) { paste() }
-        action(EditAction.DELETE, EditFeature.TEXT) { op { e, r -> e.deleteText(r.first, r.last + 1) } }
-        action(EditAction.NEW_LINE, EditFeature.TEXT) { op { e, r -> e.insertText(r.first, "\n") } }
+        action(EditAction.DELETE, EditFeature.TEXT) { op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } }
+        action(EditAction.NEW_LINE, EditFeature.TEXT) { op({ it.first + 1 }) { e, r -> e.insertText(r.first, "\n") } }
         action(EditAction.INSERT_TEXT, EditFeature.TEXT) { insert() }
         action(EditAction.REPLACE_TEXT, EditFeature.TEXT) { replace() }
         action(EditAction.FIND_REPLACE, EditFeature.FIND_REPLACE) { findReplace() }
@@ -608,6 +608,13 @@ class WordEditPanel @JvmOverloads constructor(
             anchor = start until end
         },
         onTap = { x, y -> tapAt(x, y) },
+        menu = {
+            // Paste only with something to paste
+            val clip = clipboard.hasPrimaryClip()
+            listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.SELECT_ALL)
+                .filter { isAvailable(it) && (it != EditAction.PASTE || clip) }
+                .map { action -> str(action.label) to { run(action, null, false); Unit } }
+        },
     )
 
     // the selected picture: its one-char object in the text, and whether it floats on the page
@@ -1017,7 +1024,7 @@ class WordEditPanel @JvmOverloads constructor(
                 startTyping(minOf(at, until) + formatted.text.length)
                 return
             }
-            return op { e, r -> e.pasteFormatted(r.first, r.last + 1, formatted) }
+            return op({ it.first + formatted.text.length }) { e, r -> e.pasteFormatted(r.first, r.last + 1, formatted) }
         }
         if (base >= 0) {
             // through the typing buffer, so it stays in step with the document
@@ -1025,7 +1032,7 @@ class WordEditPanel @JvmOverloads constructor(
             typing.text.replace(typing.selectionStart.coerceAtLeast(0), at, t)
             return
         }
-        op { e, r -> e.replaceText(r.first, r.last + 1, t) }
+        op({ it.first + t.length }) { e, r -> e.replaceText(r.first, r.last + 1, t) }
     }
 
     /** Keeps the caret above the keyboard and inside the screen. */
@@ -1058,6 +1065,9 @@ class WordEditPanel @JvmOverloads constructor(
 
     private fun pendingText() = if (session?.needsReopen == true) "  ·  " + str(R.string.docsdk_edit_some_after_save) else ""
 
+    override fun canUndo() = session?.canUndo() == true
+    override fun canRedo() = session?.canRedo() == true
+
     private fun session(): LiveDocxSession? {
         session?.let { return it }
         val control = reader.control ?: return null
@@ -1070,7 +1080,7 @@ class WordEditPanel @JvmOverloads constructor(
     /** Runs [action] on the selection: formatting shows at once, text changes after Save. */
     /** A paragraph change: works on the selection, or on the caret's paragraph while typing. */
     private fun paraOp(action: (LiveDocxSession, LongRange) -> Boolean) {
-        if (base < 0 || selection()?.selection() != null) return op(action)
+        if (base < 0 || selection()?.selection() != null) return op(action = action)
         val caretAt = base + typing.selectionEnd.coerceAtLeast(0)
         val s = session() ?: return
         if (!action(s, caretAt..caretAt)) {
@@ -1084,16 +1094,26 @@ class WordEditPanel @JvmOverloads constructor(
         pagesChangedFrom(caretAt)
     }
 
-    private fun op(action: (LiveDocxSession, LongRange) -> Boolean) {
+    /**
+     * [action] on the selected text. With [caretAfter] the text changed length (cut, delete, paste
+     * over it...): the caret goes where it says instead of selecting the old range again, which may
+     * now run past the end of the document.
+     */
+    private fun op(caretAfter: ((LongRange) -> Long)? = null, action: (LiveDocxSession, LongRange) -> Boolean) {
         stopTyping()
         val range = selection()?.selection() ?: return toast(str(R.string.docsdk_edit_select_text_first))
         val s = session() ?: return
         if (!action(s, range)) {
-            if (s.needsFlush) return reloadWorking { selection()?.let { select(it, range) }; op(action) }
+            if (s.needsFlush) return reloadWorking { selection()?.let { select(it, range) }; op(caretAfter, action) }
             return toast(s.lastError?.message ?: str(R.string.docsdk_edit_failed))
         }
-        // the pages were laid out again: show the selection on the new layout, refresh thumbnails
-        selection()?.let { select(it, range) }
+        // the pages were laid out again: show the selection or the caret on the new layout, refresh thumbnails
+        if (caretAfter == null) selection()?.let { select(it, range) }
+        else {
+            selection()?.clearSelection()
+            anchor = null
+            startTyping(caretAfter(range))
+        }
         pagesChangedFrom(range.first)
         if (s.needsReopen) toast(str(R.string.docsdk_edit_shown_after_save))
     }
@@ -1102,7 +1122,7 @@ class WordEditPanel @JvmOverloads constructor(
         val range = selection()?.selection() ?: return toast(str(R.string.docsdk_edit_select_text_first))
         val now = selection()?.selectedText().orEmpty()
         askText(str(R.string.docsdk_edit_replace_text), str(R.string.docsdk_edit_word_text_hint), now) { t ->
-            op { e, r -> e.replaceText(r.first, r.last + 1, t) }
+            op({ it.first + t.length }) { e, r -> e.replaceText(r.first, r.last + 1, t) }
         }
     }
 

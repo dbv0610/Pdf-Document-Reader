@@ -407,4 +407,100 @@ class PdfReaderToolsTest {
         assertTrue("pages written: $pages", pages > 0)
         checkPdf(pdf, pages, "10_excel_pdf")
     }
+
+    /** A PDF of [pages] pages whose text is only a picture, as a scanner makes it: no text layer to select. */
+    private fun scannedPdf(name: String, pages: Int): File {
+        val out = File(context.filesDir, name).also { it.delete() }
+        val doc = android.graphics.pdf.PdfDocument()
+        for (p in 0 until pages) {
+            val scan = Bitmap.createBitmap(1190, 1684, Bitmap.Config.ARGB_8888)
+            val c = android.graphics.Canvas(scan)
+            c.drawColor(Color.WHITE)
+            val paint = Paint().apply { textSize = 48f; isAntiAlias = true }
+            for (l in 0 until 10) c.drawText("Scanned page ${p + 1} line ${l + 1} words", 100f, 200f + l * 90f, paint)
+            val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, p + 1).create())
+            page.canvas.drawBitmap(scan, null, android.graphics.Rect(0, 0, 595, 842), null)
+            doc.finishPage(page)
+            scan.recycle()
+        }
+        out.outputStream().use { doc.writeTo(it) }
+        doc.close()
+        return out
+    }
+
+    /** A finger held on the screen at a point of [view], long enough for a long press. */
+    private fun longPress(view: View, x: Float, y: Float) {
+        val loc = IntArray(2)
+        instrumentation.runOnMainSync { view.getLocationOnScreen(loc) }
+        val down = SystemClock.uptimeMillis()
+        val automation = instrumentation.uiAutomation
+        for ((action, t) in listOf(MotionEvent.ACTION_DOWN to down, MotionEvent.ACTION_UP to down + 1000)) {
+            if (action == MotionEvent.ACTION_UP) Thread.sleep(1000)
+            MotionEvent.obtain(down, t, action, loc[0] + x, loc[1] + y, 0).also {
+                it.source = android.view.InputDevice.SOURCE_TOUCHSCREEN; automation.injectInputEvent(it, true); it.recycle()
+            }
+        }
+        Thread.sleep(500)
+    }
+
+    /** A point on the third line of the picture of [page], in [view]; null while the page is not shown. */
+    private fun onThirdLine(scenario: ActivityScenario<ReadPdfActivity>, view: PDFView, page: Int): Pair<Float, Float>? {
+        var at: Pair<Float, Float>? = null
+        scenario.onActivity {
+            val r = view.pageViewRect(page) ?: return@onActivity
+            val y = r.top + r.height() * (380f - 15f) / 1684f
+            if (y in 0f..view.height.toFloat()) at = (r.left + r.width() * 0.25f) to y
+        }
+        return at
+    }
+
+    /** Waits until [page] has text (the reader opened the file again after OCR). */
+    private fun waitForText(scenario: ActivityScenario<ReadPdfActivity>, view: PDFView, page: Int): Boolean {
+        val end = System.currentTimeMillis() + 60_000
+        while (System.currentTimeMillis() < end) {
+            Thread.sleep(500)
+            var scanned = true
+            scenario.onActivity { scanned = view.pageCount == 0 || view.pageViewRect(page) == null || view.isScannedPage(page) }
+            if (!scanned) return true
+        }
+        return false
+    }
+
+    private fun fileText(file: File, page: Int): String = PdfiumCore(context).let { core ->
+        val doc = core.newDocument(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+        try { core.readPageText(doc, page).orEmpty() } finally { core.closeDocument(doc) }
+    }
+
+    @Test
+    fun longPressOnScanRecognizesThePageInPlace() {
+        val file = scannedPdf("scan-select.pdf", 2)
+        launchReader(file) { scenario, view ->
+            scenario.onActivity { assertTrue("a scan before OCR", view.isScannedPage(0)) }
+            var (x, y) = onThirdLine(scenario, view, 0)!!
+            longPress(view, x, y)
+            scenario.onActivity { assertTrue("nothing to select on the scan", !view.hasTextSelection()) }
+            screenshot("11_scan_long_press")
+            onView(withText(s(R.string.pdf_ocr_recognize))).inRoot(isDialog()).perform(click())
+            // OCR of this page only, the file written over, the reader opened again
+            assertTrue("page 1 has text after OCR", waitForText(scenario, view, 0))
+            assertTrue("written into the same file", fileText(file, 0).contains("Scanned"))
+            assertTrue("page 2 left for later", fileText(file, 1).isBlank())
+            Thread.sleep(1000)
+            // now a long press selects a word on the page
+            onThirdLine(scenario, view, 0)!!.let { x = it.first; y = it.second }
+            longPress(view, x, y)
+            var selected = ""
+            scenario.onActivity { selected = if (view.hasTextSelection()) view.selectedText else ""; view.clearTextSelection() }
+            screenshot("12_scan_selected")
+            assertTrue("a word selected: '$selected'", selected.isNotBlank())
+
+            // page 2: a long press recognizes it without asking again
+            scenario.onActivity { view.jumpTo(1) }
+            Thread.sleep(1500)
+            onThirdLine(scenario, view, 1)!!.let { x = it.first; y = it.second }
+            longPress(view, x, y)
+            assertTrue("page 2 has text after OCR", waitForText(scenario, view, 1))
+            assertTrue(fileText(file, 1).contains("Scanned"))
+        }
+    }
 }
