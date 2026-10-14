@@ -81,6 +81,63 @@ class DocumentViewSlidesTest {
     }
 
     @Test
+    fun undoSlideChanges() {
+        val file = OpenDocument.copySample("sample.pptx", "undo-slides.pptx")
+        val before = slideOrder(file)
+        edit(file) {
+            settle(0, 10)
+            onMain { view.goToPage(1) }
+            settle(1, 10)
+            assertFalse(onMain { editor.isEnabled(EditAction.UNDO) })
+
+            // move, delete, add: each reopens the document
+            assertTrue(onMain { editor.run(EditAction.SLIDE_DOWN) })
+            settle(2, 10)
+            assertTrue(onMain { editor.run(EditAction.DELETE_SLIDE) })
+            settle(1, 9)
+            assertTrue(onMain { editor.run(EditAction.ADD_SLIDE) })
+            settle(2, 10)
+
+            // undone one by one, each back on the slide it was done on
+            assertTrue(onMain { editor.isEnabled(EditAction.UNDO) })
+            assertTrue(onMain { editor.run(EditAction.UNDO) })
+            settle(1, 9)
+            assertTrue(onMain { editor.run(EditAction.UNDO) })
+            settle(2, 10)
+            assertTrue(onMain { editor.run(EditAction.UNDO) })
+            settle(1, 10)
+            assertFalse("nothing left to undo", onMain { editor.isEnabled(EditAction.UNDO) })
+
+            // redone in order
+            assertTrue(onMain { editor.isEnabled(EditAction.REDO) })
+            assertTrue(onMain { editor.run(EditAction.REDO) })
+            settle(2, 10)
+            assertTrue(onMain { editor.run(EditAction.REDO) })
+            settle(1, 9)
+            assertTrue(onMain { editor.run(EditAction.REDO) })
+            settle(2, 10)
+            assertFalse("nothing left to redo", onMain { editor.isEnabled(EditAction.REDO) })
+
+            // a new change after an undo drops what was undone
+            assertTrue(onMain { editor.run(EditAction.UNDO) })
+            settle(1, 9)
+            assertTrue(onMain { editor.run(EditAction.SLIDE_UP) })
+            settle(0, 9)
+            assertFalse(onMain { editor.isEnabled(EditAction.REDO) })
+
+            // back to the start: the saved file has the slides of the original, in order
+            while (onMain { editor.isEnabled(EditAction.UNDO) }) {
+                assertTrue(onMain { editor.run(EditAction.UNDO) })
+                withTimeoutOrNull(15_000) { while (onMain { !editor.isEnabled(EditAction.UNDO) && !editor.isEnabled(EditAction.REDO) }) delay(100) }
+                delay(300)
+            }
+            settle(1, 10)
+            assertTrue(onMain { editor.save() })
+        }
+        assertEquals(before, slideOrder(file))
+    }
+
+    @Test
     fun lastSlideStays() {
         val file = OpenDocument.output("one.pptx")
         assertTrue(DocumentCreator.create(InstrumentationRegistry.getInstrumentation().targetContext, DocumentCreator.Format.POWERPOINT, file) is EditResult.Ok)

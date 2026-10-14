@@ -38,6 +38,14 @@ class SlideEditPanel @JvmOverloads constructor(
     // edits that needed a reopen (slides added, moved...); Save writes it over the original
     private var working = file
     private var workingChanged = false
+
+    /** The document at some point (a file in the cache) and the slide shown then. */
+    private class Point(val file: File, val slide: Int)
+    // slide changes reopen the document with a new session, which starts without history: they are
+    // undone by going back to the document as it was before them (edits made in one session before
+    // a slide change go back together)
+    private val undoPoints = ArrayList<Point>()
+    private val redoPoints = ArrayList<Point>()
     private var session = LivePptxSession(reader.control!!, file)
     private var shapeId = -1
     // position of the selected shape including moves not saved yet (listShapes reads the file)
@@ -59,8 +67,20 @@ class SlideEditPanel @JvmOverloads constructor(
 
     init {
         status = str(R.string.docsdk_edit_slide_hint)
-        action(EditAction.UNDO, EditFeature.UNDO_REDO) { if (!session.undo()) toast(str(R.string.docsdk_edit_nothing_to_undo)) else afterUndo() }
-        action(EditAction.REDO, EditFeature.UNDO_REDO) { if (!session.redo()) toast(str(R.string.docsdk_edit_nothing_to_redo)) else afterUndo() }
+        action(EditAction.UNDO, EditFeature.UNDO_REDO) {
+            when {
+                session.canUndo() -> if (session.undo()) afterUndo() else toast(str(R.string.docsdk_edit_nothing_to_undo))
+                undoPoints.isNotEmpty() -> goTo(undoPoints, redoPoints)
+                else -> toast(str(R.string.docsdk_edit_nothing_to_undo))
+            }
+        }
+        action(EditAction.REDO, EditFeature.UNDO_REDO) {
+            when {
+                session.canRedo() -> if (session.redo()) afterUndo() else toast(str(R.string.docsdk_edit_nothing_to_redo))
+                canRedoPoint() -> goTo(redoPoints, undoPoints)
+                else -> toast(str(R.string.docsdk_edit_nothing_to_redo))
+            }
+        }
         action(EditAction.SAVE) { save() }
         action(EditAction.SAVE_COPY, EditFeature.SAVE_COPY) { stopInline(commit = true); saveCopy() }
         action(EditAction.BOLD, EditFeature.FORMAT) { toggle { TextFormat(bold = it.bold != true) } }
@@ -97,8 +117,11 @@ class SlideEditPanel @JvmOverloads constructor(
         action(EditAction.EXPORT_PDF, EditFeature.EXPORT) { exportSlide(pdf = true) }
     }
 
-    override fun canUndo() = session.canUndo()
-    override fun canRedo() = session.canRedo()
+    override fun canUndo() = session.canUndo() || undoPoints.isNotEmpty()
+    override fun canRedo() = session.canRedo() || canRedoPoint()
+
+    // an edit made after going back to a point replaces what was undone
+    private fun canRedoPoint() = redoPoints.isNotEmpty() && !session.canUndo()
 
     override fun isActive(action: EditAction): Boolean {
         if (shapeId < 0) return false
@@ -269,6 +292,9 @@ class SlideEditPanel @JvmOverloads constructor(
     override fun close() {
         stopInline(commit = true)
         super.close()
+        val points = undoPoints + redoPoints
+        undoPoints.clear(); redoPoints.clear()
+        points.forEach { drop(it.file) }
         reader.onDocumentGesture = null
         removeOverlay(overlay)
     }
@@ -629,8 +655,35 @@ class SlideEditPanel @JvmOverloads constructor(
     private fun slideOp(failed: Int, show: (Int) -> Int = { it }, op: () -> Boolean) {
         stopInline(commit = true)
         val at = slide()
-        if (!op()) return toast(session.lastError?.message ?: str(failed))
+        // the document before the change: the opened file, or with this session's edits written out
+        val start = if (session.canUndo()) keep(working) else null
+        val before = if (start == null) keep(working) else workingCopy().takeIf { session.copyTo(it) is EditResult.Ok }
+        if (!op()) {
+            listOfNotNull(start, before).forEach { drop(it) }
+            return toast(session.lastError?.message ?: str(failed))
+        }
+        start?.let { undoPoints += Point(it, at) }
+        before?.let { undoPoints += Point(it, at) }
+        redoPoints.toList().also { redoPoints.clear() }.forEach { drop(it.file) }
         reloadWorking(show(at).coerceIn(0, maxOf(0, session.slideCount() - 1)))
+    }
+
+    /** [f] kept as an undo point: the original is copied, Save writes over it. */
+    private fun keep(f: File): File = if (f != file) f else workingCopy().also { file.copyTo(it, overwrite = true) }
+
+    /** Deletes [f] unless it is still shown, the original, or an undo/redo point. */
+    private fun drop(f: File) {
+        if (f == working || f == file || (undoPoints + redoPoints).any { it.file == f }) return
+        f.delete()
+    }
+
+    /** Undo or redo of a slide change: back to the last point of [from]; the document now goes to [to]. */
+    private fun goTo(from: MutableList<Point>, to: MutableList<Point>) {
+        stopInline(commit = true)
+        val point = from.removeAt(from.lastIndex)
+        // no edit since the document was opened (see canRedoPoint), so the opened file is the state now
+        to += Point(keep(working), slide())
+        show(point.file, point.slide.coerceAtLeast(0))
     }
 
     /**
@@ -642,12 +695,18 @@ class SlideEditPanel @JvmOverloads constructor(
         val next = workingCopy()
         val result = session.save(next)
         if (result !is EditResult.Ok) return report(result, "")
+        show(next, slideIndex)
+    }
+
+    /** Shows [next], a working copy, at [slideIndex], with a new session on it. */
+    private fun show(next: File, slideIndex: Int) {
+        select(null)
         val previous = working
         working = next
         workingChanged = true
         reopen(next) {
             session = LivePptxSession(reader.control!!, next)
-            if (previous != file) previous.delete()
+            drop(previous)
             // the slides are read in the background and a jump past those read yet is dropped
             kotlinx.coroutines.withTimeoutOrNull(10_000) { reader.state.first { it.pageNumber >= 1 && it.pageCount > slideIndex } }
             (docView() as? Presentation)?.showSlide(slideIndex, false)
@@ -678,8 +737,9 @@ class SlideEditPanel @JvmOverloads constructor(
     override fun onSaved() {
         select(null)
         // the view already shows what was saved; edit the original from now on
-        if (working != file) working.delete()
+        val previous = working
         working = file
+        drop(previous)
         workingChanged = false
         session = LivePptxSession(reader.control!!, file)
     }

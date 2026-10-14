@@ -258,4 +258,6 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
 
     /** Write the file. The live view already matches it, so no reopen is needed (see [needsReopen]). */
     fun save(target: File): EditResult = editor.save(target).also { if (it is EditResult.Ok) changes = 0 }
+    /** Writes the file like [save], but the edits still count as not saved (an undo point, not a save). */
+    fun copyTo(target: File): EditResult = editor.save(target)
 }
