@@ -24,7 +24,7 @@ object SlideGeometry {
             // getSlideDrawingRect spans the entire view height; SlideShowView centers actual content.
             (p.getSlideDrawingRect()?.left ?: ((p.width - width) / 2)).toFloat() to ((p.height - height) / 2).toFloat()
         } else {
-            val item = p.getPrintMode().getListView()?.getCurrentPageView() ?: return null
+            val item = p.getPrintMode().getListView()?.currentPageViewOrNull() ?: return null
             val a = IntArray(2); val b = IntArray(2)
             p.getLocationOnScreen(a); item.getLocationOnScreen(b)
             (b[0] - a[0]).toFloat() to (b[1] - a[1]).toFloat()

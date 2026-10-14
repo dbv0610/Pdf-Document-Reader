@@ -609,6 +609,76 @@ class PptxEditor(private val source: File) {
     /** Shape ids of the slide in drawing order (a group's shapes right after it). */
     fun shapeOrder(slideIndex: Int): List<Int> = listShapes(slideIndex).map { it.id }
 
+    /**
+     * A shape copied by [copyShape]: its XML at slide coordinates (a shape in a group too), the
+     * pictures and links it uses, its [text] for other apps and where it was ([rect], EMU).
+     */
+    class ShapeClip internal constructor(internal val element: Element, internal val rels: List<Pair<OoxmlPackage.Rel, ByteArray?>>,
+                                         val text: String, val rect: Rect)
+
+    /**
+     * The shape [shapeId] with every queued edit, for [pasteShape]; null (see [lastError]) when it
+     * is not there or holds an object kept in parts of its own (a chart, a diagram...).
+     */
+    fun copyShape(slideIndex: Int, shapeId: Int): ShapeClip? {
+        val info = listShapes(slideIndex).firstOrNull { it.id == shapeId } ?: return null.also { lastError = failure(NoSuchElementException("Shape $shapeId not found")) }
+        return read(null) { pkg ->
+            val part = part(pkg, slideIndex)
+            val copy = find(pkg, slideIndex, shapeId).first.createCopy()!!
+            // at slide coordinates: a shape of a group, or placed by its layout, keeps where it is shown
+            setOffExt(copy, info.rectEmu)
+            val used = descendants(copy).flatMap { e -> e.attributes().orEmpty().filterIsInstance<com.wxiwei.office.fc.dom4j.Attribute>().filter { it.namespaceURI == R.uRI }.mapNotNull { it.value } }.toSet()
+            val rels = pkg.relationships(part).filter { it.id in used }.map { rel ->
+                when {
+                    rel.targetMode == "External" -> rel to null
+                    rel.type == REL_IMAGE -> rel to (pkg.bytes(pkg.resolveTarget(part, rel.target)) ?: throw NoSuchElementException("Missing picture ${rel.target}"))
+                    else -> throw UnsupportedOperationException("This object cannot be copied")
+                }
+            }
+            ShapeClip(copy, rels, info.text, info.rectEmu)
+        }
+    }
+
+    /** Puts a copy of [clip] on slide [slideIndex], moved by [dx], [dy] EMU, on top. Returns its id, or -1. */
+    fun pasteShape(slideIndex: Int, clip: ShapeClip, dx: Long, dy: Long): Int {
+        val id = nextId(slideIndex); if (id < 0) return -1
+        return if (queue { pkg ->
+            val part = part(pkg, slideIndex)
+            val e = clip.element.createCopy()!!
+            // new ids for the shape and every shape inside it
+            var next = id
+            descendants(e).filter { it.namespaceURI == P.uRI && it.name == "cNvPr" }.forEach { it.addAttribute("id", "${next++}") }
+            // its pictures and links, added to this slide
+            val ids = HashMap<String, String>()
+            for ((rel, bytes) in clip.rels) ids[rel.id] = if (bytes == null) pkg.addRelationship(part, rel.type, rel.target, external = true) else {
+                val media = pkg.addMedia("ppt/media", bytes, rel.target.substringAfterLast('.', "png"))
+                pkg.addRelationship(part, rel.type, "../media/${media.substringAfterLast('/')}")
+            }
+            descendants(e).forEach { el -> el.attributes().orEmpty().filterIsInstance<com.wxiwei.office.fc.dom4j.Attribute>()
+                .filter { it.namespaceURI == R.uRI && it.value in ids }.forEach { it.value = ids[it.value] } }
+            val r = clip.rect
+            setOffExt(e, Rect(r.x + dx, r.y + dy, r.width, r.height))
+            // on top: after the other shapes, before the tree's extensions
+            val tree = tree(pkg, part)
+            val content = tree.content() as MutableList<Any?>
+            val ext = tree.firstChild(P, "extLst")
+            if (ext == null) content.add(e) else content.add(content.indexOf(ext), e)
+        }) id else -1
+    }
+
+    /** Sets where [e] is (its xfrm's offset and size; a group keeps its child space). */
+    private fun setOffExt(e: Element, r: Rect) {
+        val x = xfrm(e) ?: when (e.name) {
+            "grpSp" -> (e.firstChild(P, "grpSpPr") ?: e.child(P, "grpSpPr")).let { pr -> newElement(A, "xfrm").also { (pr.content() as MutableList<Any?>).add(0, it) } }
+            "graphicFrame" -> newElement(P, "xfrm").also { x -> val c = e.content() as MutableList<Any?>; val nv = nv(e); c.add(if (nv == null) 0 else c.indexOf(nv) + 1, x) }
+            else -> (e.firstChild(P, "spPr") ?: e.child(P, "spPr")).let { pr -> newElement(A, "xfrm").also { (pr.content() as MutableList<Any?>).add(0, it) } }
+        }
+        val off = x.firstChild(A, "off") ?: newElement(A, "off").also { (x.content() as MutableList<Any?>).add(0, it) }
+        val ext = x.firstChild(A, "ext") ?: newElement(A, "ext").also { val c = x.content() as MutableList<Any?>; c.add(c.indexOf(off) + 1, it) }
+        off.addAttribute("x", r.x.toString()); off.addAttribute("y", r.y.toString())
+        ext.addAttribute("cx", r.width.toString()); ext.addAttribute("cy", r.height.toString())
+    }
+
     fun deleteShape(slideIndex: Int, shapeId: Int): Boolean = queue { pkg ->
         val part = part(pkg, slideIndex); val e = find(pkg, slideIndex, shapeId).first
         val embeds = descendants(e).mapNotNull { it.attributeValue(QName("embed", R)) }.toSet()

@@ -57,7 +57,7 @@ class SlideEditPanel @JvmOverloads constructor(
         Tab(R.string.docsdk_edit_tab_home, listOf(EditAction.BOLD, EditAction.ITALIC, EditAction.UNDERLINE, EditAction.TEXT_COLOR,
             EditAction.FONT, EditAction.FONT_SIZE, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER, EditAction.ALIGN_RIGHT, EditAction.SET_TEXT)),
         Tab(R.string.docsdk_edit_tab_insert, listOf(EditAction.ADD_TEXT_BOX, EditAction.INSERT_PICTURE, EditAction.ADD_SHAPE)),
-        Tab(R.string.docsdk_edit_tab_arrange, listOf(EditAction.SHAPE_LIST, EditAction.MOVE_LEFT, EditAction.MOVE_RIGHT, EditAction.MOVE_UP,
+        Tab(R.string.docsdk_edit_tab_arrange, listOf(EditAction.COPY, EditAction.CUT, EditAction.PASTE, EditAction.SHAPE_LIST, EditAction.MOVE_LEFT, EditAction.MOVE_RIGHT, EditAction.MOVE_UP,
             EditAction.MOVE_DOWN, EditAction.ROTATE, EditAction.DELETE)),
         Tab(R.string.docsdk_edit_tab_slides, listOf(EditAction.ADD_SLIDE, EditAction.DUPLICATE_SLIDE, EditAction.SLIDE_UP, EditAction.SLIDE_DOWN,
             EditAction.DELETE_SLIDE, EditAction.TRANSITION, EditAction.ANIMATIONS, EditAction.EXPORT_PNG, EditAction.EXPORT_PDF)),
@@ -107,6 +107,9 @@ class SlideEditPanel @JvmOverloads constructor(
         action(EditAction.MOVE_DOWN, EditFeature.SHAPES) { move(0, 1) }
         action(EditAction.ROTATE, EditFeature.SHAPES) { if (shapeId < 0) toast(str(R.string.docsdk_edit_select_shape_first)) else rotate((overlay.shapeRotation + 90f) % 360f) }
         action(EditAction.DELETE, EditFeature.SHAPES) { delete() }
+        action(EditAction.COPY, EditFeature.CLIPBOARD) { copyShape() }
+        action(EditAction.CUT, EditFeature.CLIPBOARD, EditFeature.SHAPES) { if (copyShape()) delete() }
+        action(EditAction.PASTE, EditFeature.CLIPBOARD, EditFeature.SHAPES) { pasteShape() }
         action(EditAction.ANIMATIONS, EditFeature.ANIMATIONS) { editEffects() }
         action(EditAction.TRANSITION, EditFeature.ANIMATIONS) { editTransition() }
         action(EditAction.ADD_SLIDE, EditFeature.SLIDES) { slideOp(R.string.docsdk_edit_slide_add_failed, { it + 1 }) { session.addBlankSlide(slide()) } }
@@ -154,7 +157,13 @@ class SlideEditPanel @JvmOverloads constructor(
         }
         overlay.onTap = { x, y -> tapAt(x, y) }
         overlay.movable = has(EditFeature.SHAPES)
-        overlay.onChange = { r -> setRect(r) }
+        overlay.onChange = { r ->
+            setRect(r)
+            // out of the way while the shape moves; back once it stays still
+            showShapeMenu(false)
+            reader.removeCallbacks(menuBack)
+            reader.postDelayed(menuBack, 600)
+        }
         overlay.onRotate = { deg -> rotate(deg) }
         overlay.onFrame = { frame -> placeInline(frame) }
     }
@@ -181,6 +190,7 @@ class SlideEditPanel @JvmOverloads constructor(
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
         styleInline(edit, s.id)
+        showShapeMenu(false)
         inline = edit
         // the keyboard takes half the screen: give the slide the rest while typing on it
         toolbar?.visibility = View.GONE
@@ -427,6 +437,8 @@ class SlideEditPanel @JvmOverloads constructor(
         undoPoints.clear(); redoPoints.clear()
         points.forEach { drop(it.file) }
         reader.onDocumentGesture = null
+        reader.removeCallbacks(menuBack)
+        showShapeMenu(false)
         removeOverlay(overlay)
     }
 
@@ -455,6 +467,7 @@ class SlideEditPanel @JvmOverloads constructor(
         overlay.selection = rect
         status = s?.let { describe(it) } ?: str(R.string.docsdk_edit_no_shape_selected)
         shapeText = s?.text ?: ""
+        showShapeMenu(s != null)
     }
 
     private fun slide(): Int = (reader.state.value.pageNumber - 1).coerceAtLeast(0)
@@ -835,6 +848,8 @@ class SlideEditPanel @JvmOverloads constructor(
     /** Shows [next], a working copy, at [slideIndex], with a new session on it. */
     private fun show(next: File, slideIndex: Int) {
         select(null)
+        val pick = pendingSelect
+        pendingSelect = -1
         val previous = working
         working = next
         workingChanged = true
@@ -848,7 +863,95 @@ class SlideEditPanel @JvmOverloads constructor(
             kotlinx.coroutines.withTimeoutOrNull(2_000) { reader.state.first { it.pageNumber == slideIndex + 1 } }
             // slides were added, removed or reordered: every thumbnail may show another slide now
             reader.invalidateThumbnails()
+            // a pasted shape is selected, ready to move, once the slide's page is laid out to frame it
+            if (pick >= 0) session.listShapes(slideIndex).firstOrNull { it.id == pick }?.let { pasted ->
+                kotlinx.coroutines.withTimeoutOrNull(3_000) {
+                    while ((docView() as? Presentation)?.let { SlideGeometry.emuToView(it, pasted.rectEmu) } == null) kotlinx.coroutines.delay(50)
+                }
+                select(pasted)
+            }
         }
+    }
+
+    // ---- copy and paste of shapes ----
+
+    private val clipboard get() = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+
+    /** The shape last copied here, the text put on the clipboard for it, and the slide it came from. */
+    private var shapeClip: com.wxiwei.office.editor.pptx.PptxEditor.ShapeClip? = null
+    private var shapeClipText = ""
+    private var shapeClipSlide = -1
+    // the shape to select once the document is shown again (a pasted one)
+    private var pendingSelect = -1
+
+    /** Copies the selected shape (text box, picture, shape, table, group); other apps get its text. False when nothing was. */
+    private fun copyShape(): Boolean {
+        inline?.let { it.onTextContextMenuItem(android.R.id.copy); return true }
+        if (shapeId < 0) { toast(str(R.string.docsdk_edit_select_shape_first)); return false }
+        val clip = session.copyShape(slide(), shapeId) ?: run {
+            toast(session.lastError?.message ?: str(R.string.docsdk_edit_failed)); return false
+        }
+        shapeClip = clip
+        shapeClipSlide = slide()
+        // other apps get the shape's text; a shape without text still needs something to match on paste
+        shapeClipText = clip.text.ifEmpty { str(R.string.docsdk_edit_shape_copied, shapeId) }
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("shape", shapeClipText))
+        toast(str(R.string.docsdk_edit_copied))
+        return true
+    }
+
+    /**
+     * Pastes the copied shape on this slide (a little lower and to the right on the slide it came
+     * from, so it does not hide the original) and selects it; text from another app becomes a new
+     * text box. Shown by reopening the document, undone like slide changes.
+     */
+    private fun pasteShape() {
+        inline?.let { it.onTextContextMenuItem(android.R.id.paste); return }
+        val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+        if (text.isNullOrEmpty()) return toast(str(R.string.docsdk_edit_clipboard_empty))
+        val clip = shapeClip?.takeIf { text == shapeClipText }
+        if (clip == null) {
+            if (!has(EditFeature.SHAPES)) return
+            run(EditAction.ADD_TEXT_BOX, text, true)
+            return
+        }
+        val size = session.slideSizeEmu()
+        val step = if (slide() == shapeClipSlide) maxOf(size.width, size.height) / 40 else 0L
+        slideOp(R.string.docsdk_edit_paste_failed) {
+            session.pasteShape(slide(), clip, step, step).also { if (it) pendingSelect = session.pastedShape }
+        }
+    }
+
+    // the menu over the selected shape, while it shows
+    private var shapeMenu: android.view.ActionMode? = null
+    private val menuBack = Runnable { showShapeMenu(shapeId >= 0 && inline == null) }
+
+    /** Shows (or takes down) Cut / Copy / Paste / Delete over the selected shape. */
+    private fun showShapeMenu(on: Boolean) {
+        shapeMenu?.finish()
+        shapeMenu = null
+        if (!on || shapeId < 0 || inline != null || isBusy) return
+        val items = listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.DELETE)
+            .filter { isAvailable(it) && (it != EditAction.PASTE || clipboard.hasPrimaryClip()) }
+        if (items.isEmpty()) return
+        shapeMenu = reader.startActionMode(object : android.view.ActionMode.Callback2() {
+            override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+                items.forEachIndexed { i, a -> menu.add(android.view.Menu.NONE, i, i, str(a.label)) }
+                return true
+            }
+            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
+            override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
+                val action = items.getOrNull(item.itemId) ?: return false
+                mode.finish()
+                run(action, null, false)
+                return true
+            }
+            override fun onDestroyActionMode(mode: android.view.ActionMode) { if (shapeMenu === mode) shapeMenu = null }
+            override fun onGetContentRect(mode: android.view.ActionMode, view: View, outRect: android.graphics.Rect) {
+                val f = overlay.frameOnScreen() ?: return outRect.setEmpty()
+                outRect.set(f.left.toInt(), f.top.toInt(), f.right.toInt(), f.bottom.toInt())
+            }
+        }, android.view.ActionMode.TYPE_FLOATING)
     }
 
     /** Edits the view cannot show at once (shapes inside groups) are shown by reopening a working copy. */

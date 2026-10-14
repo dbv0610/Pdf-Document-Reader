@@ -176,6 +176,14 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
     fun deleteSlide(slideIndex: Int): Boolean = slideChange { editor.deleteSlide(slideIndex) }
     fun duplicateSlide(slideIndex: Int): Boolean = slideChange { editor.duplicateSlide(slideIndex) >= 0 }
     fun moveSlide(from: Int, to: Int): Boolean = slideChange { editor.moveSlide(from, to) }
+    /** A copy of the shape for [pasteShape]; null (see [lastError]) when it cannot be copied. */
+    fun copyShape(slideIndex: Int, shapeId: Int): PptxEditor.ShapeClip? = editor.copyShape(slideIndex, shapeId)
+    /** The id of the shape the last [pasteShape] made. */
+    var pastedShape = -1
+        private set
+    /** Puts a copy of [clip] on the slide, moved by [dx], [dy] EMU; shown after a reopen like slide changes. */
+    fun pasteShape(slideIndex: Int, clip: PptxEditor.ShapeClip, dx: Long, dy: Long): Boolean =
+        slideChange { editor.pasteShape(slideIndex, clip, dx, dy).also { pastedShape = it } >= 0 }
     /** An empty slide after [afterIndex]; shown after saving and reopening like other slide changes. */
     fun addBlankSlide(afterIndex: Int): Boolean = slideChange { editor.addBlankSlide(afterIndex) >= 0 }
 

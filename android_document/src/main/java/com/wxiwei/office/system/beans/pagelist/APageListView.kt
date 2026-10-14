@@ -272,6 +272,8 @@ open class APageListView : AdapterView<Adapter> {
     @get:JvmName("getCurrentPageViewProperty")
     val currentPageView: APageListItem get() = childViewsCache.get(currentIndex)!!
     fun getCurrentPageView(): APageListItem = currentPageView
+    /** The view of the current page, or null while it is not made yet (a document just opened). */
+    fun currentPageViewOrNull(): APageListItem? = childViewsCache.get(currentIndex)
     fun getPageListViewListener(): IPageListViewListener = pageListViewListener!!
     private fun createPageView(pageIndex: Int): APageListItem { var view = childViewsCache.get(pageIndex); if (view == null) { view = pageAdapter!!.getView(pageIndex, if (pageViewCache.isEmpty()) null else pageViewCache.removeFirst(), this) as APageListItem; if (view.layoutParams == null) view.layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT); addViewInLayout(view, 0, view.layoutParams, true); childViewsCache.append(pageIndex, view); view.measure(MeasureSpec.EXACTLY or (view.getPageWidth() * zoom).toInt(), MeasureSpec.EXACTLY or (view.getPageHeight() * zoom).toInt()) }; return view }
     fun getScrollBounds(left: Int, top: Int, right: Int, bottom: Int): Rect { var xmin = width - right; var xmax = -left; var ymin = height - bottom; var ymax = -top; if (xmin > xmax) { xmin = (xmin + xmax) / 2; xmax = xmin }; if (ymin > ymax) { ymin = (ymin + ymax) / 2; ymax = ymin }; return Rect(xmin, ymin, xmax, ymax) }

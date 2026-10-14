@@ -55,6 +55,7 @@
     <string name="docsdk_edit_column_width_failed">Không đổi được độ rộng cột</string>
     <string name="docsdk_edit_column_width_of">Độ rộng cột %1$s (ký tự)</string>
     <string name="docsdk_edit_copied">Đã chép</string>
+    <string name="docsdk_edit_shape_copied">Hình %1$d</string>
     <string name="docsdk_edit_copy">Chép</string>
     <string name="docsdk_edit_copy_file_name">%1$s (bản sao).%2$s</string>
     <string name="docsdk_edit_copy_saved">Đã lưu bản sao</string>
