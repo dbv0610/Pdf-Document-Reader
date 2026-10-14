@@ -125,7 +125,7 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
         return true
     }
 
-    /** Bold, italic, underline, size, color or alignment for all the text of a shape. */
+    /** Bold, italic, underline, size, color, font or alignment for all the text of a shape. */
     fun setTextFormat(slideIndex: Int, shapeId: Int, format: TextFormat): Boolean =
         formatText(slideIndex, shapeId, format, { editor.setTextFormat(slideIndex, shapeId, format) }) { display.setTextFormat(slideIndex, shapeId, format) }
 
@@ -166,8 +166,12 @@ class LivePptxSession internal constructor(private val editor: PptxEditor, priva
     fun slideCount(): Int = editor.slideCount()
     /** Size, color and typeface of the shape's text as shown, for an editor over it. */
     fun textStyle(slideIndex: Int, shapeId: Int): TextStyle? = display.textStyle(slideIndex, shapeId)
+    /** How each run of the shape's text is drawn, by char range, for an editor over it. */
+    fun textRuns(slideIndex: Int, shapeId: Int): List<Pair<IntRange, TextStyle>> = display.textRuns(slideIndex, shapeId)
     /** Current bold/italic/underline of the shape's text (from its first run). */
     fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = editor.textFormatOf(slideIndex, shapeId)
+    /** Bold/italic/underline and font of the text at char [offset] of the shape's text. */
+    fun textFormatAt(slideIndex: Int, shapeId: Int, offset: Int): TextFormat? = editor.textFormatAt(slideIndex, shapeId, offset)
 
     fun deleteSlide(slideIndex: Int): Boolean = slideChange { editor.deleteSlide(slideIndex) }
     fun duplicateSlide(slideIndex: Int): Boolean = slideChange { editor.duplicateSlide(slideIndex) >= 0 }

@@ -55,7 +55,7 @@ class SlideEditPanel @JvmOverloads constructor(
 
     override val tabs = listOf(
         Tab(R.string.docsdk_edit_tab_home, listOf(EditAction.BOLD, EditAction.ITALIC, EditAction.UNDERLINE, EditAction.TEXT_COLOR,
-            EditAction.FONT_SIZE, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER, EditAction.ALIGN_RIGHT, EditAction.SET_TEXT)),
+            EditAction.FONT, EditAction.FONT_SIZE, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER, EditAction.ALIGN_RIGHT, EditAction.SET_TEXT)),
         Tab(R.string.docsdk_edit_tab_insert, listOf(EditAction.ADD_TEXT_BOX, EditAction.INSERT_PICTURE, EditAction.ADD_SHAPE)),
         Tab(R.string.docsdk_edit_tab_arrange, listOf(EditAction.SHAPE_LIST, EditAction.MOVE_LEFT, EditAction.MOVE_RIGHT, EditAction.MOVE_UP,
             EditAction.MOVE_DOWN, EditAction.ROTATE, EditAction.DELETE)),
@@ -87,6 +87,11 @@ class SlideEditPanel @JvmOverloads constructor(
         action(EditAction.ITALIC, EditFeature.FORMAT) { toggle { TextFormat(italic = it.italic != true) } }
         action(EditAction.UNDERLINE, EditFeature.FORMAT) { toggle { TextFormat(underline = it.underline != true) } }
         action(EditAction.TEXT_COLOR, EditFeature.FORMAT) { pickColor(str(R.string.docsdk_edit_text_color)) { c -> c?.let { format(TextFormat(rgbHex = it)) } } }
+        action(EditAction.FONT, EditFeature.FORMAT) {
+            if (shapeId < 0) return@action toast(str(R.string.docsdk_edit_select_shape_first))
+            val current = runCatching { session.textFormatAt(slide(), shapeId, textSelection()?.first ?: 0) }.getOrNull()?.font
+            pickFont(EditFonts.names, current) { name -> format(TextFormat(font = name)) }
+        }
         action(EditAction.FONT_SIZE, EditFeature.FORMAT) { pickSize { format(TextFormat(sizePt = it)) } }
         action(EditAction.ALIGN_LEFT, EditFeature.FORMAT) { format(TextFormat(align = "l")) }
         action(EditAction.ALIGN_CENTER, EditFeature.FORMAT) { format(TextFormat(align = "ctr")) }
@@ -125,7 +130,8 @@ class SlideEditPanel @JvmOverloads constructor(
 
     override fun isActive(action: EditAction): Boolean {
         if (shapeId < 0) return false
-        val f = runCatching { session.textFormatOf(slide(), shapeId) }.getOrNull() ?: return false
+        // the part selected while typing in the box, or else its whole text
+        val f = runCatching { session.textFormatAt(slide(), shapeId, textSelection()?.first ?: 0) }.getOrNull() ?: return false
         return when (action) {
             EditAction.BOLD -> f.bold == true
             EditAction.ITALIC -> f.italic == true
@@ -135,6 +141,7 @@ class SlideEditPanel @JvmOverloads constructor(
     }
 
     init {
+        EditFonts.register()
         addOverlay(overlay)
         keepAboveKeyboard(true)
         reader.onDocumentGesture = gesture@{ type, event ->
@@ -170,31 +177,55 @@ class SlideEditPanel @JvmOverloads constructor(
                 setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, (st.sizePt * 96f / 72f * zoom).coerceIn(dp(12).toFloat(), dp(48).toFloat()))
                 typeface = st.typeface
                 val c = st.color or 0xFF000000.toInt()
-                // light text keeps a dark backdrop so it stays readable
-                val light = android.graphics.Color.luminance(c) > 0.6f
+                val runs = session.textRuns(slide(), s.id)
+                // light text keeps a dark backdrop so it stays readable: the color of most of the text decides
+                val most = runs.groupBy { it.second.color }.maxByOrNull { (_, r) -> r.sumOf { it.first.last - it.first.first + 1 } }?.key ?: c
+                val light = android.graphics.Color.luminance(most or 0xFF000000.toInt()) > 0.6f
                 setTextColor(c)
                 setBackgroundColor(if (light) 0xE0303030.toInt() else 0xF0FFFFFF.toInt())
+                // each run as drawn on the slide (a word made bold, red or in another font), relative to the first
+                val text = editableText
+                for ((range, run) in runs) {
+                    val a = range.first.coerceAtMost(text.length); val b = (range.last + 1).coerceAtMost(text.length)
+                    if (b <= a) continue
+                    val flags = android.text.Spanned.SPAN_EXCLUSIVE_INCLUSIVE
+                    if (run.color != st.color) text.setSpan(android.text.style.ForegroundColorSpan(run.color or 0xFF000000.toInt()), a, b, flags)
+                    if (run.typeface != st.typeface) text.setSpan(TypefaceSpan(run.typeface), a, b, flags)
+                    if (run.underline) text.setSpan(android.text.style.UnderlineSpan(), a, b, flags)
+                    if (run.sizePt != st.sizePt && st.sizePt > 0f) text.setSpan(android.text.style.RelativeSizeSpan(run.sizePt / st.sizePt), a, b, flags)
+                }
             }
             setPadding(dp(6), dp(4), dp(6), dp(4))
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
-        // formatting of the selected part of the text, from the text selection menu
+        // formatting of the selected part of the text, from the text selection menu (the bar is
+        // hidden while typing); closing the menu collapses the selection, so the range is taken first
         edit.customSelectionActionModeCallback = object : android.view.ActionMode.Callback {
-            private val formats = if (!has(EditFeature.FORMAT)) emptyList() else listOf(
-                str(R.string.docsdk_edit_bold) to TextFormat(bold = true), str(R.string.docsdk_edit_italic) to TextFormat(italic = true),
-                str(R.string.docsdk_edit_underline) to TextFormat(underline = true), str(R.string.docsdk_edit_red_text) to TextFormat(rgbHex = "C00000"))
+            private val formats: List<Pair<String, (Int, Int) -> Unit>> = if (!has(EditFeature.FORMAT)) emptyList() else listOf(
+                str(R.string.docsdk_edit_bold) to { a, b -> formatRange(a, b) { TextFormat(bold = it.bold != true) } },
+                str(R.string.docsdk_edit_italic) to { a, b -> formatRange(a, b) { TextFormat(italic = it.italic != true) } },
+                str(R.string.docsdk_edit_underline) to { a, b -> formatRange(a, b) { TextFormat(underline = it.underline != true) } },
+                str(R.string.docsdk_edit_text_color) to { a, b ->
+                    pickColor(str(R.string.docsdk_edit_text_color)) { c -> c?.let { formatRange(a, b) { _ -> TextFormat(rgbHex = it) } } }
+                },
+                str(R.string.docsdk_edit_font) to { a, b ->
+                    val current = runCatching { session.textFormatAt(slide(), shapeId, a) }.getOrNull()?.font
+                    pickFont(EditFonts.names, current) { name -> formatRange(a, b) { TextFormat(font = name) } }
+                },
+                str(R.string.docsdk_edit_font_size) to { a, b -> pickSize { pt -> formatRange(a, b) { TextFormat(sizePt = pt) } } },
+            )
             override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
                 formats.forEachIndexed { i, (label, _) -> menu.add(android.view.Menu.NONE, FORMAT_MENU_ID + i, 100 + i, label) }
                 return true
             }
             override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
             override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
-                val format = formats.getOrNull(item.itemId - FORMAT_MENU_ID)?.second ?: return false
+                val run = formats.getOrNull(item.itemId - FORMAT_MENU_ID)?.second ?: return false
                 val start = minOf(edit.selectionStart, edit.selectionEnd)
                 val end = maxOf(edit.selectionStart, edit.selectionEnd)
                 mode.finish()
-                formatRange(start, end, format)
+                if (end > start) run(start, end)
                 return true
             }
             override fun onDestroyActionMode(mode: android.view.ActionMode) {}
@@ -209,14 +240,44 @@ class SlideEditPanel @JvmOverloads constructor(
             .showSoftInput(edit, 0)
     }
 
-    /** Saves the text being edited in place, then formats its chars [start, end) and shows the slide. */
-    private fun formatRange(start: Int, end: Int, format: TextFormat) {
-        if (shapeId < 0 || end <= start) return
+    /**
+     * Formats chars [start, end) of the selected shape's text with [make] (given the format there
+     * now). While the text is edited in place it is written to the shape first, and the editor
+     * opens again with the same part selected.
+     */
+    private fun formatRange(start: Int, end: Int, make: (TextFormat) -> TextFormat): Boolean {
+        if (shapeId < 0 || start < 0 || end <= start) return false
+        val editing = inline != null
         // positions are in the edited text: write it to the shape first
         stopInline(commit = true)
-        if (!session.setTextFormat(slide(), shapeId, start, end, format)) toast(session.lastError?.message ?: str(R.string.docsdk_edit_format_failed))
-        else reopenHint()
+        if (end > shapeText.length) return false
+        val format = make(session.textFormatAt(slide(), shapeId, start) ?: TextFormat())
+        if (!session.setTextFormat(slide(), shapeId, start, end, format)) {
+            toast(session.lastError?.message ?: str(R.string.docsdk_edit_format_failed))
+            return false
+        }
+        reopenHint()
+        if (editing && !session.needsReopen) session.listShapes(slide()).firstOrNull { it.id == shapeId }?.let { s ->
+            startInline(s)
+            inline?.setSelection(start.coerceAtMost(s.text.length), end.coerceAtMost(s.text.length))
+        }
+        stateChanged()
+        return true
     }
+
+    /** The part of the text selected in the in-place editor, or null. */
+    fun textSelection(): IntRange? {
+        val edit = inline ?: return null
+        val a = minOf(edit.selectionStart, edit.selectionEnd)
+        val b = maxOf(edit.selectionStart, edit.selectionEnd)
+        return if (a in 0 until b) a until b else null
+    }
+
+    /** The selected shape's text, as being typed while its in-place editor is open; null without a shape. */
+    fun selectedText(): String? = if (shapeId < 0) null else inline?.text?.toString() ?: shapeText
+
+    /** Formats chars [start, end) of the selected shape's text (positions as in [selectedText]); false when it could not. */
+    fun formatText(start: Int, end: Int, format: TextFormat): Boolean = !isBusy && formatRange(start, end) { format }
 
     /** Keeps the editor on the shape frame, at least a few lines tall. */
     private fun placeInline(frame: android.graphics.RectF?) {
@@ -534,11 +595,14 @@ class SlideEditPanel @JvmOverloads constructor(
     /** B/I/U turn off when the shape's text already has them. */
     private fun toggle(next: (TextFormat) -> TextFormat) {
         if (shapeId < 0) return toast(str(R.string.docsdk_edit_select_shape_first))
+        textSelection()?.let { r -> formatRange(r.first, r.last + 1, next); return }
         format(next(session.textFormatOf(slide(), shapeId) ?: TextFormat()))
     }
 
+    /** [f] on the part selected while typing in the shape, or else on all its text. */
     private fun format(f: TextFormat) {
         if (shapeId < 0) return toast(str(R.string.docsdk_edit_select_shape_first))
+        textSelection()?.let { r -> formatRange(r.first, r.last + 1) { f }; return }
         if (!session.setTextFormat(slide(), shapeId, f)) toast(session.lastError?.message ?: str(R.string.docsdk_edit_shape_no_text))
         else reopenHint()
     }
@@ -742,6 +806,12 @@ class SlideEditPanel @JvmOverloads constructor(
         drop(previous)
         workingChanged = false
         session = LivePptxSession(reader.control!!, file)
+    }
+
+    /** Draws its text with [typeface] (TypefaceSpan(Typeface) needs API 28). */
+    private class TypefaceSpan(private val typeface: android.graphics.Typeface) : android.text.style.MetricAffectingSpan() {
+        override fun updateDrawState(paint: android.text.TextPaint) { paint.typeface = typeface }
+        override fun updateMeasureState(paint: android.text.TextPaint) { paint.typeface = typeface }
     }
 
     private companion object {

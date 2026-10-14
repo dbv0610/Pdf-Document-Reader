@@ -63,6 +63,8 @@ interface LiveSlideDisplay {
     fun setTextFormat(slideIndex: Int, id: Int, start: Int, end: Int, format: TextFormat): Any? = null
     /** How the shape's first text run is drawn, for an editor over it; null when not shown. */
     fun textStyle(slideIndex: Int, id: Int): TextStyle? = null
+    /** How each run of the shape's text is drawn, by char range [start, end); empty when not shown. */
+    fun textRuns(slideIndex: Int, id: Int): List<Pair<IntRange, TextStyle>> = emptyList()
     fun restoreFormat(slideIndex: Int, token: Any): Boolean = false
 }
 
@@ -71,8 +73,8 @@ interface LiveSlideDisplay {
  * Main thread only. Model bounds are pixels at 96 dpi, i.e. EMU / 9525, and model shape ids are the
  * XML cNvPr ids, so they match [PptxEditor] ids.
  */
-/** Text size in points, ARGB color and typeface of a shape's text. */
-data class TextStyle(val sizePt: Float, val color: Int, val typeface: android.graphics.Typeface)
+/** Text size in points, ARGB color, typeface (with its bold and italic) and underline of a shape's text. */
+data class TextStyle(val sizePt: Float, val color: Int, val typeface: android.graphics.Typeface, val underline: Boolean = false)
 
 class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     private val presentation get() = control.getView() as? Presentation
@@ -317,6 +319,29 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
             com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().getFontTypeface(am.getFontName(p, l), bold, italic))
     }
 
+    override fun textRuns(slideIndex: Int, id: Int): List<Pair<IntRange, TextStyle>> {
+        val box = slide(slideIndex)?.let { find(it, id) }?.filterIsInstance<TextBox>()?.firstOrNull() ?: return emptyList()
+        val paras = box.element?.getParaCollection() ?: return emptyList()
+        val am = AttrManage.instance()
+        val runs = ArrayList<Pair<IntRange, TextStyle>>()
+        // the text starts at offset 0: model offsets are the shape's char positions
+        for (i in 0 until paras.size()) {
+            val para = paras.getElementForIndex(i) as? ParagraphElement ?: continue
+            val p = para.getAttribute()
+            for (j in 0 until para.leafCount()) {
+                val leaf = para.getElementForIndex(j) ?: continue
+                val start = leaf.getStartOffset().toInt(); val end = leaf.getEndOffset().toInt()
+                if (end <= start) continue
+                val l = leaf.getAttribute()
+                val bold = am.getFontBold(p, l); val italic = am.getFontItalic(p, l)
+                runs += (start until end) to TextStyle(am.getFontSizeF(p, l), am.getFontColor(p, l),
+                    com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().getFontTypeface(am.getFontName(p, l), bold, italic),
+                    am.getFontUnderline(p, l) != 0)
+            }
+        }
+        return runs
+    }
+
     override fun setTextFormat(slideIndex: Int, id: Int, format: TextFormat): Any? {
         val slide = slide(slideIndex) ?: return null
         // no text drawn (an empty or undrawn text box): nothing to show
@@ -354,6 +379,7 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         format.underline?.let { am.setFontUnderline(attr, if (it) 1 else 0) }
         format.sizePt?.let { am.setFontSize(attr, it) }
         format.rgbHex?.let { am.setFontColor(attr, (0xFF shl 24) or it.removePrefix("#").toInt(16)) }
+        format.font?.let { am.setFontName(attr, com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().addFontName(it)) }
     }
 
     override fun setTextFormat(slideIndex: Int, id: Int, start: Int, end: Int, format: TextFormat): Any? {

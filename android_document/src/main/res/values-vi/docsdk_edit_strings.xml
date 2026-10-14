@@ -187,7 +187,6 @@
     <string name="docsdk_edit_push">Đẩy</string>
     <string name="docsdk_edit_range_hint">A1 hoặc A1:C10</string>
     <string name="docsdk_edit_recent_colors">Gần đây</string>
-    <string name="docsdk_edit_red_text">Chữ đỏ</string>
     <string name="docsdk_edit_reopen_failed">Không mở lại được tài liệu</string>
     <string name="docsdk_edit_reorder_failed">Không đổi được thứ tự</string>
     <string name="docsdk_edit_replace">Thay</string>

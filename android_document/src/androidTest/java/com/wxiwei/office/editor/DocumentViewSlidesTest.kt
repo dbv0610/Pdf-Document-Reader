@@ -152,38 +152,44 @@ class DocumentViewSlidesTest {
         assertEquals(1, slideOrder(file).size)
     }
 
+    /** Double taps the top text shape of the first slide, as the user does; the shape. */
+    private suspend fun EditInView.Host.doubleTapText(file: File): com.wxiwei.office.editor.pptx.PptxShapeInfo {
+        // a text shape on top at its own centre
+        val shapes = com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0)
+        val shape = shapes.first { s ->
+            val r = s.rectEmu
+            s.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT &&
+                com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)) == s
+        }
+        val (x, y) = onMain {
+            val p = office(view).control!!.getView() as com.wxiwei.office.pg.control.Presentation
+            val r = com.wxiwei.office.editor.slide.SlideGeometry.emuToView(p, shape.rectEmu)!!
+            val origin = IntArray(2).also { p.getLocationOnScreen(it) }
+            (origin[0] + r.centerX()) to (origin[1] + r.centerY())
+        }
+        // nothing selected yet: two quick taps
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        fun touch(action: Int, down: Long, at: Long) = android.view.MotionEvent.obtain(down, at, action, x, y, 0).also {
+            it.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+            automation.injectInputEvent(it, true)
+            it.recycle()
+        }
+        val t0 = android.os.SystemClock.uptimeMillis()
+        touch(android.view.MotionEvent.ACTION_DOWN, t0, t0)
+        touch(android.view.MotionEvent.ACTION_UP, t0, t0 + 40)
+        touch(android.view.MotionEvent.ACTION_DOWN, t0 + 80, t0 + 80)
+        touch(android.view.MotionEvent.ACTION_UP, t0 + 80, t0 + 120)
+        delay(1000)
+        return shape
+    }
+
     @Test
     fun doubleTapEditsText() {
         val file = OpenDocument.copySample("sample.pptx", "doubletap.pptx")
         edit(file) {
             settle(0, 10)
             delay(500)
-            // a text shape on top at its own centre
-            val shapes = com.wxiwei.office.editor.pptx.PptxEditor(file).listShapes(0)
-            val shape = shapes.first { s ->
-                val r = s.rectEmu
-                s.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT &&
-                    com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)) == s
-            }
-            val (x, y) = onMain {
-                val p = office(view).control!!.getView() as com.wxiwei.office.pg.control.Presentation
-                val r = com.wxiwei.office.editor.slide.SlideGeometry.emuToView(p, shape.rectEmu)!!
-                val origin = IntArray(2).also { p.getLocationOnScreen(it) }
-                (origin[0] + r.centerX()) to (origin[1] + r.centerY())
-            }
-            // nothing selected yet: two quick taps
-            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-            fun touch(action: Int, down: Long, at: Long) = android.view.MotionEvent.obtain(down, at, action, x, y, 0).also {
-                it.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-                automation.injectInputEvent(it, true)
-                it.recycle()
-            }
-            val t0 = android.os.SystemClock.uptimeMillis()
-            touch(android.view.MotionEvent.ACTION_DOWN, t0, t0)
-            touch(android.view.MotionEvent.ACTION_UP, t0, t0 + 40)
-            touch(android.view.MotionEvent.ACTION_DOWN, t0 + 80, t0 + 80)
-            touch(android.view.MotionEvent.ACTION_UP, t0 + 80, t0 + 120)
-            delay(1000)
+            val shape = doubleTapText(file)
             val editText = onMain {
                 fun find(v: android.view.View): android.widget.EditText? = when (v) {
                     is android.widget.EditText -> v
@@ -195,5 +201,55 @@ class DocumentViewSlidesTest {
             assertTrue("a double tap on a text shape opens the text editor", editText != null)
             assertEquals(shape.text, onMain { editText!!.text.toString() })
         }
+    }
+
+    @Test
+    fun formatTextRangeAndFont() {
+        val file = OpenDocument.copySample("sample.pptx", "format-range.pptx")
+        val format = com.editor.docsdk.TextFormat(bold = true, color = "C00000", font = "Times New Roman")
+        var part = ""
+        var shapeId = 0
+        edit(file) {
+            settle(0, 10)
+            delay(500)
+            val shape = doubleTapText(file)
+            shapeId = shape.id
+            assertEquals(shape.text, onMain { editor.selectedText })
+            part = shape.text.substring(0, 4)
+
+            // the app formats a range: the text editor stays open with that part selected
+            assertTrue(onMain { editor.formatText(0, 4, format) })
+            delay(500)
+            assertEquals(0 until 4, onMain { editor.textSelection })
+            assertTrue(onMain { editor.isActive(EditAction.BOLD) })
+            // commands act on the selected part
+            assertTrue(onMain { editor.run(EditAction.ITALIC) })
+            delay(300)
+            assertTrue(onMain { editor.run(EditAction.FONT, "Courier New") })
+            delay(300)
+            // a picture of the slide as formatted, kept after the test: adb pull /data/local/tmp/pptx-format.png
+            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("screencap -p /data/local/tmp/pptx-format.png").close()
+            delay(1000)
+            assertEquals(0 until 4, onMain { editor.textSelection })
+            // undo the font: back to Times New Roman; redo
+            assertTrue(onMain { editor.run(EditAction.UNDO) })
+            assertTrue(onMain { editor.run(EditAction.REDO) })
+            // out of the text, or no shape: refused
+            assertFalse(onMain { editor.formatText(0, shape.text.length + 5, format) })
+            assertTrue(onMain { editor.save() })
+        }
+        val xml = ZipFile(file).use { z -> z.getInputStream(z.getEntry("ppt/slides/slide1.xml")).readBytes().toString(Charsets.UTF_8) }
+        val sp = xml.substring(Regex("<p:cNvPr[^>]*\\bid=\"$shapeId\"").find(xml)!!.range.first).substringBefore("</p:sp>")
+        val runs = Regex("<a:r><a:rPr([^>]*)>(.*?)</a:rPr><a:t>([^<]*)</a:t></a:r>").findAll(sp).toList()
+        val styled = runs.filter { it.groupValues[2].contains("typeface=\"Courier New\"") }
+        assertEquals(sp, part, styled.joinToString("") { it.groupValues[3] })
+        for (r in styled) {
+            val (attrs, props) = r.groupValues[1] to r.groupValues[2]
+            assertTrue(attrs, attrs.contains("b=\"1\"") && attrs.contains("i=\"1\""))
+            // CT_TextCharacterProperties order: the fill before the fonts, latin before cs
+            assertTrue(props, props.indexOf("C00000") in 0 until props.indexOf("<a:latin"))
+            assertTrue(props, props.indexOf("<a:latin") < props.indexOf("<a:cs"))
+        }
+        assertTrue("the rest keeps its font", runs.filter { it !in styled }.none { it.groupValues[2].contains("Courier New") })
     }
 }

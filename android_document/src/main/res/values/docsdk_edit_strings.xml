@@ -188,7 +188,6 @@
     <string name="docsdk_edit_push">Push</string>
     <string name="docsdk_edit_range_hint">A1 or A1:C10</string>
     <string name="docsdk_edit_recent_colors">Recent</string>
-    <string name="docsdk_edit_red_text">Red text</string>
     <string name="docsdk_edit_reopen_failed">Could not reopen the document</string>
     <string name="docsdk_edit_reorder_failed">Could not change the order</string>
     <string name="docsdk_edit_replace">Replace</string>

@@ -35,6 +35,8 @@ enum class ShapeKind { TEXT, PICTURE, TABLE, GROUP, OTHER }
 data class TextFormat(
     val bold: Boolean? = null, val italic: Boolean? = null, val underline: Boolean? = null,
     val sizePt: Float? = null, val rgbHex: String? = null, val align: String? = null,
+    /** Font name (the a:latin and a:cs typeface). */
+    val font: String? = null,
 )
 
 /** [rotationDeg]: clockwise rotation of the shape's own xfrm (group rotation not included). */
@@ -264,22 +266,49 @@ class PptxEditor(private val source: File) {
     fun autoFits(slideIndex: Int, shapeId: Int): Boolean = read(false) { pkg ->
         find(pkg, slideIndex, shapeId).first.firstChild(P, "txBody")?.firstChild(A, "bodyPr")?.firstChild(A, "spAutoFit") != null
     }
-    /** Formats every run (and paragraph for [TextFormat.align]) of a shape's text. */
-    /** Bold/italic/underline of the shape's first text run as written in the slide (null: no text). */
-    fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = read(null) { pkg ->
+    /** Bold/italic/underline and font of the shape's first text run as written in the slide (null: no text). */
+    fun textFormatOf(slideIndex: Int, shapeId: Int): TextFormat? = textFormatAt(slideIndex, shapeId, 0)
+
+    /**
+     * Bold/italic/underline and font of the text run holding char [offset] of the shape's text
+     * (positions as in [setTextFormat]), as written in the slide; the first run when none holds it.
+     * Null: no text. The font is null when the run inherits it.
+     */
+    fun textFormatAt(slideIndex: Int, shapeId: Int, offset: Int): TextFormat? = read(null) { pkg ->
         val e = find(pkg, slideIndex, shapeId).first
-        val run = descendants(e).firstOrNull { it.namespaceURI == A.uRI && it.name == "r" } ?: return@read null
-        val rPr = run.firstChild(A, "rPr")
+        var first: Element? = null
+        var hit: Element? = null
+        var pos = 0
+        paragraphs@ for ((k, p) in descendants(e).filter { it.namespaceURI == A.uRI && it.name == "p" }.withIndex()) {
+            if (k > 0) pos++
+            for (r in p.elements()!!.filterIsInstance<Element>().filter { it.namespaceURI == A.uRI }) {
+                val len = when (r.name) { "r", "fld" -> r.firstChild(A, "t")?.text?.length ?: 0; "br" -> 1; else -> 0 }
+                if (r.name == "r") {
+                    if (first == null) first = r
+                    if (offset >= pos && offset < pos + len) { hit = r; break@paragraphs }
+                }
+                pos += len
+            }
+        }
+        val run = hit ?: first
+        val rPr = (run ?: return@read null).firstChild(A, "rPr")
         fun on(v: String?) = v == "1" || v == "true"
         TextFormat(bold = on(rPr?.attributeValue("b")), italic = on(rPr?.attributeValue("i")),
-            underline = rPr?.attributeValue("u").let { it != null && it != "none" })
+            underline = rPr?.attributeValue("u").let { it != null && it != "none" },
+            font = rPr?.firstChild(A, "latin")?.attributeValue("typeface")?.takeIf { it.isNotEmpty() && !it.startsWith("+") })
     }
 
+    private fun checkFormat(format: TextFormat) {
+        format.rgbHex?.let { require(it.removePrefix("#").matches(Regex("(?i)[0-9a-f]{6}"))) { "Expected RRGGBB" } }
+        format.align?.let { require(it in setOf("l", "ctr", "r", "just")) { "Bad alignment" } }
+        format.font?.let { require(it.isNotBlank() && it.length <= 64 && it.none { c -> c.isISOControl() }) { "Bad font name" } }
+    }
+
+    /** Formats every run (and paragraph for [TextFormat.align]) of a shape's text. */
     fun setTextFormat(slideIndex: Int, shapeId: Int, format: TextFormat): Boolean = queue { pkg ->
         val e = find(pkg, slideIndex, shapeId).first
         val body = e.firstChild(P, "txBody") ?: throw IllegalArgumentException("Shape has no editable text body")
-        format.rgbHex?.let { require(it.removePrefix("#").matches(Regex("(?i)[0-9a-f]{6}"))) { "Expected RRGGBB" } }
-        format.align?.let { require(it in setOf("l", "ctr", "r", "just")) { "Bad alignment" } }
+        checkFormat(format)
         for (p in body.childrenNamed(A, "p")) {
             format.align?.let { al ->
                 val pPr = p.firstChild(A, "pPr") ?: newElement(A, "pPr").also { (p.content() as MutableList<Any?>).add(0, it) }
@@ -311,6 +340,18 @@ class PptxEditor(private val source: File) {
             val ln = rPr.firstChild(A, "ln")
             content.add(if (ln == null) 0 else content.indexOf(ln) + 1, fill)
         }
+        format.font?.let { name ->
+            // CT_TextCharacterProperties: ... latin, ea, cs, sym, hlinkClick, hlinkMouseOver, rtl, extLst
+            listOf("latin", "cs").forEach { n -> rPr.childrenNamed(A, n).forEach { rPr.remove(it) } }
+            val content = rPr.content() as MutableList<Any?>
+            fun putBefore(local: String, next: List<String>) {
+                val font = newElement(A, local).apply { addAttribute("typeface", name) }
+                val at = content.indexOfFirst { it is Element && it.namespaceURI == A.uRI && it.name in next }
+                if (at < 0) content.add(font) else content.add(at, font)
+            }
+            putBefore("latin", listOf("ea", "cs", "sym", "hlinkClick", "hlinkMouseOver", "rtl", "extLst"))
+            putBefore("cs", listOf("sym", "hlinkClick", "hlinkMouseOver", "rtl", "extLst"))
+        }
     }
 
     /**
@@ -322,7 +363,7 @@ class PptxEditor(private val source: File) {
         require(start in 0 until end) { "Empty range" }
         val e = find(pkg, slideIndex, shapeId).first
         val body = e.firstChild(P, "txBody") ?: throw IllegalArgumentException("Shape has no editable text body")
-        format.rgbHex?.let { require(it.removePrefix("#").matches(Regex("(?i)[0-9a-f]{6}"))) { "Expected RRGGBB" } }
+        checkFormat(format)
         var pos = 0
         for ((k, p) in body.childrenNamed(A, "p").withIndex()) {
             if (k > 0) pos++ // the paragraph mark before it

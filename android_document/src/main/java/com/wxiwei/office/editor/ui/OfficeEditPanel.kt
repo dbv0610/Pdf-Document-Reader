@@ -161,18 +161,23 @@ abstract class OfficeEditPanel(
 
     /** Saves the edits over the file; true when there is nothing left to save. */
     fun save(): Boolean {
-        if (!hasChanges()) {
+        val result = quietly { if (!hasChanges()) null else saveOver(file) { target -> writeTo(target) } }
+        if (result == null) {
             toast(str(R.string.docsdk_edit_no_changes))
             return true
         }
-        val result = saveOver(file) { target -> writeTo(target) }
-        report(result, str(R.string.docsdk_edit_saved_file, file.name))
-        if (result !is EditResult.Ok) return false
+        if (result !is EditResult.Ok) {
+            report(result, "")
+            return false
+        }
         // other apps and the file list see the new size and date
         android.media.MediaScannerConnection.scanFile(context.applicationContext, arrayOf(file.absolutePath), null, null)
         EditDrafts.delete(context, file)
-        onSaved()
-        return afterSave?.invoke(file) ?: true
+        quietly { onSaved() }
+        val done = afterSave?.invoke(file) ?: true
+        // the one message of a save, once everything is done
+        if (done) report(result, str(R.string.docsdk_edit_saved_file, file.name))
+        return done
     }
 
     /** Called with the file once Save wrote it; false when what comes next (a copy back...) failed. */
@@ -574,7 +579,22 @@ abstract class OfficeEditPanel(
     /** The SDK string [id], in the app's language. */
     protected fun str(id: Int, vararg args: Any): String = context.getString(id, *args)
 
-    protected fun toast(message: String) =Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    // while Save runs only its result is shown: the steps before and after it (text being typed
+    // written to the document, a reopen) say nothing
+    private var quiet = 0
+    private var lastToast: Toast? = null
+
+    /** Shows [message], replacing the one still on screen instead of queuing after it. */
+    protected fun toast(message: String) {
+        if (quiet > 0) return
+        lastToast?.cancel()
+        lastToast = Toast.makeText(context, message, Toast.LENGTH_SHORT).also { it.show() }
+    }
+
+    private inline fun <T> quietly(block: () -> T): T {
+        quiet++
+        try { return block() } finally { quiet-- }
+    }
 
     protected fun line(vararg views: View, weights: FloatArray? = null): LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL

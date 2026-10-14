@@ -775,7 +775,12 @@ class ReadDocumentEditTest {
                 assertTrue(callback.onActionItemClicked(mode, bold))
             }
             Thread.sleep(1500)
-            scenario.onActivity { assertTrue("editor closed to show the slide", find<EditText>(viewer) { it is EditText } == null) }
+            // the editor stays open on the same part, for another format
+            scenario.onActivity {
+                val edit = find<EditText>(viewer) { it is EditText }
+                assertTrue("editor still open", edit != null)
+                assertEquals(0 to 3, edit!!.selectionStart to edit.selectionEnd)
+            }
             screenshot("slide_format_selection")
             scenario.onActivity { a -> find<View>(a.findViewById<ViewGroup>(R.id.editPanel)) { it.tag == "SAVE" }!!.performClick() }
             Thread.sleep(1500)

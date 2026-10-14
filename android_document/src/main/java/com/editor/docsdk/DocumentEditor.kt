@@ -8,6 +8,7 @@ package com.editor.docsdk
 
 import androidx.annotation.MainThread
 import com.wxiwei.office.editor.ui.OfficeEditPanel
+import com.wxiwei.office.editor.ui.SlideEditPanel
 
 /**
  * Edits the document of a [DocumentView], from [DocumentView.startEditing]. With the SDK's bar
@@ -98,6 +99,33 @@ class DocumentEditor internal constructor(val panel: OfficeEditPanel) {
     /** Runs [action] with [value] instead of asking the user; see [EditAction] for the value of each. */
     @MainThread
     fun run(action: EditAction, value: Any?): Boolean = panel.run(action, value, true)
+
+    /**
+     * PowerPoint: the text of the selected text box, as being typed while it is edited in place;
+     * paragraphs and line breaks are one "\n" each. Null when no shape is selected or in Word and Excel.
+     * Positions in it are those of [textSelection] and [formatText].
+     */
+    val selectedText: String? get() = (panel as? SlideEditPanel)?.selectedText()
+
+    /**
+     * PowerPoint: the part of [selectedText] the user selected while typing in the text box (end
+     * exclusive), or null. Format commands such as [EditAction.BOLD] or [EditAction.FONT] apply to it.
+     */
+    val textSelection: IntRange? get() = (panel as? SlideEditPanel)?.textSelection()
+
+    /**
+     * PowerPoint: formats chars [start, end) of the selected text box's text (positions as in
+     * [selectedText]) with [format], shown at once and undone with [EditAction.UNDO]. While the box is
+     * edited in place, the editor stays open with the same part selected. Returns false when no
+     * text box is selected, the range is outside its text, a value is invalid, or in Word and Excel.
+     */
+    @MainThread
+    fun formatText(start: Int, end: Int, format: TextFormat): Boolean {
+        val slides = panel as? SlideEditPanel ?: return false
+        return slides.formatText(start, end, com.wxiwei.office.editor.pptx.TextFormat(
+            bold = format.bold, italic = format.italic, underline = format.underline,
+            sizePt = format.sizePt, rgbHex = format.color?.removePrefix("#"), font = format.font))
+    }
 
     /** True when there are edits not saved yet. */
     fun hasUnsavedChanges(): Boolean = panel.hasChanges()
