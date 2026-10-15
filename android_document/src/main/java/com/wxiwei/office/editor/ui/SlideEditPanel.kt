@@ -211,7 +211,7 @@ class SlideEditPanel @JvmOverloads constructor(
     private fun styleInline(edit: EditText, id: Int) {
         val text = edit.editableText
         for (span in text.getSpans(0, text.length, Any::class.java)) {
-            val ours = span is android.text.style.ForegroundColorSpan || span is TypefaceSpan || span is android.text.style.RelativeSizeSpan ||
+            val ours = span is android.text.style.ForegroundColorSpan || span is TypefaceSpan || span is android.text.style.RelativeSizeSpan || span is FakeStyleSpan ||
                 (span is android.text.style.UnderlineSpan && text.getSpanFlags(span) and android.text.Spanned.SPAN_COMPOSING == 0)
             if (ours) text.removeSpan(span)
         }
@@ -233,7 +233,17 @@ class SlideEditPanel @JvmOverloads constructor(
             if (run.color != st.color) text.setSpan(android.text.style.ForegroundColorSpan(run.color or 0xFF000000.toInt()), a, b, flags)
             if (run.typeface != st.typeface) text.setSpan(TypefaceSpan(run.typeface), a, b, flags)
             if (run.underline) text.setSpan(android.text.style.UnderlineSpan(), a, b, flags)
+            if (run.fake != 0) text.setSpan(FakeStyleSpan(run.fake), a, b, flags)
             if (run.sizePt != st.sizePt && st.sizePt > 0f) text.setSpan(android.text.style.RelativeSizeSpan(run.sizePt / st.sizePt), a, b, flags)
+        }
+    }
+
+    /** Bold / italic the run's font cannot draw (Typeface.BOLD / ITALIC bits), faked on the paint like the slide does. */
+    private class FakeStyleSpan(private val fake: Int) : android.text.style.MetricAffectingSpan() {
+        override fun updateDrawState(tp: android.text.TextPaint) = updateMeasureState(tp)
+        override fun updateMeasureState(tp: android.text.TextPaint) {
+            if (fake and android.graphics.Typeface.BOLD != 0) tp.isFakeBoldText = true
+            if (fake and android.graphics.Typeface.ITALIC != 0) tp.textSkewX = com.wxiwei.office.simpletext.font.FontTypefaceManage.FAKE_ITALIC_SKEW
         }
     }
 
@@ -263,7 +273,7 @@ class SlideEditPanel @JvmOverloads constructor(
         if (!on || !textBar || actions.isEmpty()) return
         val b = SlideTextBar(context, editStyle, actions) { action, value -> if (value != null) run(action, value, true) else run(action, null, false) }
         bar = b
-        addOverlay(b, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(editStyle.buttonDp + 4)))
+        addOverlay(b, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(editStyle.textBarButtonDp + 8)))
         reader.viewTreeObserver.addOnPreDrawListener(placeBar)
         positionBar()
     }
@@ -400,7 +410,9 @@ class SlideEditPanel @JvmOverloads constructor(
         val origin = IntArray(2)
         p.getLocationOnScreen(origin)
         val point = SlideGeometry.viewToEmu(p, rawX - origin[0], rawY - origin[1]) ?: return null
-        return SlideGeometry.hitTest(session.listShapes(slide()), point)
+        // a fingertip's reach around small boxes (a one-line title at a small zoom)
+        val slop = SlideGeometry.emuPerPixel(p)?.let { (it * dp(12)).toLong() } ?: 0L
+        return SlideGeometry.pick(session.listShapes(slide()), point, slop)
     }
 
     /** Selects the text shape under a screen point and edits its text in place; false when there is none. */

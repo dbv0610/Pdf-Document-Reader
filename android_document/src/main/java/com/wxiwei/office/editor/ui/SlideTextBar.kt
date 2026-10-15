@@ -10,12 +10,14 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.editor.docsdk.EditAction
@@ -24,9 +26,10 @@ import com.editor.docsdk.EditStyle
 /**
  * The format bar shown over the keyboard while the text of a PowerPoint shape is typed in place:
  * a button per action of [actions] (FONT shows the font's name, FONT_SIZE shows − size +), each
- * lit when [state] says it is on. Colors, icons and sizes come from [style]; its item styler is
- * applied to every button. A button runs [onAction] with the action and, for the size steps, the
- * new size in points.
+ * selected ([View.isSelected]) when [state] says it is on. Colors, icons and sizes come from
+ * [style] (textBar* and the bar's colors); its item styler is applied to every button once, and
+ * what it sets stays: being on only changes the selected state, which the SDK's background and
+ * tint follow. A button runs [onAction] with the action and, for the size steps, the new size in points.
  */
 @SuppressLint("ViewConstructor")
 internal class SlideTextBar(
@@ -44,10 +47,14 @@ internal class SlideTextBar(
 
     private fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics).toInt()
 
+    private val buttonPx = dp(style.textBarButtonDp.toFloat())
+    private val iconPx = dp(style.textBarIconDp.toFloat()).coerceAtMost(buttonPx)
+    private val gapPx = dp(style.textBarSpacingDp.toFloat())
+
     private val row = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(4f), 0, dp(4f), 0)
+        setPadding(gapPx, 0, gapPx, 0)
     }
     private val buttons = HashMap<EditAction, View>()
     private var fontName: TextView? = null
@@ -57,28 +64,46 @@ internal class SlideTextBar(
 
     init {
         isHorizontalScrollBarEnabled = false
-        setBackgroundColor(style.toolbarBackground)
+        isFillViewport = true
+        setBackgroundColor(style.textBarBackground ?: style.toolbarBackground)
         elevation = dp(4f).toFloat()
-        addView(row)
+        addView(row, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
         for (action in actions) {
             when (action) {
-                EditAction.FONT -> row.addView(fontButton())
+                EditAction.FONT -> add(fontButton())
                 EditAction.FONT_SIZE -> sizeControl()
-                EditAction.TEXT_COLOR -> row.addView(colorButton())
-                else -> row.addView(iconButton(action))
+                EditAction.TEXT_COLOR -> add(colorButton())
+                else -> add(iconButton(action))
             }
         }
     }
 
+    /** Adds [v] to the row, [gapPx] after the one before; its size is what it (or the item styler) set. */
+    private fun add(v: View) {
+        val lp = v.layoutParams as? LinearLayout.LayoutParams ?: LinearLayout.LayoutParams(buttonPx, buttonPx)
+        if (row.childCount > 0) lp.marginStart = gapPx
+        row.addView(v, lp)
+    }
+
     private fun icon(action: EditAction) = style.icons?.icon(action) ?: action.icon
+
+    /** Round background of a button that is on, nothing otherwise. */
+    private fun onBackground() = StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_selected), GradientDrawable().apply { cornerRadius = dp(8f).toFloat(); setColor(style.activeBackground) })
+    }
+
+    private fun tint() = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf()), intArrayOf(style.iconActive, style.icon))
 
     private fun iconButton(action: EditAction): View = ImageButton(context).apply {
         setImageResource(icon(action))
-        imageTintList = ColorStateList.valueOf(style.icon)
-        background = null
+        imageTintList = tint()
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        val pad = (buttonPx - iconPx) / 2
+        setPadding(pad, pad, pad, pad)
+        background = onBackground()
         contentDescription = context.getString(action.label)
         tag = action.name
-        layoutParams = LinearLayout.LayoutParams(dp(style.buttonDp.toFloat()), dp(style.buttonDp.toFloat()))
+        layoutParams = LinearLayout.LayoutParams(buttonPx, buttonPx)
         setOnClickListener { onAction(action, null) }
         buttons[action] = this
         style.itemStyler?.style(this, action)
@@ -91,18 +116,15 @@ internal class SlideTextBar(
             gravity = Gravity.CENTER
             contentDescription = context.getString(EditAction.TEXT_COLOR.label)
             tag = EditAction.TEXT_COLOR.name
-            layoutParams = LinearLayout.LayoutParams(dp(style.buttonDp.toFloat()), dp(style.buttonDp.toFloat()))
+            layoutParams = LinearLayout.LayoutParams(buttonPx, buttonPx)
             setOnClickListener { onAction(EditAction.TEXT_COLOR, null) }
         }
-        box.addView(ImageButton(context).apply {
+        box.addView(ImageView(context).apply {
             setImageResource(icon(EditAction.TEXT_COLOR))
             imageTintList = ColorStateList.valueOf(style.icon)
-            background = null
-            isClickable = false
-            layoutParams = LinearLayout.LayoutParams(dp(style.iconDp.toFloat()), dp(style.iconDp.toFloat()))
-            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(iconPx, iconPx)
         })
-        colorBar = View(context).apply { layoutParams = LinearLayout.LayoutParams(dp(18f), dp(3f)) }
+        colorBar = View(context).apply { layoutParams = LinearLayout.LayoutParams(iconPx * 3 / 4, dp(3f)) }
         box.addView(colorBar)
         buttons[EditAction.TEXT_COLOR] = box
         style.itemStyler?.style(box, EditAction.TEXT_COLOR)
@@ -125,7 +147,7 @@ internal class SlideTextBar(
         background = GradientDrawable().apply { cornerRadius = dp(6f).toFloat(); setStroke(dp(1f), style.divider) }
         contentDescription = context.getString(EditAction.FONT.label)
         tag = EditAction.FONT.name
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34f)).apply { marginStart = dp(4f); marginEnd = dp(4f) }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, buttonPx)
         setOnClickListener { onAction(EditAction.FONT, null) }
         fontName = this
         buttons[EditAction.FONT] = this
@@ -137,35 +159,34 @@ internal class SlideTextBar(
         fun step(label: String, up: Boolean) = TextView(context).apply {
             text = label
             setTextColor(style.icon)
-            textSize = 20f
+            textSize = style.tabTextSp + 4f
             gravity = Gravity.CENTER
             contentDescription = context.getString(EditAction.FONT_SIZE.label) + " " + label
-            layoutParams = LinearLayout.LayoutParams(dp(36f), dp(style.buttonDp.toFloat()))
+            layoutParams = LinearLayout.LayoutParams(buttonPx, buttonPx)
             setOnClickListener { onAction(EditAction.FONT_SIZE, nextSize(size, up)) }
         }
-        row.addView(step("−", false))
+        add(step("−", false))
         sizeText = TextView(context).apply {
             setTextColor(style.icon)
             typeface = style.typeface
             textSize = style.tabTextSp
             gravity = Gravity.CENTER
-            minWidth = dp(32f)
             contentDescription = context.getString(EditAction.FONT_SIZE.label)
             tag = EditAction.FONT_SIZE.name
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, buttonPx)
+            minWidth = buttonPx
             setOnClickListener { onAction(EditAction.FONT_SIZE, null) }
         }
-        row.addView(sizeText)
-        row.addView(step("+", true))
         buttons[EditAction.FONT_SIZE] = sizeText!!
         style.itemStyler?.style(sizeText!!, EditAction.FONT_SIZE)
+        add(sizeText!!)
+        add(step("+", true))
     }
 
     /** Lights the buttons for what the selected text has. */
     fun show(state: State) {
         fun lit(action: EditAction, on: Boolean) {
-            val b = buttons[action] as? ImageButton ?: return
-            b.imageTintList = ColorStateList.valueOf(if (on) style.iconActive else style.icon)
-            b.background = if (on) GradientDrawable().apply { cornerRadius = dp(8f).toFloat(); setColor(style.activeBackground) } else null
+            buttons[action]?.isSelected = on
         }
         lit(EditAction.BOLD, state.bold)
         lit(EditAction.ITALIC, state.italic)

@@ -160,7 +160,7 @@ class DocumentViewSlidesTest {
         val shape = shapes.first { s ->
             val r = s.rectEmu
             s.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT &&
-                com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)) == s
+                com.wxiwei.office.editor.slide.SlideGeometry.pick(shapes, com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)) == s
         }
         val (x, y) = onMain {
             val p = office(view).control!!.getView() as com.wxiwei.office.pg.control.Presentation
@@ -297,5 +297,62 @@ class DocumentViewSlidesTest {
         assertEquals(sp, part, runs.filter { it.groupValues[1].contains("u=\"sng\"") }.joinToString("") { it.groupValues[2] })
         val lastWord = runs.filter { it.groupValues[1].contains("i=\"1\"") }.joinToString("") { it.groupValues[2] }
         assertTrue("italic word: '$lastWord'", lastWord.isNotBlank() && part !in lastWord)
+    }
+
+    @Test
+    fun formatBarOnNewTextBox() {
+        val file = OpenDocument.output("format-bar-new.pptx")
+        assertTrue(DocumentCreator.create(InstrumentationRegistry.getInstrumentation().targetContext, DocumentCreator.Format.POWERPOINT, file) is EditResult.Ok)
+        // the app's own look of a button stays when it is lit
+        val styled = android.graphics.drawable.ColorDrawable(0x3300FF00)
+        com.editor.docsdk.EditStyle.customizer = com.editor.docsdk.EditStyle.Customizer { _, style ->
+            style.copy(itemStyler = com.editor.docsdk.EditStyle.ItemStyler { b, a -> if (a == EditAction.BOLD) b.background = styled })
+        }
+        try {
+            edit(file) {
+                settle(0, 1)
+                assertTrue(onMain { editor.run(EditAction.ADD_TEXT_BOX) })
+                delay(300)
+                withTimeoutOrNull(20_000) { while (onMain { editor.panel.isBusy }) delay(100) }
+                delay(1500)
+                val panel = editor.panel
+                val session = onMain { panel.javaClass.getDeclaredField("session").apply { isAccessible = true }.get(panel) as com.wxiwei.office.editor.pptx.LivePptxSession }
+                val shape = onMain { session.listShapes(0).last() }
+                val (x, y) = onMain {
+                    val p = office(view).control!!.getView() as com.wxiwei.office.pg.control.Presentation
+                    val r = com.wxiwei.office.editor.slide.SlideGeometry.emuToView(p, shape.rectEmu)!!
+                    val o = IntArray(2).also { p.getLocationOnScreen(it) }
+                    (o[0] + r.centerX()) to (o[1] + r.centerY())
+                }
+                val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+                fun touch(action: Int, down: Long, at: Long) = android.view.MotionEvent.obtain(down, at, action, x, y, 0).also {
+                    it.source = android.view.InputDevice.SOURCE_TOUCHSCREEN; automation.injectInputEvent(it, true); it.recycle() }
+                val t0 = android.os.SystemClock.uptimeMillis()
+                touch(android.view.MotionEvent.ACTION_DOWN, t0, t0); touch(android.view.MotionEvent.ACTION_UP, t0, t0 + 40)
+                touch(android.view.MotionEvent.ACTION_DOWN, t0 + 80, t0 + 80); touch(android.view.MotionEvent.ACTION_UP, t0 + 80, t0 + 120)
+                delay(1200)
+                fun find(v: View, match: (View) -> Boolean): View? = if (match(v)) v else (v as? android.view.ViewGroup)?.let { g ->
+                    (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it), match) } }
+                val edit = onMain { find(view) { it is android.widget.EditText } as android.widget.EditText }
+                // "box" of "Text box" in italic
+                onMain { edit.setSelection(5, 8) }
+                delay(300)
+                onMain { find(view) { it.tag == "ITALIC" }!!.performClick() }
+                delay(500)
+                automation.executeShellCommand("screencap -p /data/local/tmp/pptx-bar-new.png").close()
+                delay(800)
+                val run = onMain { session.textRuns(0, shape.id).first { 6 in it.first }.second }
+                assertTrue("drawn italic", run.typeface.isItalic || run.fake and android.graphics.Typeface.ITALIC != 0)
+                assertTrue("the editor shows it", onMain { edit.paint.textSkewX != 0f || edit.text.let { t ->
+                    (t as android.text.Spanned).getSpans(5, 8, android.text.style.MetricAffectingSpan::class.java).isNotEmpty() } })
+                // buttons apart, not overlapping
+                val (b, i) = onMain { find(view) { it.tag == "BOLD" }!! to find(view) { it.tag == "ITALIC" }!! }
+                assertTrue("a gap between buttons", onMain { i.left - b.right } > 0)
+                assertTrue(onMain { i.isSelected })
+                assertTrue("the styler's background stays", onMain { b.background } === styled)
+            }
+        } finally {
+            com.editor.docsdk.EditStyle.customizer = null
+        }
     }
 }

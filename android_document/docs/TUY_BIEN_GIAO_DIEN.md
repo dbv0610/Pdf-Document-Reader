@@ -91,6 +91,10 @@ Thanh sửa gồm: hàng trên cùng (Hoàn tác, Làm lại, dòng trạng thá
 | `icons` | `null` | Icon riêng cho từng nút và dấu ✓ của ô công thức. `null` dùng icon của SDK |
 | `backIcon` | `null` | Icon nút quay lại của màn `DocumentViewer`. `null` dùng icon của SDK |
 | `inputStyler` | `null` | Hàm chỉnh thêm ô công thức Excel (mục "Ô nhập liệu") |
+| `textBarBackground` | `null` | Nền thanh định dạng trên bàn phím khi gõ chữ trong slide PowerPoint. `null` dùng `toolbarBackground` |
+| `textBarButtonDp` | `36` | Chiều cao mỗi nút của thanh định dạng; thanh cao thêm 4dp trên và dưới |
+| `textBarIconDp` | `20` | Cỡ icon của thanh định dạng |
+| `textBarSpacingDp` | `6` | Khoảng cách giữa các nút của thanh định dạng |
 
 ### Ví dụ: thanh sửa tối
 
@@ -180,7 +184,7 @@ DialogStyle.customizer = DialogStyle.Customizer { _, style -> style.copy(inputSt
 
 ## 3. Chỉnh sâu từng nút: `itemStyler`
 
-Nếu màu và kích thước chưa đủ, ví dụ bạn muốn nền riêng, hiệu ứng ripple khác hay ẩn vài nút, hãy truyền một `EditStyle.ItemStyler`. Nó được gọi trên **mọi nút** của thanh (kể cả nút **Lưu**) ngay sau khi nút được tạo, kèm `EditAction` của nút đó.
+Nếu màu và kích thước chưa đủ, ví dụ bạn muốn nền riêng, hiệu ứng ripple khác hay ẩn vài nút, hãy truyền một `EditStyle.ItemStyler`. Nó được gọi trên **mọi nút** của thanh (kể cả nút **Lưu**) ngay sau khi nút được tạo, kèm `EditAction` của nút đó. Các nút của thanh định dạng PowerPoint trên bàn phím cũng đi qua nó. Ở thanh này, nút đang bật (B, I, U, căn lề) chỉ được đặt `isSelected = true`, nên nền và màu icon bạn đặt vẫn giữ nguyên. Muốn nút có màu riêng khi bật thì dùng drawable/`ColorStateList` có `state_selected`.
 
 ```kotlin
 EditStyle.customizer = EditStyle.Customizer { context, style ->

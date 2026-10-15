@@ -274,7 +274,7 @@ class ReadDocumentEditTest {
         val target = shapes.last { it.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT && it.rectEmu.width > 0 }
         val r = target.rectEmu
         val center = com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)
-        val expected = com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, center)!!
+        val expected = com.wxiwei.office.editor.slide.SlideGeometry.pick(shapes, center)!!
         launch(file, DocumentType.Ppt).use { scenario ->
             lateinit var viewer: OfficeDocumentView
             scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
@@ -625,7 +625,7 @@ class ReadDocumentEditTest {
         val target = shapes.last { it.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT && it.rectEmu.width > 0 }
         val r = target.rectEmu
         val center = com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)
-        val expected = com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, center)!!
+        val expected = com.wxiwei.office.editor.slide.SlideGeometry.pick(shapes, center)!!
         launch(file, DocumentType.Ppt).use { scenario ->
             lateinit var viewer: OfficeDocumentView
             scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }
@@ -742,7 +742,7 @@ class ReadDocumentEditTest {
         val target = shapes.last { it.kind == com.wxiwei.office.editor.pptx.ShapeKind.TEXT && it.rectEmu.width > 0 && it.text.length > 4 }
         val r = target.rectEmu
         val center = com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)
-        val expected = com.wxiwei.office.editor.slide.SlideGeometry.hitTest(shapes, center)!!
+        val expected = com.wxiwei.office.editor.slide.SlideGeometry.pick(shapes, center)!!
         launch(file, DocumentType.Ppt).use { scenario ->
             lateinit var viewer: OfficeDocumentView
             scenario.onActivity { viewer = it.findViewById(R.id.officeViewer) }

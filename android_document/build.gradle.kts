@@ -5,7 +5,7 @@ plugins {
 
 // Coordinates of the SDK as integrators add it: implementation("com.editor:docsdk:<version>")
 group = "com.editor"
-version = "1.1.6"
+version = "1.1.7"
 
 android {
     namespace = "com.wxiwei.office"
@@ -129,7 +129,8 @@ dependencies {
     api(libs.kotlinx.coroutines.android)
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
-    api("com.google.mlkit:text-recognition:16.0.1")
+    // OCR through Google Play services: its model is downloaded by the device, not packaged in the app
+    api("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
     testImplementation(libs.junit)
     // reads the encrypted copies of PdfEncryptorTest back, independently of pdfium
     testImplementation("org.apache.pdfbox:pdfbox:3.0.5")

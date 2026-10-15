@@ -40,7 +40,7 @@ class PptxShapeClipboardTest {
         val shapes = PptxEditor(file).listShapes(slide)
         return shapes.first { s ->
             val r = s.rectEmu
-            s.kind == kind && SlideGeometry.hitTest(shapes, com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)) == s
+            s.kind == kind && SlideGeometry.pick(shapes, com.wxiwei.office.editor.pptx.Point(r.x + r.width / 2, r.y + r.height / 2)) == s
         }
     }
 

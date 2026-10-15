@@ -73,8 +73,11 @@ interface LiveSlideDisplay {
  * Main thread only. Model bounds are pixels at 96 dpi, i.e. EMU / 9525, and model shape ids are the
  * XML cNvPr ids, so they match [PptxEditor] ids.
  */
-/** Text size in points, ARGB color, typeface (with its bold and italic) and underline of a shape's text. */
-data class TextStyle(val sizePt: Float, val color: Int, val typeface: android.graphics.Typeface, val underline: Boolean = false)
+/**
+ * Text size in points, ARGB color, typeface (with its bold and italic) and underline of a shape's
+ * text; [fake]: the Typeface.BOLD / ITALIC bits the typeface cannot draw, to fake on the paint.
+ */
+data class TextStyle(val sizePt: Float, val color: Int, val typeface: android.graphics.Typeface, val underline: Boolean = false, val fake: Int = 0)
 
 class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
     private val presentation get() = control.getView() as? Presentation
@@ -315,8 +318,9 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
         val am = AttrManage.instance()
         val p = para.getAttribute(); val l = leaf.getAttribute()
         val bold = am.getFontBold(p, l); val italic = am.getFontItalic(p, l)
-        return TextStyle(am.getFontSizeF(p, l), am.getFontColor(p, l),
-            com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().getFontTypeface(am.getFontName(p, l), bold, italic))
+        val fonts = com.wxiwei.office.simpletext.font.FontTypefaceManage.instance()
+        return TextStyle(am.getFontSizeF(p, l), am.getFontColor(p, l), fonts.getFontTypeface(am.getFontName(p, l), bold, italic),
+            fake = fonts.fakeStyle(am.getFontName(p, l), bold, italic))
     }
 
     override fun textRuns(slideIndex: Int, id: Int): List<Pair<IntRange, TextStyle>> {
@@ -334,9 +338,10 @@ class LiveSlideModel(private val control: IControl) : LiveSlideDisplay {
                 if (end <= start) continue
                 val l = leaf.getAttribute()
                 val bold = am.getFontBold(p, l); val italic = am.getFontItalic(p, l)
+                val fonts = com.wxiwei.office.simpletext.font.FontTypefaceManage.instance()
                 runs += (start until end) to TextStyle(am.getFontSizeF(p, l), am.getFontColor(p, l),
-                    com.wxiwei.office.simpletext.font.FontTypefaceManage.instance().getFontTypeface(am.getFontName(p, l), bold, italic),
-                    am.getFontUnderline(p, l) != 0)
+                    fonts.getFontTypeface(am.getFontName(p, l), bold, italic),
+                    am.getFontUnderline(p, l) != 0, fonts.fakeStyle(am.getFontName(p, l), bold, italic))
             }
         }
         return runs
