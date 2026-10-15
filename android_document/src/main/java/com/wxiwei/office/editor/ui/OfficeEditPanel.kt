@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import com.editor.docsdk.EditAction
+import com.editor.docsdk.EditContext
 import com.editor.docsdk.EditDialogs
 import com.editor.docsdk.EditFeature
 import com.editor.docsdk.EditRequest
@@ -80,11 +81,18 @@ abstract class OfficeEditPanel(
     fun isEnabled(action: EditAction): Boolean = isAvailable(action) && !isBusy && when (action) {
         EditAction.UNDO -> canUndo()
         EditAction.REDO -> canRedo()
-        else -> true
+        else -> canRun(action)
     }
 
     protected open fun canUndo(): Boolean = true
     protected open fun canRedo(): Boolean = true
+
+    /** Whether [action] has something to act on now (Copy needs a selection, Paste a clipboard). */
+    protected open fun canRun(action: EditAction): Boolean = true
+
+    /** Something on the clipboard to paste. */
+    protected val canPaste: Boolean
+        get() = (context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).hasPrimaryClip()
 
     /** The available commands, in the order they were registered. */
     fun actions(): List<EditAction> = entries.keys.filter { isAvailable(it) }
@@ -138,7 +146,77 @@ abstract class OfficeEditPanel(
     fun addStatusListener(listener: (String) -> Unit) { statusListeners.add(listener) }
 
     /** What is selected may have changed: buttons that show a state are refreshed. */
-    protected fun stateChanged() = stateListeners.forEach { it() }
+    protected fun stateChanged() {
+        refreshContextBar()
+        stateListeners.forEach { it() }
+    }
+
+    // ---- the context bar: the commands for what is selected, over the keyboard or the SDK's bar ----
+
+    /** What the user works on now, or null when nothing is selected. */
+    open val editContext: EditContext? get() = null
+
+    /** The SDK's commands for [context], in the order of the bar. */
+    protected open fun defaultActions(context: EditContext): List<EditAction> = emptyList()
+
+    /** Font, size and color of the selected text, for the bar's FONT, FONT_SIZE and TEXT_COLOR. */
+    internal open fun barState(): ContextBar.State = ContextBar.State()
+
+    /** Shows the context bar (true by default); false: the app builds its own from [contextActions]. */
+    var contextBar: Boolean = true
+        set(value) { field = value; refreshContextBar() }
+
+    /**
+     * Changes the commands of a context: given the context and the SDK's commands, returns those to
+     * show (an empty list hides the bar there).
+     */
+    var contextCommands: ((EditContext, List<EditAction>) -> List<EditAction>)? = null
+        set(value) { field = value; refreshContextBar() }
+
+    /** The commands for what is selected now (available ones only), empty when nothing is. */
+    fun contextActions(): List<EditAction> {
+        val c = editContext ?: return emptyList()
+        val defaults = defaultActions(c)
+        return (contextCommands?.invoke(c, defaults) ?: defaults).filter { isAvailable(it) }.distinct()
+    }
+
+    private var bar: ContextBar? = null
+    private val placeBar = android.view.ViewTreeObserver.OnPreDrawListener { positionBar(); true }
+
+    /** Shows, rebuilds or takes down the bar for what is selected, and lights its buttons. */
+    protected fun refreshContextBar() {
+        if (!started) return
+        val actions = if (contextBar && !closed) contextActions() else emptyList()
+        var b = bar
+        if (b != null && b.actions != actions) {
+            removeOverlay(b)
+            if (reader.viewTreeObserver.isAlive) reader.viewTreeObserver.removeOnPreDrawListener(placeBar)
+            bar = null
+            b = null
+        }
+        if (actions.isEmpty()) return
+        if (b == null) {
+            b = ContextBar(context, editStyle, actions) { action, value -> if (value != null) run(action, value, true) else run(action, null, false) }
+            bar = b
+            addOverlay(b, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, dp(editStyle.textBarButtonDp + 8)))
+            reader.viewTreeObserver.addOnPreDrawListener(placeBar)
+            positionBar()
+        }
+        b.show({ isActive(it) }, { isEnabled(it) }, barState())
+    }
+
+    /** The bar sits right over the keyboard or the SDK's bar. */
+    private fun positionBar() {
+        val b = bar ?: return
+        val lp = b.layoutParams as android.widget.FrameLayout.LayoutParams
+        val top = (areaBottom(reader) - lp.height).coerceAtLeast(0)
+        if (lp.topMargin != top) { lp.topMargin = top; b.layoutParams = lp }
+    }
+
+    private var closed = false
+    // a format's panel is made after this class: the bar waits for it
+    private var started = false
+    init { reader.post { started = true; refreshContextBar() } }
 
     /** What is selected or what to do next, shown in the bar's status line. */
     var status: String = ""
@@ -485,6 +563,8 @@ abstract class OfficeEditPanel(
 
     /** Called when the panel is hidden; stop listening to the document. Call super. */
     open fun close() {
+        closed = true
+        refreshContextBar()
         keepAboveKeyboard(false)
         autosave.cancel()
     }
@@ -556,12 +636,17 @@ abstract class OfficeEditPanel(
     /** The toolbar moved with the keyboard; the visible part of the document changed. */
     protected open fun onKeyboardMoved() {}
 
+    /** Bottom of the document area not covered by the context bar, the toolbar (or else the keyboard), in [of]'s coordinates. */
+    protected fun visibleBottom(of: View): Int = areaBottom(of) - (bar?.takeIf { it.isShown }?.layoutParams?.height ?: 0)
+
     /** Bottom of the document area not covered by the toolbar (or else the keyboard), in [of]'s coordinates. */
-    protected fun visibleBottom(of: View): Int {
+    private fun areaBottom(of: View): Int {
         val at = IntArray(2).also { of.getLocationInWindow(it) }
         val bar = toolbar?.takeIf { it.isShown }
         val top = if (bar != null) IntArray(2).also { bar.getLocationInWindow(it) }[1]
-            else of.rootView.height - (androidx.core.view.ViewCompat.getRootWindowInsets(of)?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom ?: 0)
+            // the keyboard, or else the navigation bar the app draws under (edge to edge)
+            else of.rootView.height - (androidx.core.view.ViewCompat.getRootWindowInsets(of)?.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.ime() or androidx.core.view.WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0)
         return minOf(of.height, top - at[1])
     }
 

@@ -5,6 +5,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import com.editor.docsdk.EditAction
+import com.editor.docsdk.EditContext
 import com.editor.docsdk.EditRequest
 import com.editor.docsdk.EditFeature
 import com.editor.docsdk.ShapeItem
@@ -157,13 +158,7 @@ class SlideEditPanel @JvmOverloads constructor(
         }
         overlay.onTap = { x, y -> tapAt(x, y) }
         overlay.movable = has(EditFeature.SHAPES)
-        overlay.onChange = { r ->
-            setRect(r)
-            // out of the way while the shape moves; back once it stays still
-            showShapeMenu(false)
-            reader.removeCallbacks(menuBack)
-            reader.postDelayed(menuBack, 600)
-        }
+        overlay.onChange = { r -> setRect(r) }
         overlay.onRotate = { deg -> rotate(deg) }
         overlay.onFrame = { frame -> placeInline(frame) }
     }
@@ -190,12 +185,10 @@ class SlideEditPanel @JvmOverloads constructor(
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
         styleInline(edit, s.id)
-        showShapeMenu(false)
         inline = edit
         // the keyboard takes half the screen: give the slide the rest while typing on it
         toolbar?.visibility = View.GONE
         addOverlay(edit, FrameLayout.LayoutParams(1, 1))
-        showTextBar(true)
         placeInline(overlay.frameOnScreen())
         edit.requestFocus()
         (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
@@ -260,44 +253,38 @@ class SlideEditPanel @JvmOverloads constructor(
     var textBarActions: List<EditAction> = listOf(EditAction.BOLD, EditAction.ITALIC, EditAction.UNDERLINE, EditAction.TEXT_COLOR,
         EditAction.FONT, EditAction.FONT_SIZE, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER, EditAction.ALIGN_RIGHT)
 
-    private var bar: SlideTextBar? = null
-    private val placeBar = android.view.ViewTreeObserver.OnPreDrawListener { positionBar(); true }
-
-    private fun showTextBar(on: Boolean) {
-        bar?.let { b ->
-            removeOverlay(b)
-            if (reader.viewTreeObserver.isAlive) reader.viewTreeObserver.removeOnPreDrawListener(placeBar)
+    override val editContext: EditContext?
+        get() = when {
+            shapeId < 0 -> null
+            inline != null -> if (textBar) EditContext.SHAPE_TEXT else null
+            else -> EditContext.SHAPE
         }
-        bar = null
-        val actions = textBarActions.filter { isAvailable(it) }
-        if (!on || !textBar || actions.isEmpty()) return
-        val b = SlideTextBar(context, editStyle, actions) { action, value -> if (value != null) run(action, value, true) else run(action, null, false) }
-        bar = b
-        addOverlay(b, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(editStyle.textBarButtonDp + 8)))
-        reader.viewTreeObserver.addOnPreDrawListener(placeBar)
-        positionBar()
+
+    override fun defaultActions(context: EditContext): List<EditAction> = when (context) {
+        EditContext.SHAPE_TEXT -> textBarActions
+        EditContext.SHAPE -> listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.DELETE, EditAction.ROTATE) +
+            // a shape with text: its whole text formatted at once
+            if (shapeText.isEmpty()) emptyList() else listOf(EditAction.BOLD, EditAction.ITALIC, EditAction.UNDERLINE,
+                EditAction.TEXT_COLOR, EditAction.FONT_SIZE, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER, EditAction.ALIGN_RIGHT)
+        else -> emptyList()
     }
 
-    /** The bar sits right over the keyboard (or the bottom of the document). */
-    private fun positionBar() {
-        val b = bar ?: return
-        val lp = b.layoutParams as FrameLayout.LayoutParams
-        val top = (visibleBottom(reader) - lp.height).coerceAtLeast(0)
-        if (lp.topMargin != top) { lp.topMargin = top; b.layoutParams = lp }
+    override fun canRun(action: EditAction): Boolean = when (action) {
+        EditAction.PASTE -> canPaste
+        EditAction.CUT, EditAction.COPY, EditAction.DELETE, EditAction.ROTATE -> shapeId >= 0
+        else -> true
+    }
+
+    internal override fun barState(): ContextBar.State {
+        if (shapeId < 0) return ContextBar.State()
+        val at = inlineRange()?.first ?: 0
+        val f = runCatching { session.textFormatAt(slide(), shapeId, at) }.getOrNull()
+        val run = session.textRuns(slide(), shapeId).firstOrNull { at in it.first }?.second ?: session.textStyle(slide(), shapeId)
+        return ContextBar.State(font = f?.font, sizePt = run?.sizePt, color = run?.color)
     }
 
     /** The selection in the editor moved: light the bar's buttons and tell the app. */
-    private fun inlineSelectionChanged() {
-        val b = bar
-        if (b != null && shapeId >= 0) {
-            val at = inlineRange()?.first ?: 0
-            val f = runCatching { session.textFormatAt(slide(), shapeId, at) }.getOrNull()
-            val run = session.textRuns(slide(), shapeId).firstOrNull { at in it.first }?.second ?: session.textStyle(slide(), shapeId)
-            b.show(SlideTextBar.State(bold = f?.bold == true, italic = f?.italic == true, underline = f?.underline == true,
-                font = f?.font, sizePt = run?.sizePt, color = run?.color))
-        }
-        stateChanged()
-    }
+    private fun inlineSelectionChanged() = stateChanged()
 
     /** What the format commands act on while typing: the selected part, or the word at the caret; null for all the text. */
     private fun inlineRange(): IntRange? {
@@ -376,8 +363,7 @@ class SlideEditPanel @JvmOverloads constructor(
         val h = maxOf(frame.height().toInt(), dp(96))
         val left = frame.left.toInt().coerceIn(0, maxOf(0, reader.width - w))
         // above the bars and the keyboard when the shape is under them
-        val barHeight = bar?.layoutParams?.height ?: 0
-        val top = minOf(frame.top.toInt(), visibleBottom(reader) - barHeight - h - dp(8)).coerceAtLeast(0)
+        val top = minOf(frame.top.toInt(), visibleBottom(reader) - h - dp(8)).coerceAtLeast(0)
         if (lp.width != w || lp.height != h || lp.leftMargin != left || lp.topMargin != top) {
             lp.width = w; lp.height = h; lp.leftMargin = left; lp.topMargin = top
             edit.layoutParams = lp
@@ -392,7 +378,6 @@ class SlideEditPanel @JvmOverloads constructor(
         (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
             .hideSoftInputFromWindow(edit.windowToken, 0)
         removeOverlay(edit)
-        showTextBar(false)
         toolbar?.visibility = View.VISIBLE
         if (commit && shapeId >= 0 && value != shapeText) {
             if (!session.setShapeText(slide(), shapeId, value)) toast(session.lastError?.message ?: str(R.string.docsdk_edit_text_change_failed))
@@ -449,8 +434,6 @@ class SlideEditPanel @JvmOverloads constructor(
         undoPoints.clear(); redoPoints.clear()
         points.forEach { drop(it.file) }
         reader.onDocumentGesture = null
-        reader.removeCallbacks(menuBack)
-        showShapeMenu(false)
         removeOverlay(overlay)
     }
 
@@ -479,7 +462,7 @@ class SlideEditPanel @JvmOverloads constructor(
         overlay.selection = rect
         status = s?.let { describe(it) } ?: str(R.string.docsdk_edit_no_shape_selected)
         shapeText = s?.text ?: ""
-        showShapeMenu(s != null)
+        stateChanged()
     }
 
     private fun slide(): Int = (reader.state.value.pageNumber - 1).coerceAtLeast(0)
@@ -932,38 +915,6 @@ class SlideEditPanel @JvmOverloads constructor(
         slideOp(R.string.docsdk_edit_paste_failed) {
             session.pasteShape(slide(), clip, step, step).also { if (it) pendingSelect = session.pastedShape }
         }
-    }
-
-    // the menu over the selected shape, while it shows
-    private var shapeMenu: android.view.ActionMode? = null
-    private val menuBack = Runnable { showShapeMenu(shapeId >= 0 && inline == null) }
-
-    /** Shows (or takes down) Cut / Copy / Paste / Delete over the selected shape. */
-    private fun showShapeMenu(on: Boolean) {
-        shapeMenu?.finish()
-        shapeMenu = null
-        if (!on || shapeId < 0 || inline != null || isBusy) return
-        val items = listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.DELETE)
-            .filter { isAvailable(it) && (it != EditAction.PASTE || clipboard.hasPrimaryClip()) }
-        if (items.isEmpty()) return
-        shapeMenu = reader.startActionMode(object : android.view.ActionMode.Callback2() {
-            override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
-                items.forEachIndexed { i, a -> menu.add(android.view.Menu.NONE, i, i, str(a.label)) }
-                return true
-            }
-            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
-            override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
-                val action = items.getOrNull(item.itemId) ?: return false
-                mode.finish()
-                run(action, null, false)
-                return true
-            }
-            override fun onDestroyActionMode(mode: android.view.ActionMode) { if (shapeMenu === mode) shapeMenu = null }
-            override fun onGetContentRect(mode: android.view.ActionMode, view: View, outRect: android.graphics.Rect) {
-                val f = overlay.frameOnScreen() ?: return outRect.setEmpty()
-                outRect.set(f.left.toInt(), f.top.toInt(), f.right.toInt(), f.bottom.toInt())
-            }
-        }, android.view.ActionMode.TYPE_FLOATING)
     }
 
     /** Edits the view cannot show at once (shapes inside groups) are shown by reopening a working copy. */

@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.editor.docsdk.CellAlignmentFormat
 import com.editor.docsdk.EditAction
+import com.editor.docsdk.EditContext
 import com.editor.docsdk.EditRequest
 import com.editor.docsdk.EditFeature
 import com.wxiwei.office.R
@@ -130,6 +131,20 @@ class ExcelEditPanel @JvmOverloads constructor(
         action(EditAction.ADD_SHEET, EditFeature.SHEETS) { askNewSheet() }
     }
 
+    override val editContext: EditContext?
+        get() = if (sheet >= 0 && excel.getSpreadsheet()?.getSheetView()?.selectedShape == null) EditContext.CELLS else null
+
+    override fun defaultActions(context: EditContext): List<EditAction> =
+        if (context != EditContext.CELLS) emptyList()
+        else listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.CLEAR_CELLS, EditAction.BOLD, EditAction.ITALIC,
+            EditAction.UNDERLINE, EditAction.TEXT_COLOR, EditAction.FILL_COLOR, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER,
+            EditAction.ALIGN_RIGHT, EditAction.WRAP_TEXT, EditAction.MERGE_CELLS, EditAction.BORDERS, EditAction.NUMBER_FORMAT)
+
+    override fun canRun(action: EditAction): Boolean = when (action) {
+        EditAction.PASTE -> canPaste
+        else -> true
+    }
+
     override fun isActive(action: EditAction): Boolean {
         if (sheet < 0) return false
         val style = currentStyle() ?: return false
@@ -153,7 +168,6 @@ class ExcelEditPanel @JvmOverloads constructor(
             val sv = ss.getSheetView() ?: return@gesture false
             when (type) {
                 com.wxiwei.office.system.IMainFrame.ON_DOWN -> {
-                    showCellMenu(false)
                     if (grabPicture(event)) return@gesture true
                     if (sv.getCurrentSheet()?.getSelectionRange() == null) return@gesture false
                     val h = sv.selectionHandle()
@@ -192,7 +206,6 @@ class ExcelEditPanel @JvmOverloads constructor(
         super.close()
         reader.onDocumentGesture = null
         reader.touchCapture = null
-        showCellMenu(false)
         excel.getSpreadsheet()?.getSheetView()?.selectedShape = null
         excel.getSpreadsheet()?.getSheetView()?.getCurrentSheet()?.let { it.setActiveCellRowCol(it.getActiveCellRow(), it.getActiveCellColumn()) }
         watcher.cancel()
@@ -419,8 +432,8 @@ class ExcelEditPanel @JvmOverloads constructor(
     private fun dragSelection(e: android.view.MotionEvent) {
         val ss = excel.getSpreadsheet() ?: return
         val sv = ss.getSheetView() ?: return
-        // the finger is lifted: the cells are chosen, offer what to do with them
-        if (e.actionMasked == android.view.MotionEvent.ACTION_UP) return showCellMenu(true)
+        // the finger is lifted: the cells are chosen (the context bar offers what to do with them)
+        if (e.actionMasked == android.view.MotionEvent.ACTION_UP) return stateChanged()
         val p = sheetPoint(e.rawX, e.rawY)
         val edge = dp(32).toFloat()
         val dx = when { p.x > ss.width - edge -> dp(12).toFloat(); p.x < sv.getRowHeaderWidth() + edge / 2 -> -dp(12).toFloat(); else -> 0f }
@@ -602,42 +615,6 @@ class ExcelEditPanel @JvmOverloads constructor(
         if (rows > 1 || cols > 1) current?.setSelectionEnd(r1 + rows - 1, c1 + cols - 1)
         session.warnings.firstOrNull()?.let { toast(it) }
         refresh(true)
-    }
-
-    // the floating menu over the selected cells, while it shows
-    private var cellMenu: android.view.ActionMode? = null
-
-    /** Shows (or takes down) Cut / Copy / Paste / Clear over the selected cells. */
-    private fun showCellMenu(on: Boolean) {
-        cellMenu?.finish()
-        cellMenu = null
-        if (!on || sheet < 0) return
-        val ss = excel.getSpreadsheet() ?: return
-        val items = listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.CLEAR_CELLS)
-            .filter { isAvailable(it) && (it != EditAction.PASTE || clipboard.hasPrimaryClip()) }
-        if (items.isEmpty()) return
-        cellMenu = ss.startActionMode(object : android.view.ActionMode.Callback2() {
-            override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
-                items.forEachIndexed { i, a -> menu.add(android.view.Menu.NONE, i, i, str(a.label)) }
-                return true
-            }
-            override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
-            override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
-                val action = items.getOrNull(item.itemId) ?: return false
-                mode.finish()
-                run(action, null, false)
-                return true
-            }
-            override fun onDestroyActionMode(mode: android.view.ActionMode) { if (cellMenu === mode) cellMenu = null }
-            override fun onGetContentRect(mode: android.view.ActionMode, view: View, outRect: android.graphics.Rect) {
-                val sv = ss.getSheetView() ?: return
-                val sheetModel = sv.getCurrentSheet() ?: return
-                val r = sheetModel.getSelectionRange()
-                val box = if (r != null) com.wxiwei.office.ss.util.ModelUtil.instance().getCellRangeAddressAnchor(sv, r)
-                    else com.wxiwei.office.ss.util.ModelUtil.instance().getCellAnchor(sv, sheetModel.getActiveCellRow(), sheetModel.getActiveCellColumn())
-                outRect.set(box.left.toInt(), box.top.toInt(), box.right.toInt(), box.bottom.toInt())
-            }
-        }, android.view.ActionMode.TYPE_FLOATING)
     }
 
     /** A picture taken off by an undo/redo is no longer selected. */

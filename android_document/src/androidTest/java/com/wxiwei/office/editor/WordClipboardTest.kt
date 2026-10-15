@@ -21,6 +21,7 @@ import com.wxiwei.office.wp.control.Word
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -159,7 +160,7 @@ class WordClipboardTest {
         }
     }
 
-    /** The node showing [label] in any window on screen (the floating text menu is a window of its own). */
+    /** The node showing [label] in any window on screen. */
     private fun onScreen(label: String): android.view.accessibility.AccessibilityNodeInfo? {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         automation.serviceInfo = automation.serviceInfo.apply {
@@ -171,31 +172,31 @@ class WordClipboardTest {
     }
 
     @Test
-    fun floatingMenuOnSelection() {
+    fun contextBarOnSelection() {
         val original = "First paragraph here.\nSecond paragraph here.\nThird one."
         val file = docx("menu.docx", "First paragraph here.", "Second paragraph here.", "Third one.")
         val cut = context.getString(EditAction.CUT.label)
         val copy = context.getString(EditAction.COPY.label)
         EditInView.edit(file) {
             delay(1000)
-            // a long press selects the word "Second" and the menu comes up over it
+            // a long press selects the word "Second": Cut and Copy come up on the context bar
             tapAt(this, original.indexOf("Second").toLong() + 2, holdMs = 700)
             delay(800)
             assertEquals("Second", onMain { WordSelection(word(this)).selectedText() })
             // a picture of the menu, kept after the test: adb pull /data/local/tmp/word-menu.png
             InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("screencap -p /data/local/tmp/word-menu.png").close()
             delay(1500)
-            assertTrue("Copy in the menu", onScreen(copy) != null)
+            assertTrue("Copy on the bar", onScreen(copy) != null)
             val item = onScreen(cut)
-            assertTrue("Cut in the menu", item != null)
+            assertTrue("Cut on the bar", item != null)
             // a finger on the item, as the user does
             val box = android.graphics.Rect().also { item!!.getBoundsInScreen(it) }
             touchScreen(box.exactCenterX(), box.exactCenterY())
             delay(800)
             assertEquals(original.replace("Second", ""), text(this))
             assertEquals("Second", onMain { clipboard.primaryClip?.getItemAt(0)?.text?.toString() })
-            // the selection is gone: so is the menu
-            assertTrue("menu closed", onScreen(copy) == null)
+            // the selection is gone: nothing to copy
+            assertFalse("Copy off", onMain { editor.isEnabled(EditAction.COPY) })
         }
     }
 }

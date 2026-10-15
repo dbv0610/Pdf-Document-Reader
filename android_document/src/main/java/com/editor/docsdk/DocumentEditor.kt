@@ -78,8 +78,9 @@ class DocumentEditor internal constructor(val panel: OfficeEditPanel) {
     fun isAvailable(action: EditAction): Boolean = panel.isAvailable(action)
 
     /**
-     * Whether [action] can run now: false for Undo or Redo with nothing to undo or redo, and for
-     * every command while the document reopens after an edit. Grey your button out when false.
+     * Whether [action] can run now: false for Undo or Redo with nothing to undo or redo, Copy and
+     * Cut with nothing selected, Paste with nothing on the clipboard, and for every command while
+     * the document reopens after an edit. Grey your button out when false.
      */
     fun isEnabled(action: EditAction): Boolean = panel.isEnabled(action)
 
@@ -88,6 +89,37 @@ class DocumentEditor internal constructor(val panel: OfficeEditPanel) {
 
     /** What is selected or what to do next, as a short sentence. */
     val status: String get() = panel.status
+
+    /** What the user works on now (text, a table, cells, a shape...), or null when nothing is selected. */
+    val context: EditContext? get() = panel.editContext
+
+    /**
+     * The commands for what is selected now, as the context bar shows them; empty when nothing is.
+     * An app with its own bar shows these (refreshed in [Listener.onStateChanged]).
+     */
+    fun contextActions(): List<EditAction> = panel.contextActions()
+
+    /**
+     * Shows the SDK's context bar (true by default): the commands for what is selected (copy and
+     * paste, a table's rows and columns, the format of the text...), over the keyboard or the SDK's
+     * bar. Its look follows [EditStyle] (textBar* sizes). False: build your own from [context] and
+     * [contextActions].
+     */
+    var contextBar: Boolean
+        get() = panel.contextBar
+        set(value) { panel.contextBar = value }
+
+    /** Changes the commands of a context: given it and the SDK's commands, returns those to show (empty hides the bar there). */
+    fun interface ContextCommands {
+        fun commands(context: EditContext, defaults: List<EditAction>): List<EditAction>
+    }
+
+    /** The app's choice of commands for each context; null: the SDK's. */
+    var contextCommands: ContextCommands? = null
+        set(value) {
+            field = value
+            panel.contextCommands = value?.let { c -> { context, defaults -> c.commands(context, defaults) } }
+        }
 
     /**
      * Runs [action]. When it needs a value it asks the user (with [dialogs], or the SDK's dialog).

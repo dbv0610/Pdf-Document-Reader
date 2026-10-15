@@ -7,9 +7,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
-import android.view.ActionMode
-import android.view.Menu
-import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
@@ -22,8 +19,7 @@ import com.editor.docsdk.EditStyle
  *
  * [range] is the selection (end exclusive), [caret] the caret rectangle of an offset in the
  * coordinates of [source], [offsetAt] the offset at a screen point, [onChange] the new selection.
- * While there is a selection and no handle is dragged, Android's floating text menu shows over it
- * with [menu]: the label and what it does (Cut, Copy, Paste...), asked again each time it opens.
+ * What to do with the selection is on the panel's context bar.
  */
 @SuppressLint("ViewConstructor")
 class WordSelectionHandles(
@@ -35,7 +31,6 @@ class WordSelectionHandles(
     private val onChange: (start: Long, end: Long) -> Unit,
     /** A touch on a handle that did not drag it: a tap on the document there. */
     private val onTap: (rawX: Float, rawY: Float) -> Unit = { _, _ -> },
-    private val menu: () -> List<Pair<String, () -> Unit>> = { emptyList() },
 ) : View(context) {
     private val editStyle = EditStyle.of(context)
     private var moved = false
@@ -58,7 +53,6 @@ class WordSelectionHandles(
 
     override fun onDetachedFromWindow() {
         viewTreeObserver.removeOnPreDrawListener(preDraw)
-        showMenu(false)
         super.onDetachedFromWindow()
     }
 
@@ -78,59 +72,6 @@ class WordSelectionHandles(
         if (s != startTip || e != endTip) {
             startTip = s; endTip = e
             invalidate()
-            // the menu follows the selection (it moved, or the page scrolled)
-            actionMode?.invalidateContentRect()
-        }
-        if (r == null) closedFor = null
-        showMenu(s != null && e != null && dragging == 0 && r != closedFor)
-    }
-
-    // the floating text menu over the selection, while it shows
-    private var actionMode: ActionMode? = null
-    // what its items do, by item id
-    private var menuActions = emptyList<() -> Unit>()
-    // the selection whose menu was used or closed (Back, a tap away): it opens again for another one
-    private var closedFor: LongRange? = null
-    // true while the menu is taken down here, not closed by the user
-    private var hiding = false
-
-    private val menuCallback = object : ActionMode.Callback2() {
-        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-            val items = this@WordSelectionHandles.menu()
-            menuActions = items.map { it.second }
-            items.forEachIndexed { i, (label, _) -> menu.add(Menu.NONE, i, i, label) }
-            return items.isNotEmpty()
-        }
-        override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
-        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-            val run = menuActions.getOrNull(item.itemId) ?: return false
-            closedFor = range()
-            mode.finish()
-            run()
-            return true
-        }
-        override fun onDestroyActionMode(mode: ActionMode) {
-            if (actionMode !== mode) return
-            actionMode = null
-            if (!hiding) closedFor = range()
-        }
-        override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
-            val s = startTip; val e = endTip
-            if (s == null || e == null) return outRect.setEmpty()
-            // from the top of the first line to the bottom of the handles: the menu goes above it, or
-            // below without hiding a handle
-            outRect.set(minOf(s.first, e.first).toInt(), (s.second - lineHeight).toInt(), maxOf(s.first, e.first).toInt() + 1, (e.second + 2 * radius).toInt())
-        }
-    }
-
-    private fun showMenu(on: Boolean) {
-        if (!on) {
-            hiding = true
-            actionMode?.finish()
-            hiding = false
-            actionMode = null
-        } else if (actionMode == null && isAttachedToWindow) {
-            actionMode = startActionMode(menuCallback, ActionMode.TYPE_FLOATING)
         }
     }
 
@@ -151,11 +92,7 @@ class WordSelectionHandles(
                     near(startTip, true, event.x, event.y) -> 1
                     else -> 0
                 }
-                if (dragging != 0) {
-                    parent?.requestDisallowInterceptTouchEvent(true)
-                    // out of the way while the selection changes; back when the finger lifts
-                    showMenu(false)
-                }
+                if (dragging != 0) parent?.requestDisallowInterceptTouchEvent(true)
                 moved = false
                 downX = event.x; downY = event.y
                 return dragging != 0

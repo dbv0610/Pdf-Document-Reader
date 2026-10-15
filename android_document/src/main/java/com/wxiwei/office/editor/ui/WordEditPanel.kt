@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.editor.docsdk.EditFeature
 import com.editor.docsdk.EditAction
+import com.editor.docsdk.EditContext
 import com.editor.docsdk.EditRequest
 import com.editor.docsdk.Finder
 import com.editor.docsdk.FindResult
@@ -51,7 +52,7 @@ class WordEditPanel @JvmOverloads constructor(
     private val typing: EditText = object : EditText(context) {
         override fun onSelectionChanged(selStart: Int, selEnd: Int) {
             super.onSelectionChanged(selStart, selEnd)
-            if (base >= 0) caret.touch()
+            if (base >= 0) { caret.touch(); caretMoved() }
         }
     }.apply {
         alpha = 0f
@@ -159,7 +160,13 @@ class WordEditPanel @JvmOverloads constructor(
         action(EditAction.COPY, EditFeature.CLIPBOARD) { copy() }
         action(EditAction.CUT, EditFeature.CLIPBOARD, EditFeature.TEXT) { if (copy()) { if (wholeTable() != null) deleteTable() else op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } } }
         action(EditAction.PASTE, EditFeature.CLIPBOARD, EditFeature.TEXT) { paste() }
-        action(EditAction.DELETE, EditFeature.TEXT) { if (wholeTable() != null) deleteTable() else op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) } }
+        action(EditAction.DELETE, EditFeature.TEXT) {
+            when {
+                pictureAt >= 0 -> deletePicture()
+                wholeTable() != null -> deleteTable()
+                else -> op({ it.first }) { e, r -> e.deleteText(r.first, r.last + 1) }
+            }
+        }
         action(EditAction.NEW_LINE, EditFeature.TEXT) { op({ it.first + 1 }) { e, r -> e.insertText(r.first, "\n") } }
         action(EditAction.INSERT_TEXT, EditFeature.TEXT) { insert() }
         action(EditAction.REPLACE_TEXT, EditFeature.TEXT) { replace() }
@@ -172,6 +179,60 @@ class WordEditPanel @JvmOverloads constructor(
         action(EditAction.COLUMN_RIGHT, EditFeature.TABLES) { insertRowOrColumn(row = false, after = true) }
         action(EditAction.DELETE_ROW, EditFeature.TABLES) { deleteRowOrColumn(row = true) }
         action(EditAction.DELETE_COLUMN, EditFeature.TABLES) { deleteRowOrColumn(row = false) }
+    }
+
+    // ---- the context bar ----
+
+    override val editContext: EditContext?
+        get() {
+            if (pictureAt >= 0) return EditContext.PICTURE
+            if (tableAt != null) return EditContext.TABLE
+            val at = here()
+            if (at < 0) return null
+            return if (has(EditFeature.TABLES) && session()?.tableAt(at) != null) EditContext.TABLE else EditContext.TEXT
+        }
+
+    private val textFormat = listOf(EditAction.BOLD, EditAction.ITALIC, EditAction.UNDERLINE, EditAction.TEXT_COLOR, EditAction.HIGHLIGHT,
+        EditAction.FONT, EditAction.FONT_SIZE, EditAction.ALIGN_LEFT, EditAction.ALIGN_CENTER, EditAction.ALIGN_RIGHT, EditAction.BULLETS, EditAction.NUMBERING)
+
+    override fun defaultActions(context: EditContext): List<EditAction> = when (context) {
+        EditContext.TEXT -> listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE) + textFormat
+        EditContext.TABLE -> listOf(EditAction.SELECT_TABLE, EditAction.ROW_ABOVE, EditAction.ROW_BELOW, EditAction.COLUMN_LEFT,
+            EditAction.COLUMN_RIGHT, EditAction.DELETE_ROW, EditAction.DELETE_COLUMN, EditAction.CUT, EditAction.COPY, EditAction.PASTE) + textFormat
+        EditContext.PICTURE -> listOf(EditAction.DELETE)
+        else -> emptyList()
+    }
+
+    override fun canRun(action: EditAction): Boolean = when (action) {
+        EditAction.CUT, EditAction.COPY -> selection()?.selection() != null
+        EditAction.PASTE -> canPaste && (here() >= 0)
+        EditAction.SELECT_TABLE -> here() >= 0 && wholeTable() == null
+        else -> true
+    }
+
+    internal override fun barState(): ContextBar.State {
+        val s = session() ?: return ContextBar.State()
+        val at = selection()?.selection()?.first ?: if (base >= 0) (base + typing.selectionEnd.coerceAtLeast(0) - 1).coerceAtLeast(0) else return ContextBar.State()
+        return runCatching { ContextBar.State(s.fontAt(at), s.sizeAt(at).takeIf { it > 0f }, s.colorAt(at).takeIf { it >= 0 }?.let { it or 0xFF000000.toInt() }) }
+            .getOrDefault(ContextBar.State())
+    }
+
+    // the caret moved while typing: the bar follows (B lit in bold text...), once the moves settle
+    private val caretSettled = Runnable { stateChanged() }
+    private fun caretMoved() {
+        reader.removeCallbacks(caretSettled)
+        reader.postDelayed(caretSettled, 120)
+    }
+
+    /** Removes the selected picture; Undo brings it back. */
+    private fun deletePicture() {
+        val s = session() ?: return
+        val at = pictureAt
+        val shown = !s.needsReopen
+        if (!s.deleteText(at, at + 1)) return toast(s.lastError?.message ?: str(R.string.docsdk_edit_delete_failed))
+        clearPicture()
+        pagesChangedFrom(at)
+        if (shown && s.needsReopen) reloadWorking()
     }
 
     override fun isActive(action: EditAction): Boolean {
@@ -614,17 +675,6 @@ class WordEditPanel @JvmOverloads constructor(
             anchor = start until end
         },
         onTap = { x, y -> tapAt(x, y) },
-        menu = {
-            // Paste only with something to paste
-            val clip = clipboard.hasPrimaryClip()
-            // in a table not selected whole yet: select it, to copy it as a table
-            val range = selection()?.selection()
-            val table = range?.let { session()?.tableAt(it.first) }
-            val partOfTable = table != null && (range.first != table.first || range.last < table.last - 1)
-            listOf(EditAction.CUT, EditAction.COPY, EditAction.PASTE, EditAction.SELECT_TABLE, EditAction.SELECT_ALL)
-                .filter { isAvailable(it) && (it != EditAction.PASTE || clip) && (it != EditAction.SELECT_TABLE || partOfTable) }
-                .map { action -> str(action.label) to { run(action, null, false); Unit } }
-        },
     )
 
     // the selected picture: its one-char object in the text, and whether it floats on the page
@@ -948,6 +998,7 @@ class WordEditPanel @JvmOverloads constructor(
         base = -1
         caret.active = false
         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(typing.windowToken, 0)
+        stateChanged()
     }
 
     /** Replays a change of the typing buffer on the document. */

@@ -24,26 +24,27 @@ import com.editor.docsdk.EditAction
 import com.editor.docsdk.EditStyle
 
 /**
- * The format bar shown over the keyboard while the text of a PowerPoint shape is typed in place:
- * a button per action of [actions] (FONT shows the font's name, FONT_SIZE shows − size +), each
- * selected ([View.isSelected]) when [state] says it is on. Colors, icons and sizes come from
- * [style] (textBar* and the bar's colors); its item styler is applied to every button once, and
- * what it sets stays: being on only changes the selected state, which the SDK's background and
- * tint follow. A button runs [onAction] with the action and, for the size steps, the new size in points.
+ * The bar of commands for what is selected (text, a table, a picture, cells, a shape), over the
+ * keyboard or the SDK's bar: a button per action of [actions] (FONT shows the font's name,
+ * FONT_SIZE shows − size +). [show] selects ([View.isSelected]) the buttons that are on and dims
+ * those that cannot run now. Colors, icons and sizes come from [style] (textBar* and the bar's
+ * colors); its item styler is applied to every button once, and what it sets stays: being on only
+ * changes the selected state, which the SDK's background and tint follow. A button runs [onAction]
+ * with the action and, for the size steps, the new size in points.
  */
 @SuppressLint("ViewConstructor")
-internal class SlideTextBar(
+internal class ContextBar(
     context: Context,
     private val style: EditStyle,
-    private val actions: List<EditAction>,
+    private val commands: List<EditAction>,
     private val onAction: (EditAction, Any?) -> Unit,
 ) : HorizontalScrollView(context) {
 
-    /** What the selected text has now, to light the buttons. */
-    class State(
-        val bold: Boolean = false, val italic: Boolean = false, val underline: Boolean = false,
-        val font: String? = null, val sizePt: Float? = null, val color: Int? = null, val align: String? = null,
-    )
+    /** The font, size (points) and color (ARGB) of the selected text, shown by FONT, FONT_SIZE and TEXT_COLOR. */
+    class State(val font: String? = null, val sizePt: Float? = null, val color: Int? = null)
+
+    /** The commands of the bar, in order. */
+    val actions: List<EditAction> get() = commands
 
     private fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics).toInt()
 
@@ -60,6 +61,7 @@ internal class SlideTextBar(
     private var fontName: TextView? = null
     private var sizeText: TextView? = null
     private var colorBar: View? = null
+    private val steps = ArrayList<View>()
     private var size = 18f
 
     init {
@@ -68,7 +70,7 @@ internal class SlideTextBar(
         setBackgroundColor(style.textBarBackground ?: style.toolbarBackground)
         elevation = dp(4f).toFloat()
         addView(row, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
-        for (action in actions) {
+        for (action in commands) {
             when (action) {
                 EditAction.FONT -> add(fontButton())
                 EditAction.FONT_SIZE -> sizeControl()
@@ -102,6 +104,8 @@ internal class SlideTextBar(
         setPadding(pad, pad, pad, pad)
         background = onBackground()
         contentDescription = context.getString(action.label)
+        // a long press says what the icon does
+        tooltipText = contentDescription
         tag = action.name
         layoutParams = LinearLayout.LayoutParams(buttonPx, buttonPx)
         setOnClickListener { onAction(action, null) }
@@ -115,6 +119,7 @@ internal class SlideTextBar(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             contentDescription = context.getString(EditAction.TEXT_COLOR.label)
+            tooltipText = contentDescription
             tag = EditAction.TEXT_COLOR.name
             layoutParams = LinearLayout.LayoutParams(buttonPx, buttonPx)
             setOnClickListener { onAction(EditAction.TEXT_COLOR, null) }
@@ -165,7 +170,7 @@ internal class SlideTextBar(
             layoutParams = LinearLayout.LayoutParams(buttonPx, buttonPx)
             setOnClickListener { onAction(EditAction.FONT_SIZE, nextSize(size, up)) }
         }
-        add(step("−", false))
+        add(step("−", false).also { steps += it })
         sizeText = TextView(context).apply {
             setTextColor(style.icon)
             typeface = style.typeface
@@ -180,20 +185,18 @@ internal class SlideTextBar(
         buttons[EditAction.FONT_SIZE] = sizeText!!
         style.itemStyler?.style(sizeText!!, EditAction.FONT_SIZE)
         add(sizeText!!)
-        add(step("+", true))
+        add(step("+", true).also { steps += it })
     }
 
-    /** Lights the buttons for what the selected text has. */
-    fun show(state: State) {
-        fun lit(action: EditAction, on: Boolean) {
-            buttons[action]?.isSelected = on
+    /** Selects the buttons [active] says are on, dims those [enabled] says cannot run, and shows [state]. */
+    fun show(active: (EditAction) -> Boolean, enabled: (EditAction) -> Boolean, state: State) {
+        for ((action, b) in buttons) {
+            b.isSelected = active(action)
+            val on = enabled(action)
+            b.isEnabled = on
+            b.alpha = if (on) 1f else DISABLED_ALPHA
         }
-        lit(EditAction.BOLD, state.bold)
-        lit(EditAction.ITALIC, state.italic)
-        lit(EditAction.UNDERLINE, state.underline)
-        lit(EditAction.ALIGN_LEFT, state.align == "l")
-        lit(EditAction.ALIGN_CENTER, state.align == "ctr")
-        lit(EditAction.ALIGN_RIGHT, state.align == "r")
+        steps.forEach { it.isEnabled = enabled(EditAction.FONT_SIZE); it.alpha = if (it.isEnabled) 1f else DISABLED_ALPHA }
         fontName?.text = state.font ?: context.getString(EditAction.FONT.label)
         state.sizePt?.let { size = it }
         sizeText?.text = if (size % 1f == 0f) size.toInt().toString() else "%.1f".format(size)
@@ -201,6 +204,7 @@ internal class SlideTextBar(
     }
 
     private companion object {
+        const val DISABLED_ALPHA = 0.38f
         val SIZES = listOf(8f, 9f, 10f, 11f, 12f, 14f, 16f, 18f, 20f, 24f, 28f, 32f, 36f, 40f, 44f, 48f, 54f, 60f, 66f, 72f, 80f, 88f, 96f)
 
         fun nextSize(now: Float, up: Boolean): Float =

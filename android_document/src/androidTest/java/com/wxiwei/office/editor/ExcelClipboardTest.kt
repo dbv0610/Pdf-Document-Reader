@@ -113,12 +113,12 @@ class ExcelClipboardTest {
             automation.executeShellCommand("screencap -p /data/local/tmp/excel-menu.png").close()
             delay(800)
             val copy = context.getString(EditAction.COPY.label)
-            // the floating menu is a window of its own
+            // the context bar over the sheet
             automation.serviceInfo = automation.serviceInfo.apply {
                 flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             }
             val shown = automation.windows.asSequence().mapNotNull { it.root }.any { it.findAccessibilityNodeInfosByText(copy).isNotEmpty() }
-            assertTrue("menu over the cell", shown)
+            assertTrue("context bar with Copy", shown)
         }
     }
 }

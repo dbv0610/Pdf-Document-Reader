@@ -1588,14 +1588,16 @@ class LiveDocxSession(control: IControl, private val source: File) {
         }
     }
 
-    private fun colorAt(offset: Long): Int {
+    /** RGB of the text at [offset] (no alpha), or -1. */
+    fun colorAt(offset: Long): Int {
         val doc = word.getDocument()
         val para = doc.getParagraph(offset) ?: return -1
         val leaf = doc.getLeaf(offset) ?: return -1
         return am.getFontColor(para.getAttribute(), leaf.getAttribute()) and 0xFFFFFF
     }
 
-    private fun sizeAt(offset: Long): Float {
+    /** Size in points of the text at [offset], or 0. */
+    fun sizeAt(offset: Long): Float {
         val doc = word.getDocument()
         val para = doc.getParagraph(offset) ?: return 0f
         val leaf = doc.getLeaf(offset) ?: return 0f
